@@ -1,3 +1,4 @@
+import { RippleButton } from '../../components/ui/ripple-button';
 import { useState } from 'react';
 import { useCategory } from '../../context/CategoryContext';
 import { useAuth } from '../../context/AuthContext';
@@ -63,12 +64,12 @@ const ProfileSideBar = () => {
                     <h2 className="text-lg font-bold text-gray-900">
                         {isAuthenticated ? 'My Profile' : 'Welcome'}
                     </h2>
-                    <button
+                    <RippleButton
                         onClick={handleClose}
                         className="p-2 -mr-2 text-gray-400 hover:text-gray-500"
                     >
                         <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-                    </button>
+                    </RippleButton>
                 </div>
 
                 {/* Content */}
@@ -84,12 +85,12 @@ const ProfileSideBar = () => {
                                     Log in to view your profile, track orders, and save addresses.
                                 </p>
                             </div>
-                            <button
+                            <RippleButton
                                 onClick={openLoginModal}
                                 className="w-full max-w-xs py-3 bg-ud-primary text-white font-bold rounded-xl hover:bg-emerald-600 active:scale-95 transition-all shadow-lg shadow-ud-primary/20"
                             >
                                 Login or Sign Up
-                            </button>
+                            </RippleButton>
                         </div>
                     ) : (
                         view === 'main' ? (
@@ -107,12 +108,12 @@ const ProfileSideBar = () => {
                                                         {user?.name || 'User'}
                                                     </h3>
                                                     {canEditName && (
-                                                        <button
+                                                        <RippleButton
                                                             onClick={() => { setIsEditingName(true); setNameInput(''); setNameError(''); }}
                                                             className="text-xs text-ud-primary font-medium hover:underline"
                                                         >
                                                             Set name
-                                                        </button>
+                                                        </RippleButton>
                                                     )}
                                                 </div>
                                             ) : (
@@ -127,19 +128,19 @@ const ProfileSideBar = () => {
                                                         className="text-sm border border-gray-200 rounded-lg px-2 py-1 flex-1 min-w-0 focus:outline-none focus:border-ud-primary"
                                                         maxLength={50}
                                                     />
-                                                    <button
+                                                    <RippleButton
                                                         onClick={handleSaveName}
                                                         disabled={nameSaving}
                                                         className="text-xs bg-ud-primary text-white px-3 py-1 rounded-lg font-medium disabled:opacity-50"
                                                     >
                                                         {nameSaving ? '...' : 'Save'}
-                                                    </button>
-                                                    <button
+                                                    </RippleButton>
+                                                    <RippleButton
                                                         onClick={() => setIsEditingName(false)}
                                                         className="text-xs text-gray-400 hover:text-gray-600"
                                                     >
                                                         Cancel
-                                                    </button>
+                                                    </RippleButton>
                                                 </div>
                                             )}
                                             <p className="text-xs text-gray-500">{user?.phone}</p>
@@ -201,7 +202,7 @@ const ProfileSideBar = () => {
                                     </div>
                                 </div>
 
-                                <button
+                                <RippleButton
                                     onClick={() => {
                                         logout();
                                         handleClose();
@@ -209,7 +210,7 @@ const ProfileSideBar = () => {
                                     className="w-full py-3 bg-red-50 text-red-600 font-bold rounded-xl hover:bg-red-100 transition-colors mt-auto shadow-sm border border-red-100"
                                 >
                                     Log Out
-                                </button>
+                                </RippleButton>
                             </div>
                         ) : view === 'addresses' ? (
                             <AddressManager onBack={() => setView('main')} />

@@ -139,6 +139,14 @@ export class PaymentsService {
       };
     }
 
+    if (order.status === 'CANCELLED') {
+      throw new BadRequestException('Cannot process payment for a cancelled order');
+    }
+
+    if (order.status === 'DELIVERED') {
+      throw new BadRequestException('Cannot process payment for an already delivered order');
+    }
+
     if (order.paymentMethod !== PaymentMethod.RAZORPAY) {
       throw new BadRequestException('Order is not a Razorpay order');
     }

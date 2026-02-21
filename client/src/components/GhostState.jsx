@@ -1,3 +1,4 @@
+import { RippleButton } from './ui/ripple-button';
 import { Block, BlockTitle } from 'konsta/react';
 import { UNAVAILABLE_ITEMS } from '../constants';
 
@@ -19,12 +20,12 @@ const GhostState = () => {
                     </div>
                 ))}
                 <div className="text-center mt-4">
-                    <button className="text-gray-400 text-sm font-medium flex items-center justify-center w-full py-2 hover:bg-gray-100/50 rounded-lg transition-colors">
+                    <RippleButton className="text-gray-400 text-sm font-medium flex items-center justify-center w-full py-2 hover:bg-gray-100/50 rounded-lg transition-colors">
                         View all unavailable items
                         <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                         </svg>
-                    </button>
+                    </RippleButton>
                 </div>
             </Block>
         </div>

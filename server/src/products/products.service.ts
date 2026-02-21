@@ -11,6 +11,7 @@ import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { ProductQueryDto } from './dto/product-query.dto';
 import { Prisma } from '@prisma/client';
+import { CATEGORY_SUBCATEGORIES, StoreCategoryType, STORE_CATEGORY_LABELS } from '../common/constants/store-categories';
 
 import { RedisCacheService } from '../common/services/redis-cache.service';
 
@@ -55,6 +56,20 @@ export class ProductsService {
     // Remove images from dto since we handle it separately
     const { images: _ignored, ...productData } = dto;
 
+    if (storeId) {
+      const store = await this.prisma.store.findUnique({ where: { id: storeId } });
+      if (!store) throw new NotFoundException('Store not found');
+
+      const allowedSubcategories = CATEGORY_SUBCATEGORIES[store.storeType as StoreCategoryType] || [];
+      if (!allowedSubcategories.includes(dto.category) && allowedSubcategories.length > 0) {
+        throw new BadRequestException(`Category "${dto.category}" is not allowed for store type ${store.storeType}. Allowed: ${allowedSubcategories.join(', ')}`);
+      }
+      // Set category to main store type label, and subCategory to the specific option selected
+      productData.subCategory = dto.category;
+      productData.category = STORE_CATEGORY_LABELS[store.storeType as StoreCategoryType] || store.storeType;
+      productData.isGrocery = store.storeType === 'GROCERY';
+    }
+
     // Fix #4: Clean up uploaded images if DB insert fails
     try {
       const product = await this.prisma.product.create({
@@ -62,6 +77,12 @@ export class ProductsService {
           ...productData,
           images: imageUrls,
           storeId,
+          storeInventory: storeId ? {
+            create: {
+              storeId,
+              stock: productData.stock || 0
+            }
+          } : undefined,
         },
       });
 
@@ -173,9 +194,27 @@ export class ProductsService {
     const product = await this.findOne(id);
     this.checkOwnership(product, storeId);
 
+    const updateData: any = { ...dto };
+    if (dto.stock !== undefined && product.storeId) {
+      updateData.storeInventory = {
+        updateMany: {
+          where: { storeId: product.storeId },
+          data: { stock: dto.stock }
+        }
+      };
+    }
+
+    if (dto.category && product.storeId) {
+      const store = await this.prisma.store.findUnique({ where: { id: product.storeId } });
+      if (store) {
+        updateData.subCategory = dto.category;
+        updateData.category = STORE_CATEGORY_LABELS[store.storeType as StoreCategoryType] || store.storeType;
+      }
+    }
+
     const updated = await this.prisma.product.update({
       where: { id },
-      data: dto,
+      data: updateData,
     });
 
     this.logger.log(`Product updated: ${updated.name} (${id})`);
@@ -211,6 +250,23 @@ export class ProductsService {
       const updateData: any = { ...dto };
       if (newImageUrls.length > 0) {
         updateData.images = [...(product.images || []), ...newImageUrls];
+      }
+
+      if (dto.stock !== undefined && product.storeId) {
+        updateData.storeInventory = {
+          updateMany: {
+            where: { storeId: product.storeId },
+            data: { stock: dto.stock }
+          }
+        };
+      }
+
+      if (dto.category && product.storeId) {
+        const store = await this.prisma.store.findUnique({ where: { id: product.storeId } });
+        if (store) {
+          updateData.subCategory = dto.category;
+          updateData.category = STORE_CATEGORY_LABELS[store.storeType as StoreCategoryType] || store.storeType;
+        }
       }
 
       const updated = await this.prisma.product.update({

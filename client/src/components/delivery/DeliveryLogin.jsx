@@ -1,3 +1,4 @@
+import { RippleButton } from '../ui/ripple-button';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
@@ -78,7 +79,7 @@ const DeliveryLogin = () => {
                         </div>
                     )}
 
-                    <button
+                    <RippleButton
                         type="submit"
                         disabled={loading || pin.length !== 4}
                         className="w-full py-3.5 bg-gradient-to-r from-emerald-500 to-teal-600 text-white font-bold rounded-xl shadow-lg shadow-emerald-500/30 hover:shadow-emerald-500/40 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
@@ -91,7 +92,7 @@ const DeliveryLogin = () => {
                         ) : (
                             'Sign In'
                         )}
-                    </button>
+                    </RippleButton>
                 </form>
             </div>
         </div>

@@ -1,3 +1,5 @@
+import { RippleButton } from '../../components/ui/ripple-button';
+import { InteractiveHoverButton } from '../../components/ui/interactive-hover-button';
 import { useCategory } from '../../context/CategoryContext';
 import { useAuth } from '../../context/AuthContext';
 import { useState, useEffect } from 'react';
@@ -203,7 +205,7 @@ const CartSidebar = () => {
                     <p className="text-xs text-gray-400 mb-6">
                         Your order will be delivered shortly
                     </p>
-                    <button
+                    <RippleButton
                         onClick={() => {
                             setIsCartOpen(false);
                             setStep('cart');
@@ -211,7 +213,7 @@ const CartSidebar = () => {
                         className="px-8 py-3 bg-ud-primary text-white font-bold rounded-xl hover:bg-emerald-600 transition-colors"
                     >
                         Continue Shopping
-                    </button>
+                    </RippleButton>
                 </div>
             );
         }
@@ -305,12 +307,12 @@ const CartSidebar = () => {
                         </div>
                     ) : (
                         addresses.map((addr) => (
-                            <button
+                            <RippleButton
                                 key={addr.id}
                                 onClick={() => handleSelectAddress(addr)}
                                 className={`w-full text-left p-4 rounded-xl border-2 transition-all ${selectedAddress?.id === addr.id
-                                        ? 'border-emerald-500 bg-emerald-50'
-                                        : 'border-gray-100 bg-white hover:border-emerald-200'
+                                    ? 'border-emerald-500 bg-emerald-50'
+                                    : 'border-gray-100 bg-white hover:border-emerald-200'
                                     }`}
                             >
                                 <div className="flex items-center gap-2 mb-1">
@@ -327,7 +329,7 @@ const CartSidebar = () => {
                                 <p className="text-xs text-gray-500">
                                     {addr.city}, {addr.state} - {addr.zipCode}
                                 </p>
-                            </button>
+                            </RippleButton>
                         ))
                     )}
                 </div>
@@ -343,12 +345,12 @@ const CartSidebar = () => {
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
                         </svg>
                         <p>Your cart is empty.</p>
-                        <button
+                        <RippleButton
                             onClick={() => setIsCartOpen(false)}
                             className="mt-4 px-6 py-2 bg-ud-primary text-white text-sm font-bold rounded-full hover:bg-opacity-90"
                         >
                             Start Shopping
-                        </button>
+                        </RippleButton>
                     </div>
                 ) : (
                     cart.map((item) => (
@@ -363,20 +365,20 @@ const CartSidebar = () => {
                                 </p>
                                 <div className="flex items-center justify-between mt-2">
                                     <div className="flex items-center border border-gray-200 rounded">
-                                        <button
+                                        <RippleButton
                                             className="px-2 py-0.5 text-gray-500 hover:bg-gray-100"
                                             onClick={() => updateQuantity(item.id, -1)}
-                                        >-</button>
+                                        >-</RippleButton>
                                         <span className="px-2 text-xs font-medium">{item.quantity}</span>
-                                        <button
+                                        <RippleButton
                                             className="px-2 py-0.5 text-gray-500 hover:bg-gray-100"
                                             onClick={() => updateQuantity(item.id, 1)}
-                                        >+</button>
+                                        >+</RippleButton>
                                     </div>
-                                    <button
+                                    <RippleButton
                                         className="text-xs text-red-500 font-medium hover:underline"
                                         onClick={() => removeFromCart(item.id)}
-                                    >Remove</button>
+                                    >Remove</RippleButton>
                                 </div>
                             </div>
                         </div>
@@ -401,14 +403,14 @@ const CartSidebar = () => {
                 <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
                     <div className="flex items-center gap-2">
                         {step !== 'cart' && step !== 'success' && (
-                            <button
+                            <RippleButton
                                 onClick={() => setStep(step === 'preview' ? 'addresses' : 'cart')}
                                 className="p-1 hover:bg-gray-100 rounded-full"
                             >
                                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                                 </svg>
-                            </button>
+                            </RippleButton>
                         )}
                         <h2 className="text-lg font-bold text-gray-900">
                             {step === 'cart' && `Your Cart (${cart.length})`}
@@ -417,14 +419,14 @@ const CartSidebar = () => {
                             {step === 'success' && 'Order Confirmed'}
                         </h2>
                     </div>
-                    <button
+                    <RippleButton
                         onClick={() => setIsCartOpen(false)}
                         className="p-2 -mr-2 text-gray-400 hover:text-gray-500"
                     >
                         <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                         </svg>
-                    </button>
+                    </RippleButton>
                 </div>
 
                 {/* Error */}
@@ -469,18 +471,17 @@ const CartSidebar = () => {
                             <span className="text-xl font-bold text-ud-primary">₹{grandTotal.toFixed(2)}</span>
                         </div>
 
-                        <button
+                        <InteractiveHoverButton
                             onClick={handleProceedToCheckout}
-                            className="w-full bg-ud-primary text-white py-3 rounded-lg font-bold hover:bg-opacity-90 transition-colors shadow-lg shadow-green-500/30 mt-2"
-                        >
-                            Proceed to Checkout
-                        </button>
+                            className="mt-2 text-white bg-ud-primary"
+                            text="Proceed to Checkout"
+                        />
                     </div>
                 )}
 
                 {step === 'preview' && preview && !previewLoading && (
                     <div className="border-t border-gray-100 p-4 bg-gray-50 space-y-2">
-                        <button
+                        <RippleButton
                             onClick={() => handlePlaceOrder('COD')}
                             disabled={placing}
                             className="w-full bg-ud-primary text-white py-3 rounded-lg font-bold hover:bg-opacity-90 transition-colors shadow-lg shadow-green-500/30 disabled:opacity-50"
@@ -493,15 +494,15 @@ const CartSidebar = () => {
                             ) : (
                                 `Pay ₹${preview.total?.toFixed(2)} · Cash on Delivery`
                             )}
-                        </button>
+                        </RippleButton>
                         {/* Razorpay disabled for now — COD only
-                        <button
+                        <RippleButton
                             onClick={handleOnlinePayment}
                             disabled={placing}
                             className="w-full bg-white text-ud-primary py-3 rounded-lg font-bold border-2 border-ud-primary hover:bg-emerald-50 transition-colors disabled:opacity-50"
                         >
                             Pay Online
-                        </button>
+                        </RippleButton>
                         */}
                     </div>
                 )}

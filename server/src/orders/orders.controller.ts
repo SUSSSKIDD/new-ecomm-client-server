@@ -100,7 +100,7 @@ export class OrdersController {
 
   @Get('admin/store')
   @UseGuards(RolesGuard)
-  @Roles('ADMIN', 'STORE_ADMIN')
+  @Roles('ADMIN', 'STORE_MANAGER')
   @ApiOperation({ summary: 'List orders for my store (Store Admin)' })
   async findStoreOrders(
     @Req() req: AuthenticatedRequest,
@@ -123,7 +123,7 @@ export class OrdersController {
 
   @Patch('admin/:id/status')
   @UseGuards(RolesGuard)
-  @Roles('ADMIN', 'STORE_ADMIN')
+  @Roles('ADMIN', 'STORE_MANAGER')
   @ApiOperation({ summary: 'Update order status (Store Admin)' })
   async updateStatus(
     @Req() req: AuthenticatedRequest,
@@ -136,7 +136,7 @@ export class OrdersController {
 
   @Post('admin/:id/assign-delivery')
   @UseGuards(RolesGuard)
-  @Roles('ADMIN', 'STORE_ADMIN')
+  @Roles('ADMIN', 'STORE_MANAGER')
   @HttpCode(200)
   @ApiOperation({ summary: 'Manually trigger delivery assignment for an order' })
   async assignDelivery(

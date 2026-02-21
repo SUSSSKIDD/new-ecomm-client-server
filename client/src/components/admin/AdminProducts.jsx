@@ -1,20 +1,27 @@
 /* eslint-disable react/prop-types */
+import { RippleButton } from '../ui/ripple-button';
 import { useEffect, useState } from 'react';
+import { useAdminAuth } from '../../hooks/useAdminAuth';
+import { STORE_CATEGORY_SUBCATEGORIES } from '../../constants';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
-const emptyForm = { name: '', description: '', price: '', mrp: '', category: '', stock: '', isGrocery: false };
+const emptyForm = { name: '', description: '', price: '', mrp: '', category: '', stock: '', storeLocation: '' };
 
-const ProductModal = ({ product, onClose, onSaved }) => {
+const ProductModal = ({ product, onClose, onSaved, admin }) => {
+    const defaultStoreLocation = admin?.storeCode || '';
     const [form, setForm] = useState(product ? {
         name: product.name || '',
         description: product.description || '',
         price: product.price || '',
         mrp: product.mrp || '',
-        category: product.category || '',
+        category: product.subCategory || product.category || '',
         stock: product.stock || '',
-        isGrocery: product.isGrocery || false,
-    } : { ...emptyForm });
+        storeLocation: product.storeLocation || defaultStoreLocation
+    } : { ...emptyForm, storeLocation: defaultStoreLocation });
+
+    const resolvedStoreType = admin?.storeType || 'GROCERY';
+    const allowedCategories = STORE_CATEGORY_SUBCATEGORIES[resolvedStoreType] || [];
     const [images, setImages] = useState(null);
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState('');
@@ -30,9 +37,9 @@ const ProductModal = ({ product, onClose, onSaved }) => {
         fd.append('price', Number(form.price));
         fd.append('category', form.category);
         fd.append('stock', Number(form.stock));
+        if (form.storeLocation) fd.append('storeLocation', form.storeLocation);
         if (form.description) fd.append('description', form.description);
         if (form.mrp) fd.append('mrp', Number(form.mrp));
-        fd.append('isGrocery', form.isGrocery);
         if (images) {
             for (let i = 0; i < Math.min(images.length, 3); i++) {
                 fd.append('images', images[i]);
@@ -65,7 +72,7 @@ const ProductModal = ({ product, onClose, onSaved }) => {
             <div className="bg-white rounded-lg shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
                 <div className="flex justify-between items-center p-6 border-b border-gray-200">
                     <h2 className="text-lg font-bold text-gray-800">{product ? 'Edit Product' : 'Add Product'}</h2>
-                    <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
+                    <RippleButton onClick={onClose} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</RippleButton>
                 </div>
                 <form onSubmit={handleSubmit} className="p-6 space-y-4">
                     {error && <div className="bg-red-50 text-red-700 p-3 rounded text-sm">{error}</div>}
@@ -73,53 +80,56 @@ const ProductModal = ({ product, onClose, onSaved }) => {
                     <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Name *</label>
                         <input type="text" required value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-                            className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ud-primary" />
+                            className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ud-primary text-gray-900" />
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">Price *</label>
                             <input type="number" required min="0" step="0.01" value={form.price} onChange={e => setForm(f => ({ ...f, price: e.target.value }))}
-                                className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ud-primary" />
+                                className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ud-primary text-gray-900" />
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">MRP</label>
                             <input type="number" min="0" step="0.01" value={form.mrp} onChange={e => setForm(f => ({ ...f, mrp: e.target.value }))}
-                                className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ud-primary" />
+                                className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ud-primary text-gray-900" />
                         </div>
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">Category *</label>
-                            <input type="text" required value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))}
-                                className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ud-primary" />
+                            <select required value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))}
+                                className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ud-primary text-gray-900">
+                                <option value="">Select Category</option>
+                                {allowedCategories.map(c => <option key={c} value={c}>{c}</option>)}
+                            </select>
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">Stock *</label>
                             <input type="number" required min="0" value={form.stock} onChange={e => setForm(f => ({ ...f, stock: e.target.value }))}
-                                className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ud-primary" />
+                                className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ud-primary text-gray-900" />
                         </div>
                     </div>
                     <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>
                         <textarea rows="3" value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))}
-                            className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ud-primary" />
+                            className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ud-primary text-gray-900" />
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Store Location (ID)</label>
+                        <input type="text" readOnly disabled value={form.storeLocation}
+                            className="w-full border border-gray-300 rounded px-3 py-2 text-sm bg-gray-100 text-gray-500 cursor-not-allowed" />
                     </div>
                     <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Images (max 3)</label>
                         <input type="file" multiple accept="image/*" onChange={e => setImages(e.target.files)}
-                            className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-ud-primary/10 file:text-ud-primary hover:file:bg-ud-primary/20" />
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <input type="checkbox" id="isGrocery" checked={form.isGrocery} onChange={e => setForm(f => ({ ...f, isGrocery: e.target.checked }))}
-                            className="rounded border-gray-300 text-ud-primary focus:ring-ud-primary" />
-                        <label htmlFor="isGrocery" className="text-sm text-gray-700">Is Grocery Item</label>
+                            className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-ud-primary/10 file:text-ud-primary hover:file:bg-ud-primary/20 text-gray-900" />
                     </div>
                     <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
-                        <button type="button" onClick={onClose} className="px-4 py-2 border border-gray-300 rounded text-sm text-gray-700 hover:bg-gray-50">Cancel</button>
-                        <button type="submit" disabled={saving}
+                        <RippleButton type="button" onClick={onClose} className="px-4 py-2 border border-gray-300 rounded text-sm text-gray-700 hover:bg-gray-50">Cancel</RippleButton>
+                        <RippleButton type="submit" disabled={saving}
                             className="bg-ud-primary text-white px-4 py-2 rounded text-sm hover:bg-ud-primary/90 disabled:opacity-50 transition-colors">
                             {saving ? 'Saving...' : (product ? 'Update Product' : 'Create Product')}
-                        </button>
+                        </RippleButton>
                     </div>
                 </form>
             </div>
@@ -132,6 +142,7 @@ const AdminProducts = () => {
     const [loading, setLoading] = useState(true);
     const [showModal, setShowModal] = useState(false);
     const [editingProduct, setEditingProduct] = useState(null);
+    const { admin } = useAdminAuth();
 
     useEffect(() => {
         fetchProducts();
@@ -180,9 +191,9 @@ const AdminProducts = () => {
         <div>
             <div className="flex justify-between items-center mb-6">
                 <h1 className="text-2xl font-bold text-gray-800">Products</h1>
-                <button onClick={openCreate} className="bg-ud-primary text-white px-4 py-2 rounded shadow hover:bg-ud-primary/90 transition-colors flex items-center">
+                <RippleButton onClick={openCreate} className="bg-ud-primary text-white px-4 py-2 rounded shadow hover:bg-ud-primary/90 transition-colors flex items-center">
                     <span className="text-xl mr-1">+</span> Add Product
-                </button>
+                </RippleButton>
             </div>
 
             {loading ? <div className="text-center p-10 animate-pulse text-gray-500">Loading products...</div> : (
@@ -223,7 +234,7 @@ const AdminProducts = () => {
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                                         <span className="px-2 inline-flex text-xs leading-5 font-semibold rounded-full bg-gray-100 text-gray-800">
-                                            {p.category}
+                                            {p.subCategory || p.category}
                                         </span>
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
@@ -233,8 +244,8 @@ const AdminProducts = () => {
                                         </div>
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                                        <button onClick={() => openEdit(p)} className="text-indigo-600 hover:text-indigo-900 mr-4 font-semibold">Edit</button>
-                                        <button onClick={() => handleDelete(p)} className="text-red-600 hover:text-red-900 font-semibold">Delete</button>
+                                        <RippleButton onClick={() => openEdit(p)} className="text-indigo-600 hover:text-indigo-900 mr-4 font-semibold">Edit</RippleButton>
+                                        <RippleButton onClick={() => handleDelete(p)} className="text-red-600 hover:text-red-900 font-semibold">Delete</RippleButton>
                                     </td>
                                 </tr>
                             ))}
@@ -244,7 +255,7 @@ const AdminProducts = () => {
             )}
 
             {showModal && (
-                <ProductModal product={editingProduct} onClose={closeModal} onSaved={onSaved} />
+                <ProductModal product={editingProduct} onClose={closeModal} onSaved={onSaved} admin={admin} />
             )}
         </div>
     );

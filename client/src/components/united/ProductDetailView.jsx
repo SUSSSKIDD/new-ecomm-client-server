@@ -1,3 +1,4 @@
+import { RippleButton } from '../../components/ui/ripple-button';
 import { useCategory } from '../../context/CategoryContext';
 import ImageCarousel from './ImageCarousel';
 
@@ -19,12 +20,12 @@ const ProductDetailView = () => {
         <div className="bg-white min-h-screen pb-20">
             {/* Top Navigation */}
             <div className="p-4 flex items-center gap-2 border-b border-gray-100 bg-white sticky top-0 z-40">
-                <button
+                <RippleButton
                     onClick={() => setSelectedProduct(null)}
                     className="p-2 -ml-2 text-gray-600 hover:text-ud-primary"
                 >
                     <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
-                </button>
+                </RippleButton>
                 <h2 className="text-lg font-bold text-gray-900 truncate flex-1">{selectedProduct.name}</h2>
             </div>
 
@@ -80,20 +81,20 @@ const ProductDetailView = () => {
 
             {/* Bottom Sticky CTAs */}
             <div className="fixed bottom-0 left-0 right-0 p-4 bg-white border-t border-gray-100 shadow-lg flex gap-4 z-50">
-                <button
+                <RippleButton
                     onClick={() => addToCart(selectedProduct)}
                     disabled={selectedProduct.stock <= 0}
                     className="flex-1 py-3 bg-yellow-400 text-black font-bold rounded-lg hover:bg-yellow-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                     Add to Cart
-                </button>
-                <button
+                </RippleButton>
+                <RippleButton
                     onClick={handleBuyNow}
                     disabled={selectedProduct.stock <= 0}
                     className="flex-1 py-3 bg-ud-primary text-white font-bold rounded-lg hover:bg-opacity-90 transition-colors shadow-lg shadow-blue-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                     Buy Now
-                </button>
+                </RippleButton>
             </div>
         </div>
     );

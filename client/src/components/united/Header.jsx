@@ -1,3 +1,4 @@
+import { RippleButton } from '../../components/ui/ripple-button';
 import { useCategory } from '../../context/CategoryContext';
 import { useLocation } from '../../context/LocationContext';
 import { NAV_ITEMS } from '../../constants';
@@ -16,7 +17,7 @@ const Header = () => {
             {/* Location Bar */}
             <div className="bg-gradient-to-r from-emerald-50 to-teal-50 border-b border-emerald-100">
                 <div className="container mx-auto px-4 py-1.5 flex items-center justify-between">
-                    <button
+                    <RippleButton
                         onClick={requestLocation}
                         className="flex items-center gap-1.5 text-xs text-emerald-700 hover:text-emerald-800 transition-colors"
                     >
@@ -36,7 +37,7 @@ const Header = () => {
                         ) : (
                             <span className="font-medium">Set your delivery location</span>
                         )}
-                    </button>
+                    </RippleButton>
                     {serviceable === false && (
                         <span className="text-xs text-red-600 font-bold animate-pulse">
                             Not serviceable

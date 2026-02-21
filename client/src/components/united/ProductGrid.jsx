@@ -1,3 +1,4 @@
+import { RippleButton } from '../../components/ui/ripple-button';
 import PropTypes from 'prop-types';
 import { useCategory } from '../../context/CategoryContext';
 import { useProductList } from '../../hooks/useProductList';
@@ -66,7 +67,7 @@ const ProductGrid = ({ mainCategory }) => {
                                             <span className="text-[10px] text-gray-400 line-through">₹{product.mrp}</span>
                                         )}
                                     </div>
-                                    <button
+                                    <RippleButton
                                         onClick={(e) => {
                                             e.stopPropagation();
                                             if (product.stock > 0) {
@@ -80,7 +81,7 @@ const ProductGrid = ({ mainCategory }) => {
                                             }`}
                                     >
                                         ADD
-                                    </button>
+                                    </RippleButton>
                                 </div>
                             </div>
                         ))}
@@ -89,14 +90,14 @@ const ProductGrid = ({ mainCategory }) => {
                     {/* Load More Button */}
                     {hasMore && (
                         <div className="mt-6 flex justify-center">
-                            <button
+                            <RippleButton
                                 onClick={loadMore}
                                 disabled={loading}
                                 className="px-6 py-2 bg-gray-100 text-gray-700 font-semibold rounded-full hover:bg-gray-200 transition-colors disabled:opacity-50 flex items-center gap-2"
                             >
                                 {loading && <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-600"></div>}
                                 {loading ? 'Loading...' : 'Load More Products'}
-                            </button>
+                            </RippleButton>
                         </div>
                     )}
                 </>

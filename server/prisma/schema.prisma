@@ -9,7 +9,6 @@ datasource db {
 enum Role {
   USER
   STORE_MANAGER
-  STORE_ADMIN
   DELIVERY_PERSON
   ADMIN
 }
@@ -40,6 +39,20 @@ enum PaymentStatus {
 enum DeliveryPersonStatus {
   FREE
   BUSY
+}
+
+enum SmsStatus {
+  PENDING
+  SENT
+  DELIVERED
+  FAILED
+  REJECTED
+}
+
+enum SmsType {
+  OTP
+  TRANSACTIONAL
+  PROMOTIONAL
 }
 
 model User {
@@ -119,26 +132,43 @@ model Store {
   inventory       StoreInventory[]
   deliveryPersons DeliveryPerson[]
   orderItems      OrderItem[]
-  admins          StoreAdmin[]
+  managers        StoreManager[]
+  ledgerEntries   PaymentLedger[]
   products        Product[]
 
   @@index([pincode])
   @@index([isActive])
 }
 
-model StoreAdmin {
+
+model StoreManager {
   id        String   @id @default(uuid())
   name      String
   phone     String   @unique
   pinHash   String
   storeId   String
-  store     Store    @relation(fields: [storeId], references: [id])
+  store     Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([storeId])
   @@index([phone])
+}
+
+model PaymentLedger {
+  id             String   @id @default(uuid())
+  storeId        String
+  store          Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  transactionId  String   @unique // TXN-YYYYMMDD-NNNN
+  date           DateTime
+  amount         Float
+  paymentMethod  String
+  referenceNotes String?
+  createdAt      DateTime @default(now())
+
+  @@index([storeId])
+  @@index([transactionId])
 }
 
 model StoreInventory {
@@ -219,6 +249,43 @@ model Order {
   @@index([orderNumber])
   @@index([razorpayOrderId])
   @@index([status])
+}
+
+model SmsTemplate {
+  id              String    @id @default(uuid())
+  name            String
+  key             String    @unique
+  content         String
+  variables       String[]
+  type            SmsType   @default(TRANSACTIONAL)
+  isActive        Boolean   @default(true)
+  msg91TemplateId String?
+  msg91FlowId     String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  logs            SmsLog[]
+
+  @@index([key])
+  @@index([type])
+}
+
+model SmsLog {
+  id              String       @id @default(uuid())
+  templateId      String?
+  template        SmsTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  recipientPhone  String
+  variables       Json?
+  status          SmsStatus    @default(PENDING)
+  msg91RequestId  String?
+  sentAt          DateTime     @default(now())
+  deliveredAt     DateTime?
+  failureReason   String?
+  metadata        Json?
+  createdAt       DateTime     @default(now())
+
+  @@index([recipientPhone])
+  @@index([status])
+  @@index([sentAt])
 }
 
 model OrderItem {

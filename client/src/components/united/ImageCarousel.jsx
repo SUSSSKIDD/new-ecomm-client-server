@@ -1,3 +1,4 @@
+import { RippleButton } from '../../components/ui/ripple-button';
 import { useState, useEffect } from 'react';
 
 const ImageCarousel = ({ images = [], altText = '', className = '' }) => {
@@ -63,7 +64,7 @@ const ImageCarousel = ({ images = [], altText = '', className = '' }) => {
             {/* Prev / Next Arrows */}
             {hasMultiple && (
                 <>
-                    <button
+                    <RippleButton
                         onClick={goToPrev}
                         className="absolute left-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-white/80 backdrop-blur-sm shadow-md flex items-center justify-center text-gray-700 hover:bg-white hover:text-gray-900 transition-all z-10"
                         aria-label="Previous image"
@@ -71,8 +72,8 @@ const ImageCarousel = ({ images = [], altText = '', className = '' }) => {
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                         </svg>
-                    </button>
-                    <button
+                    </RippleButton>
+                    <RippleButton
                         onClick={goToNext}
                         className="absolute right-3 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-white/80 backdrop-blur-sm shadow-md flex items-center justify-center text-gray-700 hover:bg-white hover:text-gray-900 transition-all z-10"
                         aria-label="Next image"
@@ -80,7 +81,7 @@ const ImageCarousel = ({ images = [], altText = '', className = '' }) => {
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                         </svg>
-                    </button>
+                    </RippleButton>
                 </>
             )}
 
@@ -88,7 +89,7 @@ const ImageCarousel = ({ images = [], altText = '', className = '' }) => {
             {hasMultiple && (
                 <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2 z-10">
                     {images.map((_, idx) => (
-                        <button
+                        <RippleButton
                             key={idx}
                             onClick={(e) => {
                                 e.stopPropagation();

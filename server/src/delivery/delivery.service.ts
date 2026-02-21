@@ -121,6 +121,18 @@ export class DeliveryService {
         });
     }
 
+    /** Delete a delivery person (admin). */
+    async deletePerson(id: string) {
+        const person = await this.prisma.deliveryPerson.findUnique({
+            where: { id },
+        });
+        if (!person) throw new NotFoundException(`Delivery person ${id} not found`);
+
+        return this.prisma.deliveryPerson.delete({
+            where: { id }
+        });
+    }
+
     // ── Delivery person: Self-service ───────────────────────────────
 
     /** Get own profile. */

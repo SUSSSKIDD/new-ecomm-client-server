@@ -1,12 +1,13 @@
+import { RippleButton } from '../../components/ui/ripple-button';
 const HeroSection = () => {
     return (
         <div className="bg-ud-primary text-white overflow-hidden relative">
             <div className="container mx-auto px-4 py-4 md:py-0 md:h-[400px] flex flex-row items-center justify-between relative z-10">
 
                 {/* Left Arrow (Desktop Only) */}
-                <button className="hidden md:flex absolute left-4 w-10 h-10 rounded-full bg-white/20 hover:bg-white/30 items-center justify-center backdrop-blur-sm transition-colors">
+                <RippleButton className="hidden md:flex absolute left-4 w-10 h-10 rounded-full bg-white/20 hover:bg-white/30 items-center justify-center backdrop-blur-sm transition-colors">
                     <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
-                </button>
+                </RippleButton>
 
                 {/* Content */}
                 <div className="w-3/5 md:w-1/2 space-y-2 md:space-y-6 md:pl-12 z-10 text-left">
@@ -42,9 +43,9 @@ const HeroSection = () => {
                 </div>
 
                 {/* Right Arrow (Desktop Only) */}
-                <button className="hidden md:flex absolute right-4 w-10 h-10 rounded-full bg-white/20 hover:bg-white/30 items-center justify-center backdrop-blur-sm transition-colors z-30">
+                <RippleButton className="hidden md:flex absolute right-4 w-10 h-10 rounded-full bg-white/20 hover:bg-white/30 items-center justify-center backdrop-blur-sm transition-colors z-30">
                     <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
-                </button>
+                </RippleButton>
 
             </div>
         </div>

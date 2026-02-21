@@ -1,4 +1,4 @@
-import { IsString, IsNotEmpty, IsUUID } from 'class-validator';
+import { IsString, IsNotEmpty, IsUUID, Matches } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class CreateDeliveryPersonDto {
@@ -9,7 +9,7 @@ export class CreateDeliveryPersonDto {
 
   @ApiProperty({ example: '+919876543210' })
   @IsString()
-  @IsNotEmpty()
+  @Matches(/^\+91[6-9]\d{9}$/, { message: 'Phone must be a valid Indian mobile number (+91XXXXXXXXXX)' })
   phone: string;
 
   @ApiProperty({ description: 'Home store ID for this delivery person' })

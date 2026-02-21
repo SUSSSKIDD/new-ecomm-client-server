@@ -22,7 +22,7 @@ export class VerifyOtpDto {
   otp: string;
 }
 
-export class StoreAdminLoginDto {
+export class StoreManagerLoginDto {
   @IsString()
   @IsNotEmpty()
   @Matches(/^\+91[6-9]\d{9}$/, {

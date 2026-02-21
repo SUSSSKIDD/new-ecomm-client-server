@@ -21,10 +21,10 @@ export class StoreGuard implements CanActivate {
             return true;
         }
 
-        // Role.STORE_ADMIN must match storeId
-        if (user.role === Role.STORE_ADMIN) {
+        // Role.STORE_MANAGER must match storeId
+        if (user.role === Role.STORE_MANAGER) {
             if (!user.storeId) {
-                throw new ForbiddenException('Store Admin has no assigned store');
+                throw new ForbiddenException('Store Manager has no assigned store');
             }
 
             const storeIdParam = request.params.storeId;
@@ -61,6 +61,7 @@ export class StoreGuard implements CanActivate {
             return true;
         }
 
-        return true;
+        // All other roles (USER, DELIVERY_PERSON) are denied access to store resources
+        throw new ForbiddenException('Access denied: insufficient role for store resources');
     }
 }

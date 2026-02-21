@@ -3,12 +3,14 @@ import {
   Get,
   Post,
   Patch,
+  Delete,
   Body,
   Param,
   Req,
   Sse,
   UseGuards,
   ParseUUIDPipe,
+  Logger,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
@@ -32,11 +34,13 @@ interface AuthenticatedRequest extends Request {
 @ApiTags('delivery')
 @Controller('delivery')
 export class DeliveryController {
+  private readonly logger = new Logger(DeliveryController.name);
+
   constructor(
     private readonly deliveryService: DeliveryService,
     private readonly sseService: DeliverySseService,
     private readonly autoAssignService: AutoAssignService,
-  ) {}
+  ) { }
 
   // ── Admin endpoints ─────────────────────────────────────────────
 
@@ -69,6 +73,15 @@ export class DeliveryController {
     data: Partial<{ name: string; isActive: boolean; homeStoreId: string }>,
   ) {
     return this.deliveryService.updatePerson(id, data);
+  }
+
+  @Delete('persons/:id')
+  @ApiBearerAuth()
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles('ADMIN')
+  @ApiOperation({ summary: 'Delete delivery person' })
+  deletePerson(@Param('id', ParseUUIDPipe) id: string) {
+    return this.deliveryService.deletePerson(id);
   }
 
   // ── Delivery person self-service ────────────────────────────────
@@ -114,7 +127,7 @@ export class DeliveryController {
       this.autoAssignService
         .checkPendingOrders(req.user.sub)
         .catch((err) =>
-          console.error('checkPendingOrders error:', err.message),
+          this.logger.error(`checkPendingOrders error: ${err.message}`),
         );
     }
 
@@ -149,7 +162,7 @@ export class DeliveryController {
     // Person is now FREE — check pending orders
     this.autoAssignService
       .checkPendingOrders(req.user.sub)
-      .catch((err) => console.error('checkPendingOrders error:', err.message));
+      .catch((err) => this.logger.error(`checkPendingOrders error: ${err.message}`));
 
     return response;
   }

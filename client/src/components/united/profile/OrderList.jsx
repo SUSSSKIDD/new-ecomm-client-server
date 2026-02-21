@@ -1,3 +1,4 @@
+import { RippleButton } from '../../../components/ui/ripple-button';
 import { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useAuth } from '../../../context/AuthContext';
@@ -44,9 +45,9 @@ const OrderList = ({ onBack }) => {
         return (
             <div className="flex flex-col h-full bg-white">
                 <div className="flex items-center gap-3 p-4 border-b border-gray-100">
-                    <button onClick={onBack} className="p-2 -ml-2 hover:bg-gray-100 rounded-full">
+                    <RippleButton onClick={onBack} className="p-2 -ml-2 hover:bg-gray-100 rounded-full">
                         <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
-                    </button>
+                    </RippleButton>
                     <h2 className="text-lg font-bold text-gray-900">My Orders</h2>
                 </div>
                 <div className="flex-1 flex items-center justify-center">
@@ -59,9 +60,9 @@ const OrderList = ({ onBack }) => {
     return (
         <div className="flex flex-col h-full bg-white">
             <div className="flex items-center gap-3 p-4 border-b border-gray-100 bg-white sticky top-0 z-10">
-                <button onClick={onBack} className="p-2 -ml-2 hover:bg-gray-100 rounded-full">
+                <RippleButton onClick={onBack} className="p-2 -ml-2 hover:bg-gray-100 rounded-full">
                     <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
-                </button>
+                </RippleButton>
                 <h2 className="text-lg font-bold text-gray-900">My Orders</h2>
             </div>
 

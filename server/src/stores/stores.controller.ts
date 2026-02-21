@@ -27,13 +27,30 @@ import {
 import { CheckServiceabilityDto } from './dto/check-serviceability.dto';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
+import { StoreGuard } from '../auth/guards/store.guard';
+import {
+  STORE_CATEGORIES,
+  STORE_CATEGORY_LABELS,
+  CATEGORY_SUBCATEGORIES,
+} from '../common/constants/store-categories';
 
 @ApiTags('stores')
 @Controller('stores')
 export class StoresController {
-  constructor(private readonly storesService: StoresService) {}
+  constructor(private readonly storesService: StoresService) { }
 
   // ── Public ───────────────────────────────────────────────────────
+
+  @Get('categories')
+  @ApiOperation({ summary: 'Get available store categories' })
+  @ApiResponse({ status: 200, description: 'Store categories list' })
+  getCategories() {
+    return {
+      categories: STORE_CATEGORIES,
+      labels: STORE_CATEGORY_LABELS,
+      subcategories: CATEGORY_SUBCATEGORIES,
+    };
+  }
 
   @Get('serviceability')
   @ApiOperation({
@@ -86,7 +103,7 @@ export class StoresController {
 
   @Get(':id/inventory')
   @ApiBearerAuth()
-  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @UseGuards(AuthGuard('jwt'), RolesGuard, StoreGuard)
   @Roles('ADMIN', 'STORE_MANAGER')
   @ApiOperation({ summary: 'Get store inventory (Admin/Store Manager)' })
   getInventory(@Param('id', ParseUUIDPipe) id: string) {
@@ -95,7 +112,7 @@ export class StoresController {
 
   @Post(':id/inventory')
   @ApiBearerAuth()
-  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @UseGuards(AuthGuard('jwt'), RolesGuard, StoreGuard)
   @Roles('ADMIN', 'STORE_MANAGER')
   @ApiOperation({ summary: 'Set single product stock (Admin/Store Manager)' })
   updateInventory(
@@ -107,7 +124,7 @@ export class StoresController {
 
   @Post(':id/inventory/bulk')
   @ApiBearerAuth()
-  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @UseGuards(AuthGuard('jwt'), RolesGuard, StoreGuard)
   @Roles('ADMIN', 'STORE_MANAGER')
   @ApiOperation({ summary: 'Bulk set inventory (Admin/Store Manager)' })
   bulkUpdateInventory(

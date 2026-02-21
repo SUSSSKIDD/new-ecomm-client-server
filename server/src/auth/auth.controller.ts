@@ -1,6 +1,6 @@
 import { Controller, Post, Body, HttpCode, HttpStatus } from '@nestjs/common';
 import { AuthService } from './auth.service';
-import { SendOtpDto, VerifyOtpDto, StoreAdminLoginDto } from './dto/auth.dto';
+import { SendOtpDto, VerifyOtpDto, StoreManagerLoginDto } from './dto/auth.dto';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 
 @ApiTags('auth')
@@ -26,12 +26,21 @@ export class AuthController {
     return this.authService.verifyOtp(verifyOtpDto);
   }
 
-  @Post('store-admin/login')
+  @Post('store-manager/login')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Store Admin Login (Phone + PIN)' })
+  @ApiOperation({ summary: 'Store Manager Login (Phone + PIN)' })
   @ApiResponse({ status: 200, description: 'Token issued.' })
   @ApiResponse({ status: 401, description: 'Invalid credentials.' })
-  storeAdminLogin(@Body() dto: StoreAdminLoginDto) {
-    return this.authService.storeAdminLogin(dto);
+  storeManagerLogin(@Body() dto: StoreManagerLoginDto) {
+    return this.authService.storeManagerLogin(dto);
+  }
+
+  @Post('super-admin/login')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Super Admin Login (Phone + PIN)' })
+  @ApiResponse({ status: 200, description: 'Token issued.' })
+  @ApiResponse({ status: 401, description: 'Invalid credentials.' })
+  superAdminLogin(@Body() dto: StoreManagerLoginDto) {
+    return this.authService.superAdminLogin(dto);
   }
 }

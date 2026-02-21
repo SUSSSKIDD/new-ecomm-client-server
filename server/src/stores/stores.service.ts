@@ -103,15 +103,45 @@ export class StoresService {
 
   // ── CRUD ────────────────────────────────────────────────────────
 
+  private async generateStoreCode(): Promise<string> {
+    const lastStore = await this.prisma.store.findFirst({
+      where: { storeCode: { startsWith: 'A' } },
+      orderBy: { storeCode: 'desc' },
+    });
+
+    if (!lastStore || !lastStore.storeCode) {
+      return 'A1';
+    }
+
+    const numMatch = lastStore.storeCode.match(/A(\d+)/);
+    if (numMatch) {
+      const nextNum = parseInt(numMatch[1], 10) + 1;
+      return `A${nextNum}`;
+    }
+    return 'A1';
+  }
+
   async create(dto: CreateStoreDto) {
-    try {
-      const store = await this.prisma.store.create({ data: dto });
-      await this.invalidateCache();
-      this.logger.log(`Store created: ${store.name} (${store.id})`);
-      return store;
-    } catch (error) {
-      this.logger.error(`Failed to create store: ${error.message}`, error.stack);
-      throw error;
+    let retries = 3;
+    while (retries > 0) {
+      try {
+        const storeCode = await this.generateStoreCode();
+        const store = await this.prisma.store.create({
+          data: { ...dto, storeCode }
+        });
+        await this.invalidateCache();
+        this.logger.log(`Store created: ${store.name} (${store.id}) with code ${store.storeCode}`);
+        return store;
+      } catch (error) {
+        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002' && Array.isArray(error.meta?.target) && error.meta.target.includes('storeCode')) {
+          retries--;
+          if (retries === 0) throw new BadRequestException('Failed to generate unique store code. Please try again.');
+          // Let it loop and retry
+        } else {
+          this.logger.error(`Failed to create store: ${error.message}`, error.stack);
+          throw error;
+        }
+      }
     }
   }
 

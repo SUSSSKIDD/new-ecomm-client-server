@@ -1,3 +1,4 @@
+import { RippleButton } from '../ui/ripple-button';
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAdminAuth } from '../../hooks/useAdminAuth';
 import { useEffect } from 'react';
@@ -15,19 +16,27 @@ const AdminLayout = () => {
 
     if (loading || !admin) return <div className="p-10 text-center text-gray-500">Loading Admin Panel...</div>;
 
-    const navItems = [
+    let navItems = [
         { name: 'Dashboard', path: '/admin/dashboard', icon: '📊' },
         { name: 'Products', path: '/admin/products', icon: '📦' },
         { name: 'Orders', path: '/admin/orders', icon: '🛒' },
         { name: 'Inventory', path: '/admin/inventory', icon: '📋' },
+        { name: 'Ledger', path: '/admin/ledger', icon: '📒' },
     ];
+
+    if (admin?.role === 'ADMIN') {
+        navItems = navItems.filter(i => i.name !== 'Products' && i.name !== 'Inventory');
+        navItems.push({ name: 'Stores', path: '/admin/stores', icon: '🏪' });
+        navItems.push({ name: 'Managers', path: '/admin/managers', icon: '👔' });
+        navItems.push({ name: 'Delivery Guys', path: '/admin/delivery', icon: '🛵' });
+    }
 
     return (
         <div className="flex h-screen bg-gray-100 font-sans">
             {/* Sidebar */}
             <aside className="w-64 bg-white shadow-xl flex flex-col fixed inset-y-0 left-0 z-10">
                 <div className="p-6 border-b border-gray-100 bg-ud-primary text-white">
-                    <h1 className="text-xl font-bold tracking-tight">Store Admin</h1>
+                    <h1 className="text-xl font-bold tracking-tight">Admin Panel</h1>
                     <div className="mt-2 text-sm opacity-90 truncate">
                         {admin?.storeName || 'Store'} <span className="text-xs bg-white/20 px-1 rounded ml-1">{admin?.storeCode}</span>
                     </div>
@@ -35,14 +44,14 @@ const AdminLayout = () => {
 
                 <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
                     {navItems.map(item => {
-                        const isActive = location.pathname.startsWith(item.path);
+                        const isActive = location.pathname === item.path || location.pathname.startsWith(item.path + '/');
                         return (
                             <Link
                                 key={item.path}
                                 to={item.path}
                                 className={`flex items-center p-3 rounded-lg transition-colors ${isActive
-                                        ? 'bg-ud-primary/10 text-ud-primary font-medium'
-                                        : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+                                    ? 'bg-ud-primary/10 text-ud-primary font-medium'
+                                    : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'
                                     }`}
                             >
                                 <span className="mr-3 text-xl">{item.icon}</span>
@@ -62,12 +71,12 @@ const AdminLayout = () => {
                             <p className="text-xs text-gray-500 truncate w-32">{admin?.phone}</p>
                         </div>
                     </div>
-                    <button
+                    <RippleButton
                         onClick={logout}
                         className="w-full flex items-center justify-center p-2 text-red-600 hover:bg-red-50 rounded transition-colors text-sm font-medium border border-red-200"
                     >
                         LOGOUT
-                    </button>
+                    </RippleButton>
                 </div>
             </aside>
 

@@ -1,3 +1,4 @@
+import { RippleButton } from '../../components/ui/ripple-button';
 import { DEAL_OF_DAY_ITEMS } from '../../constants';
 
 const DealsSection = () => {
@@ -17,7 +18,7 @@ const DealsSection = () => {
                             <span className="bg-yellow-400 p-1 rounded">30m</span>
                         </div>
                     </div>
-                    <button className="text-xs font-bold text-gray-500 hover:text-ud-primary uppercase tracking-wider">View All</button>
+                    <RippleButton className="text-xs font-bold text-gray-500 hover:text-ud-primary uppercase tracking-wider">View All</RippleButton>
                 </div>
             </div>
 
@@ -41,7 +42,7 @@ const DealsSection = () => {
                                 <span className="text-xs text-gray-400 line-through">{p.original}</span>
                                 <span className="text-base md:text-lg font-bold text-ud-primary">{p.price}</span>
                             </div>
-                            <button className="w-full md:w-auto bg-ud-dark text-white text-xs font-bold px-3 py-1.5 md:px-4 md:py-2 rounded hover:bg-ud-primary transition-colors text-center">ADD</button>
+                            <RippleButton className="w-full md:w-auto bg-ud-dark text-white text-xs font-bold px-3 py-1.5 md:px-4 md:py-2 rounded hover:bg-ud-primary transition-colors text-center">ADD</RippleButton>
                         </div>
                     </div>
                 ))}

@@ -1,3 +1,4 @@
+import { RippleButton } from '../ui/ripple-button';
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import PropTypes from 'prop-types';
@@ -79,9 +80,9 @@ const LoginModal = ({ isOpen, onClose }) => {
                         <h2 className="text-xl font-bold text-gray-900">
                             {step === 'phone' ? 'Login or Sign up' : 'Enter OTP'}
                         </h2>
-                        <button onClick={onClose} className="p-2 -mr-2 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-100 transition-colors">
+                        <RippleButton onClick={onClose} className="p-2 -mr-2 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-100 transition-colors">
                             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-                        </button>
+                        </RippleButton>
                     </div>
 
                     {step === 'phone' ? (
@@ -105,7 +106,7 @@ const LoginModal = ({ isOpen, onClose }) => {
                                 </div>
                             </div>
                             {error && <p className="text-red-500 text-sm bg-red-50 p-2 rounded-lg">{error}</p>}
-                            <button
+                            <RippleButton
                                 type="submit"
                                 disabled={loading || phone.length < 10}
                                 className="w-full py-3 bg-ud-primary text-white font-bold rounded-xl hover:bg-emerald-600 active:scale-95 transition-all disabled:opacity-70 disabled:cursor-not-allowed flex justify-center items-center gap-2 shadow-lg shadow-ud-primary/20"
@@ -114,7 +115,7 @@ const LoginModal = ({ isOpen, onClose }) => {
                                     <svg className="animate-spin h-5 w-5 text-white" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
                                 )}
                                 {loading ? 'Sending OTP...' : 'Continue'}
-                            </button>
+                            </RippleButton>
                             <p className="text-xs text-center text-gray-400 mt-4 leading-relaxed">
                                 By continuing, you agree to our <span className="text-gray-600 underline cursor-pointer">Terms of Service</span> & <span className="text-gray-600 underline cursor-pointer">Privacy Policy</span>
                             </p>
@@ -125,13 +126,13 @@ const LoginModal = ({ isOpen, onClose }) => {
                                 <p className="text-sm text-gray-600 mb-1">
                                     We sent a code to <span className="font-bold text-gray-900">{phone}</span>
                                 </p>
-                                <button
+                                <RippleButton
                                     type="button"
                                     onClick={() => setStep('phone')}
                                     className="text-xs text-ud-primary font-bold hover:underline transition-all"
                                 >
                                     Wrong number?
-                                </button>
+                                </RippleButton>
                             </div>
 
                             <div className="flex justify-center">
@@ -150,7 +151,7 @@ const LoginModal = ({ isOpen, onClose }) => {
 
                             {error && <p className="text-red-500 text-sm text-center bg-red-50 p-2 rounded-lg">{error}</p>}
 
-                            <button
+                            <RippleButton
                                 type="submit"
                                 disabled={loading || otp.length < 6}
                                 className="w-full py-3 bg-ud-primary text-white font-bold rounded-xl hover:bg-emerald-600 active:scale-95 transition-all disabled:opacity-70 disabled:cursor-not-allowed flex justify-center items-center gap-2 shadow-lg shadow-ud-primary/20"
@@ -159,17 +160,17 @@ const LoginModal = ({ isOpen, onClose }) => {
                                     <svg className="animate-spin h-5 w-5 text-white" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
                                 )}
                                 {loading ? 'Verifying...' : 'Verify & Login'}
-                            </button>
+                            </RippleButton>
 
                             <div className="text-center">
-                                <button
+                                <RippleButton
                                     type="button"
                                     className={`text-xs font-medium transition-colors ${resendCooldown > 0 ? 'text-gray-400 cursor-not-allowed' : 'text-ud-primary hover:underline'}`}
                                     onClick={handleResendOtp}
                                     disabled={resendCooldown > 0 || loading}
                                 >
                                     {resendCooldown > 0 ? `Resend Code in ${resendCooldown}s` : 'Resend Code'}
-                                </button>
+                                </RippleButton>
                             </div>
                         </form>
                     )}

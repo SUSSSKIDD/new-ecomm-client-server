@@ -13,8 +13,11 @@ import { OrdersModule } from './orders/orders.module';
 import { PaymentsModule } from './payments/payments.module';
 import { StoresModule } from './stores/stores.module';
 import { DeliveryModule } from './delivery/delivery.module';
-import { StoreAdminModule } from './store-admin/store-admin.module';
+
 import { DashboardModule } from './dashboard/dashboard.module';
+import { StoreManagerModule } from './store-manager/store-manager.module';
+import { LedgerModule } from './ledger/ledger.module';
+import { SmsModule } from './sms/sms.module';
 
 @Module({
   imports: [
@@ -30,8 +33,11 @@ import { DashboardModule } from './dashboard/dashboard.module';
     PaymentsModule,
     StoresModule,
     DeliveryModule,
-    StoreAdminModule,
+
     DashboardModule,
+    StoreManagerModule,
+    LedgerModule,
+    SmsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

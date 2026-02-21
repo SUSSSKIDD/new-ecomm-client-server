@@ -1,3 +1,4 @@
+import { RippleButton } from '../components/ui/ripple-button';
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
@@ -54,9 +55,9 @@ const ProductDetails = () => {
                 <Header />
                 <div className="flex-1 flex flex-col justify-center items-center gap-4">
                     <p className="text-red-500 text-lg">Failed to load product details.</p>
-                    <button onClick={handleBack} className="px-4 py-2 bg-ud-primary text-white rounded-lg">
+                    <RippleButton onClick={handleBack} className="px-4 py-2 bg-ud-primary text-white rounded-lg">
                         Go Back
-                    </button>
+                    </RippleButton>
                 </div>
             </div>
         );
@@ -70,10 +71,10 @@ const ProductDetails = () => {
         <div className="min-h-screen bg-gray-50 flex flex-col">
             <Header />
             <div className="flex-1 container mx-auto px-4 py-8">
-                <button onClick={handleBack} className="mb-4 text-gray-600 hover:text-gray-900 flex items-center gap-1">
+                <RippleButton onClick={handleBack} className="mb-4 text-gray-600 hover:text-gray-900 flex items-center gap-1">
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
                     Back to Shopping
-                </button>
+                </RippleButton>
 
                 <div className="bg-white rounded-xl shadow-sm overflow-hidden flex flex-col md:flex-row">
                     {/* Image Carousel Section */}
@@ -132,20 +133,20 @@ const ProductDetails = () => {
                         </div>
 
                         <div className="mt-8 flex gap-4">
-                            <button
+                            <RippleButton
                                 disabled={product.stock <= 0}
                                 onClick={() => addToCart(product)}
                                 className="flex-1 py-3 px-6 bg-yellow-400 font-bold text-gray-900 rounded-lg hover:bg-yellow-500 transition-colors shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                                 Add to Cart
-                            </button>
-                            <button
+                            </RippleButton>
+                            <RippleButton
                                 disabled={product.stock <= 0}
                                 onClick={() => { addToCart(product); setIsCartOpen(true); }}
                                 className="flex-1 py-3 px-6 bg-orange-500 font-bold text-white rounded-lg hover:bg-orange-600 transition-colors shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                                 Buy Now
-                            </button>
+                            </RippleButton>
                         </div>
                     </div>
                 </div>

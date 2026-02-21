@@ -6,8 +6,8 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma.service';
-import { TwilioService } from './twilio.service';
-import { SendOtpDto, VerifyOtpDto, StoreAdminLoginDto } from './dto/auth.dto';
+import { SmsService } from '../sms/sms.service';
+import { SendOtpDto, VerifyOtpDto, StoreManagerLoginDto } from './dto/auth.dto';
 import * as bcrypt from 'bcryptjs';
 import { Role } from '@prisma/client';
 
@@ -18,13 +18,13 @@ export class AuthService {
   constructor(
     private prisma: PrismaService,
     private jwtService: JwtService,
-    private twilioService: TwilioService,
+    private smsService: SmsService,
   ) { }
 
   async sendOtp(dto: SendOtpDto) {
     // TODO: Add rate limiting here using Redis
     try {
-      await this.twilioService.sendOtp(dto.phone);
+      await this.smsService.sendOtp(dto.phone);
       return { message: 'OTP sent successfully' };
     } catch (error) {
       throw new BadRequestException(
@@ -34,7 +34,7 @@ export class AuthService {
   }
 
   async verifyOtp(dto: VerifyOtpDto) {
-    const isValid = await this.twilioService.verifyOtp(dto.phone, dto.otp);
+    const isValid = await this.smsService.verifyOtp(dto.phone, dto.otp);
 
     if (!isValid) {
       throw new UnauthorizedException('Invalid OTP');
@@ -78,38 +78,75 @@ export class AuthService {
       },
     };
   }
-  async storeAdminLogin(dto: StoreAdminLoginDto) {
-    const admin = await this.prisma.storeAdmin.findUnique({
+  async storeManagerLogin(dto: StoreManagerLoginDto) {
+    const manager = await this.prisma.storeManager.findUnique({
       where: { phone: dto.phone },
       include: { store: true },
     });
 
-    if (!admin || !admin.isActive) {
+    if (!manager || !manager.isActive) {
       throw new UnauthorizedException('Invalid credentials or inactive account');
     }
 
-    const isPinValid = await bcrypt.compare(dto.pin, admin.pinHash);
+    const isPinValid = await bcrypt.compare(dto.pin, manager.pinHash);
     if (!isPinValid) {
       throw new UnauthorizedException('Invalid credentials');
     }
 
     const payload = {
-      sub: admin.id,
-      phone: admin.phone,
-      role: Role.STORE_ADMIN,
-      storeId: admin.storeId,
+      sub: manager.id,
+      phone: manager.phone,
+      role: Role.STORE_MANAGER,
+      storeId: manager.storeId,
     };
 
     return {
       access_token: await this.jwtService.signAsync(payload),
       user: {
-        id: admin.id,
-        name: admin.name,
-        phone: admin.phone,
-        role: Role.STORE_ADMIN,
-        storeId: admin.storeId,
-        storeName: admin.store.name,
-        storeCode: admin.store.storeCode,
+        id: manager.id,
+        name: manager.name,
+        phone: manager.phone,
+        role: Role.STORE_MANAGER,
+        storeId: manager.storeId,
+        storeName: manager.store.name,
+        storeCode: manager.store.storeCode,
+        storeType: manager.store.storeType,
+      },
+    };
+  }
+
+  async superAdminLogin(dto: StoreManagerLoginDto) {
+    if (dto.phone !== '+919999999999' || dto.pin !== '0000') {
+      throw new UnauthorizedException('Invalid Super Admin credentials');
+    }
+
+    let user = await this.prisma.user.findUnique({
+      where: { phone: dto.phone },
+    });
+
+    if (!user) {
+      user = await this.prisma.user.create({
+        data: {
+          phone: dto.phone,
+          role: Role.ADMIN,
+          name: 'Super Admin',
+        },
+      });
+    }
+
+    const payload = {
+      sub: user.id,
+      phone: user.phone,
+      role: Role.ADMIN,
+    };
+
+    return {
+      access_token: await this.jwtService.signAsync(payload),
+      user: {
+        id: user.id,
+        name: user.name,
+        phone: user.phone,
+        role: Role.ADMIN,
       },
     };
   }

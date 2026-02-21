@@ -1,0 +1,61 @@
+export const STORE_CATEGORIES = [
+    'GROCERY',
+    'PIZZA_TOWN',
+    'AUTO_SERVICE',
+    'DROP_IN_FACTORY',
+    'AUTO_PARTS_SHOP',
+] as const;
+
+export type StoreCategoryType = (typeof STORE_CATEGORIES)[number];
+
+export const STORE_CATEGORY_LABELS: Record<StoreCategoryType, string> = {
+    GROCERY: 'Grocery',
+    PIZZA_TOWN: 'Pizza Town & Food Zone',
+    AUTO_SERVICE: 'Auto Service & Parts',
+    DROP_IN_FACTORY: 'Drop In Factory',
+    AUTO_PARTS_SHOP: 'Auto Parts Shop',
+};
+
+export const CATEGORY_SUBCATEGORIES: Record<StoreCategoryType, string[]> = {
+    GROCERY: [
+        'Vegetables & Fruits',
+        'Atta, Rice & Dal',
+        'Oil, Ghee & Masala',
+        'Dairy, Bread & Eggs',
+        'Bakery & Biscuits',
+        'Dry Fruits & Cereals',
+        'Chicken, Meat & Fish',
+        'Kitchenware & Appliances',
+        'Chips & Namkeen',
+        'Sweets & Chocolates',
+        'Drinks & Juices',
+        'Tea, Coffee & Milk Drinks',
+        'Instant Food',
+        'Sauces & Spreads',
+        'Paan Corner',
+        'Ice Creams & More',
+        'Bath & Body',
+        'Hair',
+        'Skin & Face',
+        'Beauty & Cosmetics',
+        'Feminine Hygiene',
+        'Baby Care',
+        'Health & Pharma',
+        'Sexual Wellness',
+        'Home & Lifestyle',
+        'Cleaners & Repellents',
+        'Electronics',
+        'Stationery & Games',
+    ],
+    PIZZA_TOWN: ['Pizza', 'Burger', 'Sandwich', 'French Fries', 'Cake'],
+    AUTO_SERVICE: ['Car Wash', 'Bike Wash', 'Car Products', 'Bike Products'],
+    DROP_IN_FACTORY: [
+        'General',
+        'Photo Frames',
+        'Coffee Mugs',
+        'Custom T-Shirts',
+        'Personalized Gifts',
+        'Stationery Printing',
+    ],
+    AUTO_PARTS_SHOP: ['Parts', 'Accessories', 'Tools'], // Added default ones if needed
+};

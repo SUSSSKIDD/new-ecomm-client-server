@@ -1,3 +1,4 @@
+import { RippleButton } from '../ui/ripple-button';
 import { useEffect, useState } from 'react';
 import { useAdminAuth } from '../../hooks/useAdminAuth';
 
@@ -51,7 +52,7 @@ const AdminDashboard = () => {
         <div>
             <div className="flex justify-between items-center mb-8">
                 <h1 className="text-2xl font-bold text-gray-800">Dashboard</h1>
-                <button onClick={fetchStats} className="text-sm text-ud-primary hover:underline">Refresh Data</button>
+                <RippleButton onClick={fetchStats} className="text-sm text-ud-primary hover:underline">Refresh Data</RippleButton>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">

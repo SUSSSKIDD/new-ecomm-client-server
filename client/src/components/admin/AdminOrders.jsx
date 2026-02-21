@@ -1,4 +1,5 @@
 /* eslint-disable react/prop-types */
+import { RippleButton } from '../ui/ripple-button';
 import { useEffect, useState } from 'react';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
@@ -116,7 +117,7 @@ const AdminOrders = () => {
                 <select
                     value={statusFilter}
                     onChange={e => { setStatusFilter(e.target.value); setPage(1); }}
-                    className="border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ud-primary"
+                    className="border border-gray-300 rounded px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-ud-primary"
                 >
                     <option value="">All Statuses</option>
                     {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
@@ -183,13 +184,13 @@ const AdminOrders = () => {
                                                 {o.assignment.deliveryPerson?.name || 'Assigned'}
                                             </span>
                                         ) : canAssignDelivery(o) ? (
-                                            <button
+                                            <RippleButton
                                                 onClick={() => assignDelivery(o.id)}
                                                 disabled={assigningId === o.id}
                                                 className="px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50"
                                             >
                                                 {assigningId === o.id ? 'Assigning...' : 'Find Delivery'}
-                                            </button>
+                                            </RippleButton>
                                         ) : (
                                             <span className="text-xs text-gray-400">—</span>
                                         )}
@@ -199,7 +200,7 @@ const AdminOrders = () => {
                                             value={o.status}
                                             disabled={updatingId === o.id}
                                             onChange={e => updateStatus(o.id, e.target.value)}
-                                            className="border border-gray-300 rounded px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-ud-primary disabled:opacity-50"
+                                            className="border border-gray-300 rounded px-2 py-1 text-xs text-gray-900 focus:outline-none focus:ring-2 focus:ring-ud-primary disabled:opacity-50"
                                         >
                                             {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
                                         </select>
@@ -213,20 +214,20 @@ const AdminOrders = () => {
                     <div className="bg-gray-50 px-6 py-3 flex items-center justify-between border-t border-gray-200">
                         <span className="text-sm text-gray-500">Page {page} of {totalPages}</span>
                         <div className="flex gap-2">
-                            <button
+                            <RippleButton
                                 onClick={() => setPage(p => Math.max(1, p - 1))}
                                 disabled={page <= 1}
                                 className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                                 Previous
-                            </button>
-                            <button
+                            </RippleButton>
+                            <RippleButton
                                 onClick={() => setPage(p => Math.min(totalPages, p + 1))}
                                 disabled={page >= totalPages}
                                 className="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                                 Next
-                            </button>
+                            </RippleButton>
                         </div>
                     </div>
                 </div>

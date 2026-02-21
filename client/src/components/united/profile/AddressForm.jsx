@@ -1,3 +1,4 @@
+import { RippleButton } from '../../../components/ui/ripple-button';
 import { useState } from 'react';
 import { INDIAN_STATES } from '../../../utils/constants';
 
@@ -47,9 +48,9 @@ const AddressForm = ({ onSubmit, onCancel, loading, initialData }) => {
     return (
         <div className="flex flex-col h-full">
             <div className="flex items-center gap-3 mb-6">
-                <button onClick={onCancel} className="p-2 hover:bg-gray-100 rounded-full">
+                <RippleButton onClick={onCancel} className="p-2 hover:bg-gray-100 rounded-full">
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
-                </button>
+                </RippleButton>
                 <h3 className="text-lg font-bold text-gray-900">{initialData ? 'Edit Address' : 'Add New Address'}</h3>
             </div>
 
@@ -59,7 +60,7 @@ const AddressForm = ({ onSubmit, onCancel, loading, initialData }) => {
                     <label className="block text-xs font-bold text-gray-700 mb-2 uppercase">Address Type</label>
                     <div className="flex gap-2">
                         {['HOME', 'WORK', 'OTHER'].map(type => (
-                            <button
+                            <RippleButton
                                 type="button"
                                 key={type}
                                 onClick={() => setFormData({ ...formData, type })}
@@ -69,7 +70,7 @@ const AddressForm = ({ onSubmit, onCancel, loading, initialData }) => {
                                     }`}
                             >
                                 {type}
-                            </button>
+                            </RippleButton>
                         ))}
                     </div>
                 </div>
@@ -103,7 +104,7 @@ const AddressForm = ({ onSubmit, onCancel, loading, initialData }) => {
 
                 {/* Use Current Location Button */}
                 <div>
-                    <button
+                    <RippleButton
                         type="button"
                         onClick={handleUseLocation}
                         disabled={gpsLoading}
@@ -130,7 +131,7 @@ const AddressForm = ({ onSubmit, onCancel, loading, initialData }) => {
                                 <span className="text-sm font-medium">Use current location</span>
                             </>
                         )}
-                    </button>
+                    </RippleButton>
                 </div>
 
                 {/* Address Fields */}
@@ -208,13 +209,13 @@ const AddressForm = ({ onSubmit, onCancel, loading, initialData }) => {
                 </div>
 
                 <div className="pt-4">
-                    <button
+                    <RippleButton
                         type="submit"
                         disabled={loading}
                         className="w-full py-3 bg-ud-primary text-white font-bold rounded-xl shadow-lg hover:bg-emerald-600 transition-colors disabled:opacity-50"
                     >
                         {loading ? 'Saving...' : (initialData ? 'Update Address' : 'Save Address')}
-                    </button>
+                    </RippleButton>
                 </div>
             </form>
         </div>

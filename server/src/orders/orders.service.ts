@@ -491,6 +491,7 @@ export class OrdersService {
       select: {
         id: true,
         orderNumber: true,
+        status: true,
         total: true,
         paymentMethod: true,
         paymentStatus: true,

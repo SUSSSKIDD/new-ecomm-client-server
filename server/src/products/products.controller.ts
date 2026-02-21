@@ -31,6 +31,8 @@ import { RemoveImageDto } from './dto/remove-image.dto';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 
+import { StoreGuard } from '../auth/guards/store.guard';
+
 const MULTER_IMAGE_OPTIONS = {
   limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
   fileFilter: (_req: any, file: Express.Multer.File, cb: any) => {
@@ -73,9 +75,9 @@ export class ProductsController {
 
   @Get('admin/my-store')
   @ApiBearerAuth()
-  @UseGuards(AuthGuard('jwt'), RolesGuard)
-  @Roles('ADMIN', 'STORE_ADMIN')
-  @ApiOperation({ summary: 'List products for my store (Store Admin)' })
+  @UseGuards(AuthGuard('jwt'), RolesGuard, StoreGuard)
+  @Roles('ADMIN', 'STORE_MANAGER')
+  @ApiOperation({ summary: 'List products for my store (Store Admin / Store Manager)' })
   findStoreProducts(@Req() req: any) {
     const storeId = req.user?.storeId;
     if (!storeId && req.user.role !== 'ADMIN') {
@@ -91,8 +93,8 @@ export class ProductsController {
 
   @Post()
   @ApiBearerAuth()
-  @UseGuards(AuthGuard('jwt'), RolesGuard)
-  @Roles('ADMIN', 'STORE_MANAGER', 'STORE_ADMIN')
+  @UseGuards(AuthGuard('jwt'), RolesGuard, StoreGuard)
+  @Roles('ADMIN', 'STORE_MANAGER')
   @UseInterceptors(FilesInterceptor('images', 3, MULTER_IMAGE_OPTIONS))
   @ApiConsumes('multipart/form-data')
   @ApiOperation({ summary: 'Create a product with image uploads (Admin only)' })
@@ -125,8 +127,8 @@ export class ProductsController {
 
   @Patch(':id')
   @ApiBearerAuth()
-  @UseGuards(AuthGuard('jwt'), RolesGuard)
-  @Roles('ADMIN', 'STORE_MANAGER', 'STORE_ADMIN')
+  @UseGuards(AuthGuard('jwt'), RolesGuard, StoreGuard)
+  @Roles('ADMIN', 'STORE_MANAGER')
   @UseInterceptors(FilesInterceptor('images', 3, MULTER_IMAGE_OPTIONS))
   @ApiConsumes('multipart/form-data')
   @ApiOperation({ summary: 'Update product details (Admin only)' })
@@ -141,8 +143,8 @@ export class ProductsController {
 
   @Delete(':id')
   @ApiBearerAuth()
-  @UseGuards(AuthGuard('jwt'), RolesGuard)
-  @Roles('ADMIN', 'STORE_MANAGER', 'STORE_ADMIN')
+  @UseGuards(AuthGuard('jwt'), RolesGuard, StoreGuard)
+  @Roles('ADMIN', 'STORE_MANAGER')
   @ApiOperation({ summary: 'Delete product + cleanup images (Admin only)' })
   remove(@Param('id', ParseUUIDPipe) id: string, @Req() req: any) {
     return this.productsService.remove(id, req.user?.storeId);
@@ -150,7 +152,7 @@ export class ProductsController {
 
   @Post(':id/images')
   @ApiBearerAuth()
-  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @UseGuards(AuthGuard('jwt'), RolesGuard, StoreGuard)
   @Roles('ADMIN', 'STORE_MANAGER')
   @UseInterceptors(FilesInterceptor('images', 3, MULTER_IMAGE_OPTIONS))
   @ApiConsumes('multipart/form-data')
@@ -175,7 +177,7 @@ export class ProductsController {
 
   @Delete(':id/images')
   @ApiBearerAuth()
-  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @UseGuards(AuthGuard('jwt'), RolesGuard, StoreGuard)
   @Roles('ADMIN', 'STORE_MANAGER')
   @ApiOperation({
     summary: 'Remove a specific image from product (Admin only)',

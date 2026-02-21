@@ -1,3 +1,4 @@
+import { RippleButton } from '../ui/ripple-button';
 const DeliveryOrderCard = ({ assignment, onComplete }) => {
     const { order } = assignment;
 
@@ -64,7 +65,7 @@ const DeliveryOrderCard = ({ assignment, onComplete }) => {
                         Near: {order.deliveryAddress.landmark}
                     </p>
                 )}
-                <button
+                <RippleButton
                     onClick={openInMaps}
                     className="mt-2 text-xs text-emerald-600 font-bold flex items-center gap-1 hover:text-emerald-700"
                 >
@@ -73,23 +74,23 @@ const DeliveryOrderCard = ({ assignment, onComplete }) => {
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
                     </svg>
                     Open in Maps
-                </button>
+                </RippleButton>
             </div>
 
             {/* Actions */}
             <div className="px-4 py-3 flex gap-2">
-                <button
+                <RippleButton
                     onClick={() => onComplete(order.id, 'NOT_DELIVERED')}
                     className="flex-1 py-2.5 border-2 border-red-200 text-red-600 rounded-xl font-bold text-sm hover:bg-red-50 transition-colors"
                 >
                     Not Delivered
-                </button>
-                <button
+                </RippleButton>
+                <RippleButton
                     onClick={() => onComplete(order.id, 'DELIVERED')}
                     className="flex-1 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-600 text-white rounded-xl font-bold text-sm shadow-lg shadow-emerald-500/20 hover:shadow-emerald-500/30 transition-all"
                 >
                     ✓ Delivered
-                </button>
+                </RippleButton>
             </div>
         </div>
     );

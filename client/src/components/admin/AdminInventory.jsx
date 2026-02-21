@@ -1,4 +1,5 @@
 /* eslint-disable react/prop-types */
+import { RippleButton } from '../ui/ripple-button';
 import { useEffect, useState } from 'react';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
@@ -83,12 +84,12 @@ const AdminInventory = () => {
         <div>
             <div className="flex justify-between items-center mb-6">
                 <h1 className="text-2xl font-bold text-gray-800">Inventory</h1>
-                <button
+                <RippleButton
                     onClick={fetchInventory}
                     className="border border-gray-300 text-gray-700 px-4 py-2 rounded hover:bg-gray-50 transition-colors text-sm"
                 >
                     Refresh
-                </button>
+                </RippleButton>
             </div>
 
             {loading ? (
@@ -138,13 +139,13 @@ const AdminInventory = () => {
                                                     onChange={e => setStockEdits(prev => ({ ...prev, [pid]: e.target.value }))}
                                                     className="w-20 border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-ud-primary"
                                                 />
-                                                <button
+                                                <RippleButton
                                                     onClick={() => updateStock(item)}
                                                     disabled={!isEdited || updatingId === pid}
                                                     className="bg-ud-primary text-white px-3 py-1 rounded text-sm hover:bg-ud-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                                                 >
                                                     {updatingId === pid ? '...' : 'Update'}
-                                                </button>
+                                                </RippleButton>
                                                 {successId === pid && (
                                                     <span className="text-green-600 text-xs font-semibold">Saved!</span>
                                                 )}

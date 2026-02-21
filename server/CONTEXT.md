@@ -21,7 +21,7 @@ NEYOKART (formerly United Deals) is a hyper-local grocery delivery platform with
 | Framework | NestJS 11 (Express) |
 | Database | PostgreSQL + Prisma ORM 7.4 (via pg adapter) |
 | Cache | Upstash Redis (graceful degradation if unavailable) |
-| Auth | JWT (60-day expiry) + Twilio OTP + Store Admin PIN + Delivery Person PIN |
+| Auth | JWT (60-day expiry) + MSG91 SMS OTP + Store Manager PIN + Delivery Person PIN |
 | Payment | Razorpay SDK (test mode: `rzp_test_*`, mock mode when credentials absent) |
 | Storage | Supabase Storage (product images, graceful degradation) |
 | Security | Helmet, CORS, ValidationPipe (whitelist + transform), RolesGuard, StoreGuard |
@@ -46,13 +46,17 @@ new grocery/
 │       │   │       ├── AddressManager.jsx       # Address CRUD controller
 │       │   │       ├── AddressForm.jsx          # Address form (HOME/WORK/OTHER)
 │       │   │       └── AddressList.jsx          # Saved addresses display
-│       │   ├── admin/                           # Store Admin Dashboard
+│       │   ├── admin/                           # Admin Panel (SuperAdmin + StoreManager)
 │       │   │   ├── AdminDashboard.jsx           # Main admin dashboard with stats
+│       │   │   ├── AdminDelivery.jsx            # Delivery person management (ADMIN only)
 │       │   │   ├── AdminInventory.jsx           # Store inventory management
 │       │   │   ├── AdminLayout.jsx              # Admin layout wrapper
-│       │   │   ├── AdminLogin.jsx               # Store admin PIN login
+│       │   │   ├── AdminLedger.jsx              # Payment ledger entries
+│       │   │   ├── AdminLogin.jsx               # Admin login (SuperAdmin or StoreManager)
+│       │   │   ├── AdminManagers.jsx            # Store manager management (ADMIN only)
 │       │   │   ├── AdminOrders.jsx              # Order management with status updates
-│       │   │   └── AdminProducts.jsx            # Product management (CRUD + images)
+│       │   │   ├── AdminProducts.jsx            # Product management (CRUD + images)
+│       │   │   └── AdminStores.jsx              # Store management (ADMIN only)
 │       │   ├── delivery/                        # Delivery Person App
 │       │   │   ├── DeliveryDashboard.jsx        # Delivery person main dashboard
 │       │   │   ├── DeliveryLogin.jsx            # Delivery person phone+PIN login
@@ -81,11 +85,16 @@ new grocery/
     └── src/
         ├── auth/                                # OTP login + JWT + RBAC
         │   ├── auth.module.ts                   # Global, exports RolesGuard
-        │   ├── auth.controller.ts               # User OTP + Store Admin PIN endpoints
+        │   ├── auth.controller.ts               # User OTP + Store Manager PIN + Super Admin endpoints
         │   ├── auth.service.ts                  # Auth logic, hardcoded admin phone +919999999999
         │   ├── jwt.strategy.ts                  # JWT → { sub, phone, role, storeId? }
-        │   ├── twilio.service.ts                # DEV MODE: skips SMS, accepts OTP 123456
-        │   ├── decorators/roles.decorator.ts    # @Roles('ADMIN', 'STORE_ADMIN')
+        ├── sms/                                 # SMS via MSG91 (templates, logs, analytics)
+        │   ├── sms.module.ts                   # Global, exports SmsService
+        │   ├── sms.controller.ts               # Admin-only SMS management endpoints
+        │   ├── sms.service.ts                  # OTP (replaces Twilio) + template CRUD + logs + analytics
+        │   ├── msg91.service.ts                # MSG91 Flow API wrapper (DEV MODE when AUTH_KEY empty)
+        │   └── dto/ (CreateTemplateDto, UpdateTemplateDto, SendSmsDto, SmsQueryDto)
+        │   ├── decorators/roles.decorator.ts    # @Roles('ADMIN', 'STORE_MANAGER')
         │   ├── guards/roles.guard.ts            # RolesGuard (checks req.user.role)
         │   ├── guards/store.guard.ts            # StoreGuard (ownership validation, ADMIN bypasses)
         │   ├── dto/auth.dto.ts                  # Phone regex: ^\+91[6-9]\d{9}$
@@ -126,10 +135,16 @@ new grocery/
         │   ├── stores.controller.ts             # Store CRUD, inventory bulk update
         │   ├── stores.service.ts
         │   └── dto/
-        ├── store-admin/                         # Store Admin management
-        │   ├── store-admin.module.ts
-        │   ├── store-admin.controller.ts        # Store admin CRUD
-        │   ├── store-admin.service.ts
+
+        ├── store-manager/                       # Store Manager CRUD (ADMIN only)
+        │   ├── store-manager.module.ts
+        │   ├── store-manager.controller.ts     # CRUD endpoints at /store-managers
+        │   ├── store-manager.service.ts        # Create, soft-delete, phone conflict check
+        │   └── dto/
+        ├── ledger/                              # Payment Ledger
+        │   ├── ledger.module.ts
+        │   ├── ledger.controller.ts            # Create, list, my-store endpoints
+        │   ├── ledger.service.ts               # Counter-based TXN ID with P2002 retry
         │   └── dto/
         ├── dashboard/                           # Admin dashboard stats
         │   ├── dashboard.module.ts
@@ -160,7 +175,21 @@ new grocery/
 ### Auth
 - `POST /auth/send-otp` — Send OTP to phone (`+91[6-9]XXXXXXXXX` format)
 - `POST /auth/verify-otp` — Verify OTP, returns JWT + user
-- `POST /auth/store-admin/login` — Store admin login (phone + PIN)
+- `POST /auth/store-manager/login` — Store Manager login (phone + 4-digit PIN)
+- `POST /auth/super-admin/login` — Super Admin login (hardcoded: +919999999999/0000)
+
+### Store Managers (JWT + ADMIN only)
+- `POST /store-managers` — Create store manager (name, phone, pin, storeId)
+- `GET /store-managers` — List all active store managers
+- `GET /store-managers/:id` — Get store manager by ID
+- `PATCH /store-managers/:id` — Update store manager (name, phone, pin, isActive)
+- `DELETE /store-managers/:id` — Soft-deactivate store manager
+
+### Ledger (JWT + ADMIN/STORE_MANAGER)
+- `POST /ledger` — Create ledger entry (storeId, date, amount, paymentMethod)
+- `GET /ledger` — List all ledger entries (ADMIN, with filters)
+- `GET /ledger/my-store` — Get ledger entries for own store
+
 
 ### Cart (JWT required)
 - `GET /cart` — Get current cart (from Redis)
@@ -176,7 +205,7 @@ new grocery/
 - `GET /orders/:id` — Order detail with items
 - `POST /orders/:id/cancel` — Cancel order (PENDING/CONFIRMED only, restores stock)
 
-### Orders — Admin (JWT + ADMIN/STORE_ADMIN)
+### Orders — Admin (JWT + ADMIN/STORE_MANAGER)
 - `GET /orders/admin/store` — List orders for admin's store (ADMIN sees all)
 - `PATCH /orders/admin/:id/status` — Update order status (validates state machine)
 - `POST /orders/admin/:id/assign-delivery` — Manually trigger delivery assignment
@@ -198,39 +227,47 @@ new grocery/
 - `GET /products` — List/search products (query params: category, subCategory, search, page, limit)
 - `GET /products/:id` — Product detail
 
-### Products — Admin (JWT + ADMIN/STORE_MANAGER/STORE_ADMIN)
+### Products — Admin (JWT + ADMIN/STORE_MANAGER)
 - `POST /products` — Create product with image uploads (`multipart/form-data`, max 3 images)
 - `PATCH /products/:id` — Update product fields (JSON body)
 - `DELETE /products/:id` — Delete product + cleanup images from storage
 - `POST /products/:id/images` — Add images to existing product (max 3 total)
 - `DELETE /products/:id/images` — Remove specific image by URL in body
 
-### Stores (JWT + ADMIN/STORE_ADMIN)
+### Stores (JWT + ADMIN/STORE_MANAGER)
 - `GET /stores` — List all stores
 - `POST /stores` — Create store
 - `PATCH /stores/:id` — Update store
 - `POST /stores/:storeId/inventory/bulk` — Bulk update store inventory
 
-### Store Admin (JWT + ADMIN)
-- `GET /store-admin` — List store admins
-- `POST /store-admin` — Create store admin (phone + PIN + storeId)
-- `PATCH /store-admin/:id` — Update store admin
-- `DELETE /store-admin/:id` — Delete store admin
 
-### Dashboard (JWT + ADMIN/STORE_ADMIN)
-- `GET /dashboard/stats` — Dashboard analytics (orders, revenue, etc.)
+### Dashboard (JWT + ADMIN/STORE_MANAGER)
+- `GET /dashboard/store` — Dashboard analytics for store (orders, revenue, inventory health)
+- `GET /dashboard/delivery/:id` — Delivery person stats
 
-### Delivery
+### Delivery — Admin (JWT + ADMIN)
+- `POST /delivery/persons` — Create delivery person (returns auto-generated PIN once)
+- `GET /delivery/persons` — List all delivery persons
+- `PATCH /delivery/persons/:id` — Update delivery person (name, isActive, homeStoreId)
+- `DELETE /delivery/persons/:id` — Delete delivery person
+
+### Delivery — Auth & Self-Service
 - `POST /delivery/auth/login` — Delivery person login (phone + PIN)
-- `GET /delivery/persons` — List delivery persons (Admin)
-- `POST /delivery/persons` — Create delivery person (Admin)
-- `PATCH /delivery/persons/:id` — Update delivery person (Admin)
-- `GET /delivery/profile` — Get own profile (Delivery Person)
-- `POST /delivery/location` — Update own location (lat/lng)
-- `POST /delivery/status` — Toggle status (FREE/BUSY/OFFLINE)
+- `GET /delivery/me` — Get own profile (DELIVERY_PERSON)
+- `POST /delivery/location` — Update own GPS location (lat/lng)
+- `POST /delivery/status` — Set status (FREE/BUSY)
 - `GET /delivery/orders` — Get assigned orders
-- `POST /delivery/orders/:id/complete` — Mark delivery as completed
-- `GET /delivery/events` — SSE stream for real-time delivery updates
+- `POST /delivery/orders/:id/complete` — Mark delivery as DELIVERED/NOT_DELIVERED
+- `GET /delivery/sse` — SSE stream for real-time delivery notifications
+
+### SMS (JWT + ADMIN only)
+- `POST /sms/templates` — Create SMS template (auto-extracts `##VAR##` variables)
+- `GET /sms/templates` — List all templates
+- `GET /sms/templates/:key` — Get template by key
+- `PUT /sms/templates/:id` — Update template
+- `POST /sms/send` — Send SMS using template (templateKey + recipients[{phone, variables}])
+- `GET /sms/logs` — Get SMS logs (paginated, filters: templateId, recipientPhone, status, date range)
+- `GET /sms/analytics` — Get SMS analytics for date range (totalSent, delivered, failed, deliveryRate)
 
 ### Search
 - `GET /search/products` — Full-text product search
@@ -315,37 +352,43 @@ CANCELLED  CANCELLED   CANCELLED    CANCELLED    CANCELLED
 ## Database Models (Prisma)
 
 ### Enums
-- **Role**: `USER`, `STORE_MANAGER`, `STORE_ADMIN`, `DELIVERY_PERSON`, `ADMIN`
+- **Role**: `USER`, `STORE_MANAGER`, `DELIVERY_PERSON`, `ADMIN`
 - **OrderStatus**: `PENDING`, `CONFIRMED`, `PROCESSING`, `ORDER_PICKED`, `SHIPPED`, `DELIVERED`, `CANCELLED`
 - **PaymentMethod**: `COD`, `RAZORPAY`
 - **PaymentStatus**: `PENDING`, `COD_PENDING`, `PAID`, `FAILED`, `REFUNDED`
-- **DeliveryPersonStatus**: `FREE`, `BUSY`, `OFFLINE`
+- **DeliveryPersonStatus**: `FREE`, `BUSY`
+- **SmsStatus**: `PENDING`, `SENT`, `DELIVERED`, `FAILED`, `REJECTED`
+- **SmsType**: `OTP`, `TRANSACTIONAL`, `PROMOTIONAL`
 
 ### Models
 - **User** — id, phone (unique), name, role, orders[], addresses[]
 - **Address** — id, userId, type (HOME/WORK/OTHER), houseNo, street, city, state, zipCode, landmark, mapsLink, recipientName, recipientPhone, lat, lng
-- **Product** — id, name, price, mrp, category, subCategory, stock, storeLocation, isGrocery, images[], storeInventory[]
+- **Product** — id, name, price, mrp, category, subCategory, stock, storeLocation, isGrocery, images[], storeId?, storeInventory[]
   - Indexes: name, category, subCategory, storeLocation, isGrocery, createdAt, [category+createdAt], [isGrocery+category]
-- **Store** — id, name, address, lat, lng, phone, isActive, inventory[], storeAdmins[]
-- **StoreAdmin** — id, userId, storeId, pin (hashed), store (relation)
-- **StoreInventory** — id, storeId, productId, stock, price (unique: [storeId, productId])
-- **DeliveryPerson** — id, userId, phone, name, pin (hashed), status (FREE/BUSY/OFFLINE), lat, lng, isActive, assignments[]
+- **Store** — id, name, pincode, lat, lng, address?, storeType, storeCode (unique, auto-generated A1/A2...), isActive, managers[], inventory[], deliveryPersons[], products[], ledgerEntries[]
+- **StoreManager** — id, name, phone (unique), pinHash, storeId, isActive, store (relation, onDelete: Cascade)
+- **PaymentLedger** — id, storeId, transactionId (unique, TXN-YYYYMMDD-NNNN), date, amount, paymentMethod, referenceNotes?, store (relation, onDelete: Cascade)
+- **StoreInventory** — id, storeId, productId, stock (unique: [storeId, productId])
+- **DeliveryPerson** — id, name, phone (unique), pinHash, homeStoreId, status (FREE/BUSY), lat?, lng?, isActive, lastLocationAt?, assignments[]
 - **OrderAssignment** — id, orderId, deliveryPersonId, assignedAt, completedAt, result
 - **Order** — id, userId, orderNumber (UD-YYYYMMDD-XXXX), status, paymentMethod, paymentStatus, deliveryAddress (JSON snapshot), subtotal, deliveryFee, tax, total, idempotencyKey (unique), razorpayOrderId (unique), razorpayPaymentId, razorpaySignature, paidAt, deliveredAt, items[], assignments[], fulfillingStoreId?
   - Indexes: [userId+createdAt], orderNumber, razorpayOrderId, status
 - **OrderItem** — id, orderId, productId, name (snapshot), price (snapshot), quantity, total
   - Cascade delete when order is deleted
+- **SmsTemplate** — id, name, key (unique), content, variables[], type (SmsType), isActive, msg91TemplateId?, msg91FlowId?, logs[]
+- **SmsLog** — id, templateId?, recipientPhone, variables (JSON), status (SmsStatus), msg91RequestId?, sentAt, deliveredAt?, failureReason?, metadata (JSON)
 
 ## Dev Accounts (DEV MODE)
 
-| Role | Phone | PIN | Notes |
-|------|-------|-----|-------|
-| Super Admin | `+919999999999` | — | Hardcoded in auth.service.ts, OTP: `123456` |
-| Store Admin | `+918888888888` | `8888` | Created via seed/setup |
-| Delivery Person | `+917777777777` | `7777` | Created via seed/setup |
-| Any Customer | `+91[6-9]XXXXXXXXX` | — | OTP: `123456` (DEV MODE) |
+| Role | Phone | PIN | Login Endpoint |
+|------|-------|-----|----------------|
+| Super Admin | `+919999999999` | `0000` | `POST /auth/super-admin/login` |
+| Delivery Person | `+917777777777` | *(auto-generated)* | `POST /delivery/auth/login` |
+| Any Customer | `+91[6-9]XXXXXXXXX` | — | `POST /auth/verify-otp` (OTP: `123456`) |
 
-**DEV MODE**: Twilio service skips SMS and accepts OTP `123456` for any phone number.
+**Note**: STORE_ADMIN role has been removed. Only two admin-panel roles exist: ADMIN (SuperAdmin) and STORE_MANAGER.
+
+**DEV MODE**: When `MSG91_AUTH_KEY` is empty, the SMS service skips actual SMS delivery and accepts OTP `123456` for any phone number.
 
 ## Key Configuration (`.env`)
 
@@ -354,9 +397,8 @@ CANCELLED  CANCELLED   CANCELLED    CANCELLED    CANCELLED
 | `DATABASE_URL` | — | PostgreSQL connection (pooled, pgbouncer) |
 | `DIRECT_URL` | — | PostgreSQL connection (direct, for migrations) |
 | `JWT_SECRET` | — | Secret for JWT signing |
-| `TWILIO_ACCOUNT_SID` | — | Twilio account SID for OTP |
-| `TWILIO_AUTH_TOKEN` | — | Twilio auth token |
-| `TWILIO_SERVICE_SID` | — | Twilio Verify service SID |
+| `MSG91_AUTH_KEY` | (empty) | MSG91 auth key (empty = DEV MODE, OTP 123456 accepted) |
+| `MSG91_BASE_URL` | `https://control.msg91.com/api/v5` | MSG91 API base URL |
 | `UPSTASH_REDIS_REST_URL` | — | Upstash Redis URL (empty = caching disabled) |
 | `UPSTASH_REDIS_REST_TOKEN` | — | Upstash Redis token |
 | `PORT` | 3000 | Server port |
@@ -380,7 +422,7 @@ Must stay in sync with server `.env`:
 
 The JWT payload shape is `{ sub: userId, phone, role, storeId? }`.
 In controllers, the user ID is accessed via `req.user.sub` (NOT `req.user.id`).
-`storeId` is included for STORE_ADMIN role users.
+`storeId` is included for `STORE_MANAGER` role users. `ADMIN` role has no `storeId` (has access to all stores).
 
 ## Key Architecture Decisions
 
@@ -420,14 +462,13 @@ Use `StoreGuard` for store-scoped operations (validates `req.user.storeId` match
 | Role | Permissions |
 |------|------------|
 | `USER` | Cart, orders, payments, addresses, browse products |
-| `STORE_MANAGER` | All USER permissions + product CRUD + image upload |
-| `STORE_ADMIN` | Store-scoped: orders, inventory, dashboard for their assigned store |
+| `STORE_MANAGER` | Product CRUD, order management, inventory, ledger, dashboard — scoped to assigned store |
 | `DELIVERY_PERSON` | View assigned orders, update location/status, complete deliveries |
-| `ADMIN` | Full access — bypasses store ownership checks |
+| `ADMIN` | Full access — create/manage stores, store managers, delivery persons. Bypasses store ownership checks |
 
 ### Guards
 - **RolesGuard**: Reads `@Roles()` metadata → if no decorator, passes through (auth-only). If roles specified, checks `req.user.role`.
-- **StoreGuard**: ADMIN bypasses. STORE_ADMIN must match storeId from route params or use their `req.user.storeId` for scoped queries.
+- **StoreGuard**: ADMIN bypasses. STORE_MANAGER must match storeId from route params or use their `req.user.storeId` for scoped queries. USER and DELIVERY_PERSON are explicitly denied with ForbiddenException.
 
 ## Image Upload
 
@@ -473,43 +514,33 @@ See `server/BUGFIX-REPORT.md` for full details with before/after code.
 3. **DeliveryDashboard Crash** (`DeliveryDashboard.jsx`): Added optional chaining for `a.order?.id`
 4. **AdminOrders Payment Display** (`AdminOrders.jsx`): Split payment status and payment method into separate displays
 
-## E2E Test Results
+## E2E Test Results (2026-02-22)
 
-**Result: 19/19 PASSED** (comprehensive flow test)
+**Result: 28/28 PASSED** (post STORE_ADMIN removal QA audit)
 
 ### Tests Executed
-| # | Test | Result |
-|---|------|--------|
-| 1 | Store Admin Login (phone + PIN) | PASS |
-| 2 | Customer Auth (send OTP + verify) | PASS |
-| 3 | Add to Cart (`POST /cart/items`) | PASS |
-| 4 | Address Ready (list user addresses) | PASS |
-| 5 | Order Preview (`POST /orders/preview`) | PASS |
-| 6 | Place Order — COD | PASS |
-| 7 | Idempotency Check (same key → same order) | PASS |
-| 8a | Status: CONFIRMED → PROCESSING | PASS |
-| 8b | Status: PROCESSING → ORDER_PICKED | PASS |
-| 8c | Invalid Transition Rejected (400) | PASS |
-| 9 | Assign Delivery Person | PASS |
-| 10 | Delivery Person Login (phone + PIN) | PASS |
-| 11 | Delivery Get Assigned Orders | PASS |
-| 12 | Mark as Delivered | PASS |
-| 13 | Verify Final State = DELIVERED | PASS |
-| 14 | Cancel Order + Stock Restore | PASS |
-| 15 | Empty Cart Order Rejected (400) | PASS |
-| 16 | Invalid Address Rejected (403) | PASS |
-| 17 | PROCESSING → CANCELLED (bugfix verification) | PASS |
+| # | Category | Tests | Result |
+|---|----------|-------|--------|
+| 1 | Auth | Super admin login (200), removed store-admin endpoint (404), invalid phone (400) | 3/3 PASS |
+| 2 | Store Management | Create (201), List (200), Update (200) | 3/3 PASS |
+| 3 | Store Manager CRUD | Create (201), Duplicate conflict (409), List without pinHash (200), Update (200), Self-phone update (200), Soft delete (200) | 6/6 PASS |
+| 4 | Deactivated Login | Rejected with 401 "Invalid credentials or inactive" | 1/1 PASS |
+| 5 | Delivery CRUD | Create with auto-PIN (201), Invalid phone (400), List (200), Toggle isActive (200) | 4/4 PASS |
+| 6 | Delivery Login | Login with generated PIN (201) | 1/1 PASS |
+| 7 | Delivery Self-Service | GET /delivery/me (200), POST /delivery/location (201) | 2/2 PASS |
+| 8 | RBAC Security | No token=401, Delivery on admin routes=403 (x3) | 4/4 PASS |
+| 9 | Dashboard | Admin stats endpoint (200) | 1/1 PASS |
+| 10 | Validation | pin="abcd" (400), phone="+91123" (400), delivery pin="ab" (400) | 3/3 PASS |
 
-### Edge Cases Tested
-- **Idempotency**: Same idempotency key returns same order without creating duplicate
-- **Empty cart**: `POST /orders` with empty cart returns 400 Bad Request
-- **Invalid address**: Order with non-existent addressId returns 403 Forbidden
-- **Invalid status transition**: E.g., PENDING → DELIVERED returns 400 Bad Request
-- **Cancel + stock restore**: Order cancellation atomically restores product stock
-- **PROCESSING → CANCELLED**: Admin can cancel orders in PROCESSING state (bugfix verified)
-- **SHIPPED → CANCELLED**: Admin can cancel shipped orders for edge cases (wrong address, refusal)
-- **Auto-assign race condition**: Transaction re-checks both order and delivery person status
-- **Idempotency IDOR**: User A cannot retrieve User B's order via idempotency key reuse
+### Edge Cases Verified
+- **STORE_ADMIN removed**: `/auth/store-admin/login` returns 404
+- **Phone validation**: Indian mobile format `+91[6-9]XXXXXXXXX` enforced on all DTOs
+- **PIN validation**: Digits-only, exactly 4 characters enforced
+- **Duplicate phone**: Store manager creation with duplicate phone returns 409
+- **Soft delete**: Manager deactivation sets isActive=false, blocks subsequent login
+- **pinHash never leaked**: Verified absent from all list/detail responses
+- **StoreGuard RBAC**: DELIVERY_PERSON cannot access store-scoped endpoints (403)
+- **mockPayment blocks cancelled orders**: Cannot process payment for CANCELLED/DELIVERED orders
 
 ## Running Locally
 
@@ -533,10 +564,42 @@ npm run dev                 # Start on :5173 or :5174
 
 Swagger API docs available at: `http://localhost:3000/api`
 
+## Fixed Store Categories
+
+Stores have a `storeType` field. Each type has immutable subcategories defined in `server/src/common/constants/store-categories.ts` and `client/src/constants/index.js`:
+
+| Store Type | Subcategories |
+|------------|--------------|
+| `GROCERY` | Vegetables & Fruits, Atta Rice & Dal, Dairy Bread & Eggs, etc. (28 categories) |
+| `PIZZA_TOWN` | Pizza, Burger, Sandwich, French Fries, Cake |
+| `AUTO_SERVICE` | Car Wash, Bike Wash, Car Products, Bike Products |
+| `DROP_IN_FACTORY` | General, Photo Frames, Coffee Mugs, Custom T-Shirts, etc. |
+| `AUTO_PARTS_SHOP` | Parts, Accessories, Tools |
+
+Store naming follows auto-generated codes: A1, A2, A3... AN (with retry on unique constraint collision).
+
+## Latency Benchmark (2026-02-22)
+
+| Endpoint | Avg | Min | Max |
+|----------|-----|-----|-----|
+| `GET /` (health) | 0.6ms | 0.5ms | 0.9ms |
+| `POST /auth/super-admin/login` | 58ms | 45ms | 107ms |
+| `GET /stores` | 48ms | 47ms | 49ms |
+| `GET /dashboard/store` | 1.1ms | 0.9ms | 1.5ms |
+| `GET /products` | 129ms | 29ms | 435ms |
+| `GET /search/products?q=milk` | 66ms | 29ms | 134ms |
+| `GET /store-managers` | 110ms | 94ms | 166ms |
+| `GET /delivery/persons` | 108ms | 92ms | 155ms |
+| `GET /ledger/my-store` | 60ms | 46ms | 106ms |
+
+*Note: First request for cached endpoints (products, search) is slower; subsequent requests hit Redis cache.*
+
 ## Remaining Recommendations
 
 1. **Rate limiting on OTP endpoints** — No rate limiting on `POST /auth/send-otp`. Add throttling (e.g., 3 attempts per minute per phone).
 2. **Razorpay live integration** — CartSidebar currently uses mock endpoint. For production, integrate the Razorpay checkout SDK widget.
 3. **Customer cancellation scope** — `POST /orders/:id/cancel` only allows PENDING/CONFIRMED. Consider whether customers should request cancellation for PROCESSING/SHIPPED.
-4. **Duplicate products in DB** — Multiple copies of same products from repeated test seeding. Consider deduplication.
-5. **Stock restoration on admin cancel** — When admin cancels via `PATCH /orders/admin/:id/status`, stock is NOT restored (only customer `cancel()` restores stock). The `updateStatus` method should handle stock restoration when transitioning to CANCELLED.
+4. **Stock restoration on admin cancel** — When admin cancels via `PATCH /orders/admin/:id/status`, stock is NOT restored (only customer `cancel()` restores stock). The `updateStatus` method should handle stock restoration when transitioning to CANCELLED.
+5. **Super Admin credentials** — Currently hardcoded in auth.service.ts. Move to environment variables for production.
+6. **Token expiration handling** — Frontend has no 401 interceptor. Expired tokens cause silent failures instead of redirect to login.
+7. **Toast notifications** — Frontend uses `alert()` for user feedback in several admin pages. Replace with a proper toast notification system.

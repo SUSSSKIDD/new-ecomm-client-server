@@ -1,3 +1,4 @@
+import { RippleButton } from '../../components/ui/ripple-button';
 import { useCategory } from '../../context/CategoryContext';
 import ProductGrid from './ProductGrid';
 import { HOME_CATEGORIES } from '../../constants';
@@ -62,9 +63,9 @@ const HomeCategoryList = () => {
                                 <h4 className="font-bold text-gray-800 mb-1">Send Packages Anywhere</h4>
                                 <p className="text-sm text-gray-500">{section.description}</p>
                             </div>
-                            <button className="bg-ud-primary text-white px-4 py-2 rounded-lg text-sm font-bold shadow-lg shadow-blue-500/30 hover:bg-blue-800 transition-colors">
+                            <RippleButton className="bg-ud-primary text-white px-4 py-2 rounded-lg text-sm font-bold shadow-lg shadow-blue-500/30 hover:bg-blue-800 transition-colors">
                                 Book Now
-                            </button>
+                            </RippleButton>
                         </div>
                     )}
                 </div>
