@@ -1,0 +1,11 @@
+import { Request } from 'express';
+
+export interface AuthenticatedUser {
+  sub: string;
+  phone: string;
+  role: string;
+}
+
+export interface AuthenticatedRequest extends Request {
+  user: AuthenticatedUser;
+}

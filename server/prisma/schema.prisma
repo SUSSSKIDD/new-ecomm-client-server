@@ -1,0 +1,238 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  USER
+  STORE_MANAGER
+  STORE_ADMIN
+  DELIVERY_PERSON
+  ADMIN
+}
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  PROCESSING
+  ORDER_PICKED
+  SHIPPED
+  DELIVERED
+  CANCELLED
+}
+
+enum PaymentMethod {
+  COD
+  RAZORPAY
+}
+
+enum PaymentStatus {
+  PENDING
+  COD_PENDING
+  PAID
+  FAILED
+  REFUNDED
+}
+
+enum DeliveryPersonStatus {
+  FREE
+  BUSY
+}
+
+model User {
+  id        String   @id @default(uuid())
+  phone     String   @unique
+  name      String?
+  role      Role     @default(USER)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  addresses Address[]
+  orders    Order[]
+}
+
+model Address {
+  id             String   @id @default(uuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id])
+  type           String // HOME, WORK, OTHER
+  houseNo        String?
+  street         String
+  city           String
+  state          String?
+  zipCode        String
+  landmark       String?
+  mapsLink       String?
+  recipientName  String? // For OTHER
+  recipientPhone String? // For OTHER
+  lat            Float?
+  lng            Float?
+  createdAt      DateTime @default(now())
+
+  @@index([userId])
+}
+
+model Product {
+  id            String           @id @default(uuid())
+  name          String
+  description   String?
+  price         Float
+  mrp           Float?
+  category      String
+  subCategory   String?
+  stock         Int              @default(0)
+  storeLocation String?          // Specific to grocery backend operations (A1-A6)
+  isGrocery     Boolean          @default(false)
+  images        String[]
+  storeId       String?
+  store         Store?           @relation(fields: [storeId], references: [id])
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  storeInventory StoreInventory[]
+
+  @@index([name])
+  @@index([category])
+  @@index([subCategory])
+  @@index([storeLocation])
+  @@index([isGrocery])
+  @@index([createdAt])
+  @@index([category, createdAt(sort: Desc)])
+  @@index([isGrocery, category])
+}
+
+model Store {
+  id        String   @id @default(uuid())
+  name      String
+  pincode   String
+  lat       Float
+  lng       Float
+  address   String?
+  storeType String   @default("GROCERY")
+  storeCode String?  @unique
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  inventory       StoreInventory[]
+  deliveryPersons DeliveryPerson[]
+  orderItems      OrderItem[]
+  admins          StoreAdmin[]
+  products        Product[]
+
+  @@index([pincode])
+  @@index([isActive])
+}
+
+model StoreAdmin {
+  id        String   @id @default(uuid())
+  name      String
+  phone     String   @unique
+  pinHash   String
+  storeId   String
+  store     Store    @relation(fields: [storeId], references: [id])
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([storeId])
+  @@index([phone])
+}
+
+model StoreInventory {
+  id        String  @id @default(uuid())
+  storeId   String
+  store     Store   @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  stock     Int     @default(0)
+
+  @@unique([storeId, productId])
+  @@index([storeId])
+  @@index([productId])
+  @@index([storeId, stock])
+}
+
+model DeliveryPerson {
+  id             String               @id @default(uuid())
+  name           String
+  phone          String               @unique
+  pinHash        String
+  homeStoreId    String
+  homeStore      Store                @relation(fields: [homeStoreId], references: [id])
+  status         DeliveryPersonStatus @default(FREE)
+  lat            Float?
+  lng            Float?
+  isActive       Boolean              @default(true)
+  lastLocationAt DateTime?
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+
+  assignments OrderAssignment[]
+
+  @@index([homeStoreId])
+  @@index([status])
+  @@index([phone])
+}
+
+model OrderAssignment {
+  id               String         @id @default(uuid())
+  orderId          String         @unique
+  order            Order          @relation(fields: [orderId], references: [id])
+  deliveryPersonId String
+  deliveryPerson   DeliveryPerson @relation(fields: [deliveryPersonId], references: [id])
+  assignedAt       DateTime       @default(now())
+  completedAt      DateTime?
+  result           String?
+
+  @@index([deliveryPersonId])
+  @@index([orderId])
+}
+
+model Order {
+  id                String        @id @default(uuid())
+  userId            String
+  user              User          @relation(fields: [userId], references: [id])
+  orderNumber       String        @unique // UD-YYYYMMDD-XXXX
+  status            OrderStatus   @default(PENDING)
+  paymentMethod     PaymentMethod
+  paymentStatus     PaymentStatus @default(PENDING)
+  deliveryAddress   Json          // Snapshot of address at order time
+  subtotal          Float
+  deliveryFee       Float         @default(0)
+  tax               Float         @default(0)
+  total             Float
+  idempotencyKey    String        @unique
+  razorpayOrderId   String?       @unique
+  razorpayPaymentId String?
+  razorpaySignature String?
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  paidAt            DateTime?
+  deliveredAt       DateTime?
+  items             OrderItem[]
+  assignment        OrderAssignment?
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([orderNumber])
+  @@index([razorpayOrderId])
+  @@index([status])
+}
+
+model OrderItem {
+  id        String  @id @default(uuid())
+  orderId   String
+  order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId String
+  name      String   // Snapshot
+  price     Float    // Snapshot
+  quantity  Int
+  total     Float
+  storeId   String?
+  store     Store?   @relation(fields: [storeId], references: [id])
+
+  @@index([orderId])
+  @@index([storeId])
+}

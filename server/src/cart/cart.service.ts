@@ -1,0 +1,185 @@
+import {
+  Injectable,
+  Logger,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
+import { PrismaService } from '../prisma.service';
+import { RedisCacheService } from '../common/services/redis-cache.service';
+import { Cart, CartItem } from './interfaces/cart.interface';
+import { AddToCartDto } from './dto/add-to-cart.dto';
+import { UpdateCartItemDto } from './dto/update-cart-item.dto';
+
+@Injectable()
+export class CartService {
+  private readonly logger = new Logger(CartService.name);
+  private static readonly CART_TTL = 604800; // 7 days in seconds
+  private static readonly CART_PREFIX = 'cart:';
+
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cache: RedisCacheService,
+  ) { }
+
+  /**
+   * Build the Redis key for a user's cart.
+   */
+  private cartKey(userId: string): string {
+    return `${CartService.CART_PREFIX}${userId}`;
+  }
+
+  /**
+   * Get the user's cart. Returns an empty cart if none exists.
+   */
+  async getCart(userId: string): Promise<Cart> {
+    const cart = await this.cache.get<Cart>(this.cartKey(userId));
+    if (!cart) {
+      return { userId, items: [], updatedAt: new Date().toISOString() };
+    }
+    return cart;
+  }
+
+  /**
+   * Add an item to cart. Validates product exists and has sufficient stock.
+   * If item already exists, increments quantity.
+   */
+  async addItem(userId: string, dto: AddToCartDto): Promise<Cart> {
+    // Validate product exists
+    const [product, maxStoreResult] = await Promise.all([
+      this.prisma.product.findUnique({
+        where: { id: dto.productId },
+      }),
+      this.prisma.storeInventory.aggregate({
+        where: { productId: dto.productId },
+        _max: { stock: true },
+      }),
+    ]);
+
+    if (!product) {
+      throw new NotFoundException(`Product ${dto.productId} not found`);
+    }
+    const maxStoreStock = maxStoreResult._max.stock ?? 0;
+    // Optimistic stock check: uses max of global and best store stock.
+    // Exact store-level validation happens at fulfillment/order creation time.
+    const availableStock = Math.max(product.stock, maxStoreStock);
+
+    if (availableStock < dto.quantity) {
+      throw new BadRequestException(
+        `Insufficient stock. Available: ${availableStock}`,
+      );
+    }
+
+    const cart = await this.getCart(userId);
+    const existingIndex = cart.items.findIndex(
+      (item) => item.productId === dto.productId,
+    );
+
+    if (existingIndex >= 0) {
+      // Increment existing item quantity
+      const newQty = cart.items[existingIndex].quantity + dto.quantity;
+      if (newQty > availableStock) {
+        throw new BadRequestException(
+          `Cannot add ${dto.quantity} more. Total would exceed stock (${availableStock}).`,
+        );
+      }
+      cart.items[existingIndex].quantity = newQty;
+      // Refresh price snapshot
+      cart.items[existingIndex].price = product.price;
+      cart.items[existingIndex].name = product.name;
+      cart.items[existingIndex].image = product.images?.[0] ?? null;
+    } else {
+      // Add new item with price/name snapshot
+      const newItem: CartItem = {
+        productId: dto.productId,
+        quantity: dto.quantity,
+        price: product.price,
+        name: product.name,
+        image: product.images?.[0] ?? null,
+      };
+      cart.items.push(newItem);
+    }
+
+    cart.updatedAt = new Date().toISOString();
+    await this.cache.set(this.cartKey(userId), cart, CartService.CART_TTL);
+    this.logger.log(
+      `Cart updated for user ${userId}: ${cart.items.length} items`,
+    );
+    return cart;
+  }
+
+  /**
+   * Update quantity of a specific item in the cart.
+   * Refreshes price snapshot from current product data.
+   */
+  async updateItem(
+    userId: string,
+    productId: string,
+    dto: UpdateCartItemDto,
+  ): Promise<Cart> {
+    const cart = await this.getCart(userId);
+    const itemIndex = cart.items.findIndex(
+      (item) => item.productId === productId,
+    );
+    if (itemIndex < 0) {
+      throw new NotFoundException(`Item ${productId} not in cart`);
+    }
+
+    // Validate stock for updated quantity
+    const [product, maxStoreResult] = await Promise.all([
+      this.prisma.product.findUnique({
+        where: { id: productId },
+      }),
+      this.prisma.storeInventory.aggregate({
+        where: { productId },
+        _max: { stock: true },
+      }),
+    ]);
+
+    if (!product) {
+      throw new NotFoundException(`Product ${productId} no longer exists`);
+    }
+    const maxStoreStock = maxStoreResult._max.stock ?? 0;
+    const availableStock = Math.max(product.stock, maxStoreStock);
+
+    if (dto.quantity > availableStock) {
+      throw new BadRequestException(
+        `Insufficient stock. Available: ${availableStock}`,
+      );
+    }
+
+    // Refresh snapshot
+    cart.items[itemIndex].quantity = dto.quantity;
+    cart.items[itemIndex].price = product.price;
+    cart.items[itemIndex].name = product.name;
+    cart.items[itemIndex].image = product.images?.[0] ?? null;
+
+    cart.updatedAt = new Date().toISOString();
+    await this.cache.set(this.cartKey(userId), cart, CartService.CART_TTL);
+    return cart;
+  }
+
+  /**
+   * Remove a specific item from the cart.
+   */
+  async removeItem(userId: string, productId: string): Promise<Cart> {
+    const cart = await this.getCart(userId);
+    const initialLength = cart.items.length;
+    cart.items = cart.items.filter((item) => item.productId !== productId);
+
+    if (cart.items.length === initialLength) {
+      throw new NotFoundException(`Item ${productId} not in cart`);
+    }
+
+    cart.updatedAt = new Date().toISOString();
+    await this.cache.set(this.cartKey(userId), cart, CartService.CART_TTL);
+    return cart;
+  }
+
+  /**
+   * Clear the entire cart.
+   */
+  async clearCart(userId: string): Promise<void> {
+    await this.cache.del(this.cartKey(userId));
+    this.logger.log(`Cart cleared for user ${userId}`);
+  }
+}
