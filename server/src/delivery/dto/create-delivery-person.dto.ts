@@ -15,4 +15,9 @@ export class CreateDeliveryPersonDto {
   @ApiProperty({ description: 'Home store ID for this delivery person' })
   @IsUUID()
   homeStoreId: string;
+
+  @ApiProperty({ example: '1234', description: '4-digit PIN set by admin' })
+  @IsString()
+  @Matches(/^\d{4}$/, { message: 'PIN must be exactly 4 digits' })
+  pin: string;
 }

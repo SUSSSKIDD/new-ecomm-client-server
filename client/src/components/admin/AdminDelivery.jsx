@@ -10,7 +10,7 @@ const AdminDelivery = () => {
 
     // Form state
     const [showForm, setShowForm] = useState(false);
-    const [formData, setFormData] = useState({ name: '', phone: '', homeStoreId: '' });
+    const [formData, setFormData] = useState({ name: '', phone: '', homeStoreId: '', pin: '' });
 
     useEffect(() => {
         fetchData();
@@ -62,8 +62,8 @@ const AdminDelivery = () => {
                 const newPerson = await res.json();
                 setDeliveryPersons(prev => [newPerson, ...prev]);
                 setShowForm(false);
-                setFormData({ name: '', phone: '', homeStoreId: '' });
-                alert(`Delivery guy created successfully! Original PIN is: ${newPerson.pin}`);
+                setFormData({ name: '', phone: '', homeStoreId: '', pin: '' });
+                alert(`Delivery guy created successfully!\nPIN: ${newPerson.pin}`);
             } else {
                 const data = await res.json();
                 alert(data.message || 'Failed to create');
@@ -149,6 +149,20 @@ const AdminDelivery = () => {
                                 ))}
                             </select>
                         </div>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700">PIN (4 digits)</label>
+                            <input
+                                required
+                                type="text"
+                                maxLength={4}
+                                pattern="\d{4}"
+                                placeholder="1234"
+                                value={formData.pin}
+                                onChange={e => setFormData({ ...formData, pin: e.target.value.replace(/\D/g, '').slice(0, 4) })}
+                                className="mt-1 w-full border border-gray-300 rounded p-2 text-gray-900 tracking-widest font-mono text-lg"
+                            />
+                            <p className="text-xs text-gray-400 mt-1">Delivery guy will use this PIN to login</p>
+                        </div>
                         <RippleButton type="submit" className="bg-blue-600 text-white px-4 py-2 rounded font-medium">Create</RippleButton>
                     </form>
                 </div>
@@ -163,6 +177,7 @@ const AdminDelivery = () => {
                             <tr>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Phone</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">PIN</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Home Store</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
@@ -173,6 +188,9 @@ const AdminDelivery = () => {
                                 <tr key={p.id}>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{p.name}</td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{p.phone}</td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-mono font-bold text-gray-700">
+                                        {p.pin || <span className="text-gray-300">****</span>}
+                                    </td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{p.homeStore?.name || p.homeStoreId}</td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm">
                                         <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${p.isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>

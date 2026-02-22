@@ -45,13 +45,13 @@ const AddressList = ({ addresses, onAdd, onBack, loading, onEdit, onDelete }) =>
                                 </div>
                             </div>
                             <p className="text-sm font-bold text-gray-900">
-                                {addr.type === 'OTHER' ? addr.recipientName : (addr.user?.name || addr.user?.phone || 'User')}
+                                {addr.recipientName || addr.user?.name || addr.user?.phone || 'Me'}
                             </p>
                             <p className="text-xs text-gray-600 mt-1">
                                 {addr.houseNo}, {addr.street}<br />
                                 {addr.city}, {addr.state} - {addr.zipCode}
                             </p>
-                            {addr.type === 'OTHER' && (
+                            {addr.recipientPhone && (
                                 <p className="text-xs text-gray-500 mt-1">Phone: {addr.recipientPhone}</p>
                             )}
                             {addr.mapsLink && (

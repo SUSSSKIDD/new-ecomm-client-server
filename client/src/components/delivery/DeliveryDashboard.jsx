@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import DeliveryOrderCard from './DeliveryOrderCard';
+import AvailableOrderCard from './AvailableOrderCard';
 import DeliveryStatusToggle from './DeliveryStatusToggle';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
@@ -11,6 +12,7 @@ const DeliveryDashboard = () => {
     const navigate = useNavigate();
     const [person, setPerson] = useState(null);
     const [orders, setOrders] = useState([]);
+    const [availableOrders, setAvailableOrders] = useState([]);
     const [status, setStatus] = useState('FREE');
     const [gpsActive, setGpsActive] = useState(false);
     const [loading, setLoading] = useState(true);
@@ -32,6 +34,11 @@ const DeliveryDashboard = () => {
         [token],
     );
 
+    const showToast = useCallback((msg, duration = 4000) => {
+        setToast(msg);
+        setTimeout(() => setToast(null), duration);
+    }, []);
+
     // Redirect if not logged in
     useEffect(() => {
         if (!token) {
@@ -41,13 +48,15 @@ const DeliveryDashboard = () => {
 
         const init = async () => {
             try {
-                const [profileRes, ordersRes] = await Promise.all([
+                const [profileRes, ordersRes, availableRes] = await Promise.all([
                     api('get', '/delivery/me'),
                     api('get', '/delivery/orders'),
+                    api('get', '/delivery/available-orders'),
                 ]);
                 setPerson(profileRes.data);
                 setStatus(profileRes.data.status);
                 setOrders(ordersRes.data);
+                setAvailableOrders(availableRes.data);
             } catch (err) {
                 console.error('Dashboard init failed:', err);
                 if (err.response?.status === 401) {
@@ -127,11 +136,37 @@ const DeliveryDashboard = () => {
                         if (line.startsWith('data: ')) {
                             try {
                                 const event = JSON.parse(line.slice(6));
+
                                 if (event.type === 'NEW_ORDER') {
+                                    // Legacy: direct assignment notification
                                     const res = await api('get', '/delivery/orders');
                                     setOrders(res.data);
-                                    setToast(`New order assigned: ${event.data.orderNumber}`);
-                                    setTimeout(() => setToast(null), 5000);
+                                    showToast(`New order assigned: ${event.data.orderNumber}`);
+                                }
+
+                                if (event.type === 'NEW_AVAILABLE_ORDER') {
+                                    // Competitive: new order available for claiming
+                                    setAvailableOrders((prev) => {
+                                        // Avoid duplicates
+                                        if (prev.some((o) => o.orderId === event.data.orderId)) return prev;
+                                        return [...prev, event.data];
+                                    });
+                                    showToast(`New order available: ${event.data.orderNumber}`);
+                                }
+
+                                if (event.type === 'ORDER_CLAIMED') {
+                                    // Another rider claimed the order — remove from available
+                                    setAvailableOrders((prev) =>
+                                        prev.filter((o) => o.orderId !== event.data.orderId),
+                                    );
+                                }
+
+                                if (event.type === 'CLAIM_CONFIRMED') {
+                                    // We successfully claimed an order — refresh assigned orders
+                                    const res = await api('get', '/delivery/orders');
+                                    setOrders(res.data);
+                                    setStatus('BUSY');
+                                    showToast(`Order ${event.data.orderNumber} claimed!`);
                                 }
                             } catch {
                                 // Parse error — skip
@@ -154,7 +189,7 @@ const DeliveryDashboard = () => {
             currentController.abort();
             if (reconnectTimer) clearTimeout(reconnectTimer);
         };
-    }, [token, api]);
+    }, [token, api, showToast]);
 
     const handleStatusToggle = async (newStatus) => {
         setStatusLoading(true);
@@ -168,13 +203,61 @@ const DeliveryDashboard = () => {
         }
     };
 
+    const handleClaim = async (orderId) => {
+        // Optimistic removal from available list
+        setAvailableOrders((prev) => prev.filter((o) => o.orderId !== orderId));
+
+        try {
+            await api('post', `/delivery/orders/${orderId}/claim`);
+            // CLAIM_CONFIRMED SSE event will refresh assigned orders
+        } catch (err) {
+            if (err.response?.status === 409) {
+                showToast('Order already claimed by another rider');
+            } else {
+                console.error('Claim failed:', err);
+                showToast('Failed to claim order');
+                // Re-fetch available orders to restore state
+                try {
+                    const res = await api('get', '/delivery/available-orders');
+                    setAvailableOrders(res.data);
+                } catch {}
+            }
+        }
+    };
+
+    const handleAccept = async (orderId) => {
+        try {
+            await api('post', `/delivery/orders/${orderId}/accept`);
+            setOrders((prev) =>
+                prev.map((a) =>
+                    a.order?.id === orderId ? { ...a, acceptedAt: new Date().toISOString() } : a
+                ),
+            );
+            showToast('Order accepted!', 3000);
+        } catch (err) {
+            console.error('Accept failed:', err);
+            showToast('Failed to accept order', 3000);
+        }
+    };
+
+    const handleReject = async (orderId) => {
+        try {
+            await api('post', `/delivery/orders/${orderId}/reject`);
+            setOrders((prev) => prev.filter((a) => a.order?.id !== orderId));
+            setStatus('FREE');
+            showToast('Order rejected — reassigning to another delivery partner');
+        } catch (err) {
+            console.error('Reject failed:', err);
+            showToast('Failed to reject order', 3000);
+        }
+    };
+
     const handleComplete = async (orderId, result) => {
         try {
             await api('post', `/delivery/orders/${orderId}/complete`, { result });
             setOrders((prev) => prev.filter((a) => a.order?.id !== orderId));
             setStatus('FREE');
-            setToast(`Order marked as ${result}`);
-            setTimeout(() => setToast(null), 3000);
+            showToast(`Order marked as ${result}`, 3000);
         } catch (err) {
             console.error('Complete delivery failed:', err);
         }
@@ -249,29 +332,61 @@ const DeliveryDashboard = () => {
                 </div>
             </div>
 
-            {/* Orders */}
-            <main className="max-w-lg mx-auto px-4 py-4 space-y-4">
-                {orders.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center py-20 text-gray-400">
-                        <svg className="w-16 h-16 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-                        </svg>
-                        <p className="text-lg font-medium">No active deliveries</p>
-                        <p className="text-sm mt-1">
-                            {status === 'FREE'
-                                ? "You'll be notified when an order is assigned"
-                                : "Set status to 'Available' to receive orders"}
-                        </p>
-                    </div>
-                ) : (
-                    orders.map((assignment) => (
-                        <DeliveryOrderCard
-                            key={assignment.id}
-                            assignment={assignment}
-                            onComplete={handleComplete}
-                        />
-                    ))
+            <main className="max-w-lg mx-auto px-4 py-4 space-y-6">
+                {/* Available Orders (Competitive Claiming) */}
+                {availableOrders.length > 0 && (
+                    <section>
+                        <h2 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-3 flex items-center gap-2">
+                            <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span>
+                            Available Orders ({availableOrders.length})
+                        </h2>
+                        <div className="space-y-3">
+                            {availableOrders.map((order) => (
+                                <AvailableOrderCard
+                                    key={order.orderId}
+                                    order={order}
+                                    onClaim={handleClaim}
+                                />
+                            ))}
+                        </div>
+                    </section>
                 )}
+
+                {/* Assigned Orders */}
+                <section>
+                    {orders.length === 0 && availableOrders.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center py-20 text-gray-400">
+                            <svg className="w-16 h-16 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                            </svg>
+                            <p className="text-lg font-medium">No active deliveries</p>
+                            <p className="text-sm mt-1">
+                                {status === 'FREE'
+                                    ? "You'll be notified when orders are available"
+                                    : "Set status to 'Available' to receive orders"}
+                            </p>
+                        </div>
+                    ) : (
+                        <>
+                            {orders.length > 0 && (
+                                <h2 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-3">
+                                    My Deliveries ({orders.length})
+                                </h2>
+                            )}
+                            <div className="space-y-4">
+                                {orders.map((assignment) => (
+                                    <DeliveryOrderCard
+                                        key={assignment.id}
+                                        assignment={assignment}
+                                        onAccept={handleAccept}
+                                        onReject={handleReject}
+                                        onComplete={handleComplete}
+                                    />
+                                ))}
+                            </div>
+                        </>
+                    )}
+                </section>
             </main>
         </div>
     );

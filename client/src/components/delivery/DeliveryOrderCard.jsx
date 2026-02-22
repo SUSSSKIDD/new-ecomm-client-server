@@ -1,6 +1,10 @@
 import { RippleButton } from '../ui/ripple-button';
-const DeliveryOrderCard = ({ assignment, onComplete }) => {
+import { useState } from 'react';
+
+const DeliveryOrderCard = ({ assignment, onAccept, onReject, onComplete }) => {
     const { order } = assignment;
+    const isAccepted = !!assignment.acceptedAt;
+    const [actionLoading, setActionLoading] = useState(null);
 
     const openInMaps = () => {
         const addr = order.deliveryAddress;
@@ -19,12 +23,26 @@ const DeliveryOrderCard = ({ assignment, onComplete }) => {
         }
     };
 
+    const handleAction = async (action, callback) => {
+        setActionLoading(action);
+        try {
+            await callback();
+        } finally {
+            setActionLoading(null);
+        }
+    };
+
     return (
         <div className="bg-white rounded-2xl shadow-lg shadow-gray-200/50 overflow-hidden border border-gray-100">
             {/* Header */}
-            <div className="bg-gradient-to-r from-emerald-500 to-teal-600 px-4 py-3 flex items-center justify-between">
+            <div className={`px-4 py-3 flex items-center justify-between ${isAccepted
+                ? 'bg-gradient-to-r from-emerald-500 to-teal-600'
+                : 'bg-gradient-to-r from-amber-500 to-orange-500'
+                }`}>
                 <div>
-                    <p className="text-white/70 text-xs font-medium">Order</p>
+                    <p className="text-white/70 text-xs font-medium">
+                        {isAccepted ? 'Order' : 'New Order'}
+                    </p>
                     <p className="text-white font-bold text-sm">{order.orderNumber}</p>
                 </div>
                 <div className="text-right">
@@ -32,6 +50,16 @@ const DeliveryOrderCard = ({ assignment, onComplete }) => {
                     <p className="text-white font-bold">₹{order.total}</p>
                 </div>
             </div>
+
+            {/* Pending badge */}
+            {!isAccepted && (
+                <div className="px-4 pt-3">
+                    <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                        <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
+                        <span className="text-xs font-medium text-amber-700">Waiting for your response</span>
+                    </div>
+                </div>
+            )}
 
             {/* Items */}
             <div className="px-4 py-3 border-b border-gray-100">
@@ -56,13 +84,22 @@ const DeliveryOrderCard = ({ assignment, onComplete }) => {
             <div className="px-4 py-3 border-b border-gray-100">
                 <p className="text-xs font-bold text-gray-500 uppercase mb-1">Delivery Address</p>
                 <p className="text-sm text-gray-700">
+                    {order.deliveryAddress?.recipientName && (
+                        <span className="font-medium text-gray-900">{order.deliveryAddress.recipientName}<br /></span>
+                    )}
                     {order.deliveryAddress?.houseNo && `${order.deliveryAddress.houseNo}, `}
+                    {order.deliveryAddress?.flatBuilding && `${order.deliveryAddress.flatBuilding}, `}
                     {order.deliveryAddress?.street}, {order.deliveryAddress?.city}{' '}
                     {order.deliveryAddress?.zipCode}
                 </p>
                 {order.deliveryAddress?.landmark && (
                     <p className="text-xs text-gray-500 mt-1">
                         Near: {order.deliveryAddress.landmark}
+                    </p>
+                )}
+                {order.deliveryAddress?.recipientPhone && (
+                    <p className="text-xs text-gray-500 mt-1">
+                        Phone: {order.deliveryAddress.recipientPhone}
                     </p>
                 )}
                 <RippleButton
@@ -78,19 +115,42 @@ const DeliveryOrderCard = ({ assignment, onComplete }) => {
             </div>
 
             {/* Actions */}
-            <div className="px-4 py-3 flex gap-2">
-                <RippleButton
-                    onClick={() => onComplete(order.id, 'NOT_DELIVERED')}
-                    className="flex-1 py-2.5 border-2 border-red-200 text-red-600 rounded-xl font-bold text-sm hover:bg-red-50 transition-colors"
-                >
-                    Not Delivered
-                </RippleButton>
-                <RippleButton
-                    onClick={() => onComplete(order.id, 'DELIVERED')}
-                    className="flex-1 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-600 text-white rounded-xl font-bold text-sm shadow-lg shadow-emerald-500/20 hover:shadow-emerald-500/30 transition-all"
-                >
-                    ✓ Delivered
-                </RippleButton>
+            <div className="px-4 py-3">
+                {!isAccepted ? (
+                    <div className="flex gap-2">
+                        <RippleButton
+                            onClick={() => handleAction('reject', () => onReject(order.id))}
+                            disabled={!!actionLoading}
+                            className="flex-1 py-2.5 border-2 border-red-200 text-red-600 rounded-xl font-bold text-sm hover:bg-red-50 transition-colors disabled:opacity-50"
+                        >
+                            {actionLoading === 'reject' ? 'Rejecting...' : 'Reject'}
+                        </RippleButton>
+                        <RippleButton
+                            onClick={() => handleAction('accept', () => onAccept(order.id))}
+                            disabled={!!actionLoading}
+                            className="flex-1 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-600 text-white rounded-xl font-bold text-sm shadow-lg shadow-emerald-500/20 hover:shadow-emerald-500/30 transition-all disabled:opacity-50"
+                        >
+                            {actionLoading === 'accept' ? 'Accepting...' : 'Accept'}
+                        </RippleButton>
+                    </div>
+                ) : (
+                    <div className="flex gap-2">
+                        <RippleButton
+                            onClick={() => handleAction('not_delivered', () => onComplete(order.id, 'NOT_DELIVERED'))}
+                            disabled={!!actionLoading}
+                            className="flex-1 py-2.5 border-2 border-red-200 text-red-600 rounded-xl font-bold text-sm hover:bg-red-50 transition-colors disabled:opacity-50"
+                        >
+                            {actionLoading === 'not_delivered' ? 'Updating...' : 'Not Delivered'}
+                        </RippleButton>
+                        <RippleButton
+                            onClick={() => handleAction('delivered', () => onComplete(order.id, 'DELIVERED'))}
+                            disabled={!!actionLoading}
+                            className="flex-1 py-2.5 bg-gradient-to-r from-emerald-500 to-teal-600 text-white rounded-xl font-bold text-sm shadow-lg shadow-emerald-500/20 hover:shadow-emerald-500/30 transition-all disabled:opacity-50"
+                        >
+                            {actionLoading === 'delivered' ? 'Updating...' : '✓ Delivered'}
+                        </RippleButton>
+                    </div>
+                )}
             </div>
         </div>
     );

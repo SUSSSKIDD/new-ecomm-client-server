@@ -214,6 +214,7 @@ model OrderAssignment {
   deliveryPersonId String
   deliveryPerson   DeliveryPerson @relation(fields: [deliveryPersonId], references: [id])
   assignedAt       DateTime       @default(now())
+  acceptedAt       DateTime?
   completedAt      DateTime?
   result           String?
 

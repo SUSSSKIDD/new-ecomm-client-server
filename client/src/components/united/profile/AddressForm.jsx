@@ -1,5 +1,6 @@
 import { RippleButton } from '../../../components/ui/ripple-button';
 import { useState } from 'react';
+import { ArrowRight } from 'lucide-react';
 import { INDIAN_STATES } from '../../../utils/constants';
 
 const AddressForm = ({ onSubmit, onCancel, loading, initialData }) => {
@@ -18,6 +19,9 @@ const AddressForm = ({ onSubmit, onCancel, loading, initialData }) => {
         lng: initialData?.lng || null,
     });
     const [gpsLoading, setGpsLoading] = useState(false);
+    const [showRecipient, setShowRecipient] = useState(
+        !!(initialData?.recipientName || initialData?.recipientPhone),
+    );
 
     const handleInputChange = (e) => {
         setFormData({ ...formData, [e.target.name]: e.target.value });
@@ -27,12 +31,39 @@ const AddressForm = ({ onSubmit, onCancel, loading, initialData }) => {
         if (!navigator.geolocation) return;
         setGpsLoading(true);
         navigator.geolocation.getCurrentPosition(
-            (pos) => {
-                setFormData((prev) => ({
-                    ...prev,
-                    lat: pos.coords.latitude,
-                    lng: pos.coords.longitude,
-                }));
+            async (pos) => {
+                const { latitude, longitude } = pos.coords;
+                const updates = { lat: latitude, lng: longitude };
+
+                try {
+                    const res = await fetch(
+                        `https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json&addressdetails=1`,
+                        { headers: { 'Accept-Language': 'en' } },
+                    );
+                    const data = await res.json();
+                    const addr = data.address || {};
+
+                    updates.houseNo = addr.house_number || '';
+                    updates.street = [addr.road, addr.neighbourhood, addr.suburb]
+                        .filter(Boolean)
+                        .join(', ') || '';
+                    updates.city = addr.city || addr.town || addr.village || addr.county || '';
+                    updates.zipCode = addr.postcode || '';
+                    updates.landmark = addr.neighbourhood || addr.suburb || '';
+                    updates.mapsLink = `https://www.google.com/maps?q=${latitude},${longitude}`;
+
+                    // Match state to INDIAN_STATES list
+                    const rawState = addr.state || '';
+                    const matched = INDIAN_STATES.find(
+                        (s) => s.toLowerCase() === rawState.toLowerCase()
+                            || rawState.toLowerCase().includes(s.toLowerCase()),
+                    );
+                    if (matched) updates.state = matched;
+                } catch {
+                    // Reverse geocoding failed — still save lat/lng
+                }
+
+                setFormData((prev) => ({ ...prev, ...updates }));
                 setGpsLoading(false);
             },
             () => setGpsLoading(false),
@@ -75,32 +106,59 @@ const AddressForm = ({ onSubmit, onCancel, loading, initialData }) => {
                     </div>
                 </div>
 
-                {/* Conditional Fields for OTHER */}
-                {formData.type === 'OTHER' && (
-                    <div className="grid grid-cols-2 gap-3 p-3 bg-orange-50 rounded-lg border border-orange-100">
-                        <div className="col-span-2 text-xs font-bold text-orange-800 uppercase mb-1">Recipient Details</div>
-                        <div>
-                            <input
-                                required
-                                name="recipientName"
-                                placeholder="Name"
-                                value={formData.recipientName}
-                                onChange={handleInputChange}
-                                className="w-full p-2 text-sm border border-gray-200 rounded-lg"
-                            />
+                {/* Ordering for someone else? */}
+                <div>
+                    {!showRecipient ? (
+                        <button
+                            type="button"
+                            onClick={() => setShowRecipient(true)}
+                            className="group relative w-full cursor-pointer overflow-hidden rounded-lg border border-orange-200 bg-orange-50 p-3 text-center font-semibold text-orange-700"
+                        >
+                            <span className="inline-block translate-x-1 transition-all duration-300 group-hover:translate-x-12 group-hover:opacity-0">
+                                Ordering for someone else?
+                            </span>
+                            <div className="absolute top-0 z-10 flex h-full w-full translate-x-12 items-center justify-center gap-2 text-white opacity-0 transition-all duration-300 group-hover:-translate-x-1 group-hover:opacity-100">
+                                <span>Ordering for someone else?</span>
+                                <ArrowRight className="w-5 h-5" />
+                            </div>
+                            <div className="absolute left-[20%] top-[40%] h-2 w-2 scale-[1] rounded-lg bg-orange-500 transition-all duration-300 group-hover:left-[0%] group-hover:top-[0%] group-hover:h-full group-hover:w-full group-hover:scale-[1.8] group-hover:bg-orange-500"></div>
+                        </button>
+                    ) : (
+                        <div className="p-3 bg-orange-50 rounded-lg border border-orange-100 space-y-3">
+                            <div className="flex items-center justify-between">
+                                <span className="text-xs font-bold text-orange-800 uppercase">Recipient Details</span>
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setShowRecipient(false);
+                                        setFormData((prev) => ({ ...prev, recipientName: '', recipientPhone: '' }));
+                                    }}
+                                    className="text-xs text-gray-400 hover:text-red-500 transition-colors"
+                                >
+                                    Remove
+                                </button>
+                            </div>
+                            <div className="grid grid-cols-2 gap-3">
+                                <input
+                                    required
+                                    name="recipientName"
+                                    placeholder="Recipient Name"
+                                    value={formData.recipientName}
+                                    onChange={handleInputChange}
+                                    className="w-full p-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-orange-400 transition-colors"
+                                />
+                                <input
+                                    required
+                                    name="recipientPhone"
+                                    placeholder="Phone Number"
+                                    value={formData.recipientPhone}
+                                    onChange={handleInputChange}
+                                    className="w-full p-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-orange-400 transition-colors"
+                                />
+                            </div>
                         </div>
-                        <div>
-                            <input
-                                required
-                                name="recipientPhone"
-                                placeholder="Phone"
-                                value={formData.recipientPhone}
-                                onChange={handleInputChange}
-                                className="w-full p-2 text-sm border border-gray-200 rounded-lg"
-                            />
-                        </div>
-                    </div>
-                )}
+                    )}
+                </div>
 
                 {/* Use Current Location Button */}
                 <div>

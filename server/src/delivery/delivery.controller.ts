@@ -11,6 +11,8 @@ import {
   UseGuards,
   ParseUUIDPipe,
   Logger,
+  HttpCode,
+  HttpStatus,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
@@ -19,6 +21,8 @@ import { Observable } from 'rxjs';
 import { DeliveryService } from './delivery.service';
 import { DeliverySseService } from './delivery-sse.service';
 import { AutoAssignService } from './auto-assign.service';
+import { OrderClaimService } from './order-claim.service';
+import { OrderPoolService } from './order-pool.service';
 import { CreateDeliveryPersonDto } from './dto/create-delivery-person.dto';
 import { UpdateLocationDto } from './dto/update-location.dto';
 import { UpdateStatusDto } from './dto/update-status.dto';
@@ -40,7 +44,9 @@ export class DeliveryController {
     private readonly deliveryService: DeliveryService,
     private readonly sseService: DeliverySseService,
     private readonly autoAssignService: AutoAssignService,
-  ) { }
+    private readonly orderClaimService: OrderClaimService,
+    private readonly orderPoolService: OrderPoolService,
+  ) {}
 
   // ── Admin endpoints ─────────────────────────────────────────────
 
@@ -121,9 +127,8 @@ export class DeliveryController {
       dto.status,
     );
 
-    // If person sets FREE, check for pending orders
+    // If person sets FREE, broadcast pending orders to them
     if (dto.status === DeliveryPersonStatus.FREE) {
-      // Fire-and-forget (non-blocking)
       this.autoAssignService
         .checkPendingOrders(req.user.sub)
         .catch((err) =>
@@ -143,6 +148,61 @@ export class DeliveryController {
     return this.deliveryService.getAssignedOrders(req.user.sub);
   }
 
+  // ── Competitive Claiming ──────────────────────────────────────
+
+  @Get('available-orders')
+  @ApiBearerAuth()
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles('DELIVERY_PERSON')
+  @ApiOperation({ summary: 'List available orders for claiming (SSE reconnection fallback)' })
+  getAvailableOrders(@Req() req: AuthenticatedRequest) {
+    return this.orderPoolService.getAvailableOrdersForRider(req.user.sub);
+  }
+
+  @Post('orders/:id/claim')
+  @ApiBearerAuth()
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles('DELIVERY_PERSON')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Competitively claim an available order' })
+  claimOrder(
+    @Req() req: AuthenticatedRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.orderClaimService.claimOrder(req.user.sub, id);
+  }
+
+  @Post('orders/:id/accept')
+  @ApiBearerAuth()
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles('DELIVERY_PERSON')
+  @ApiOperation({ summary: 'Accept a delivery assignment' })
+  acceptAssignment(
+    @Req() req: AuthenticatedRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.deliveryService.acceptAssignment(req.user.sub, id);
+  }
+
+  @Post('orders/:id/reject')
+  @ApiBearerAuth()
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles('DELIVERY_PERSON')
+  @ApiOperation({ summary: 'Reject a delivery assignment' })
+  async rejectAssignment(
+    @Req() req: AuthenticatedRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    const response = await this.deliveryService.rejectAssignment(req.user.sub, id);
+
+    // Re-broadcast for other riders to claim
+    this.autoAssignService
+      .assignOrder(id)
+      .catch((err) => this.logger.error(`Re-assign after reject error: ${err.message}`));
+
+    return response;
+  }
+
   @Post('orders/:id/complete')
   @ApiBearerAuth()
   @UseGuards(AuthGuard('jwt'), RolesGuard)
@@ -159,7 +219,7 @@ export class DeliveryController {
       dto.result,
     );
 
-    // Person is now FREE — check pending orders
+    // Person is now FREE — broadcast pending orders
     this.autoAssignService
       .checkPendingOrders(req.user.sub)
       .catch((err) => this.logger.error(`checkPendingOrders error: ${err.message}`));

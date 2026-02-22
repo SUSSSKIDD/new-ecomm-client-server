@@ -175,10 +175,23 @@ export class ProductsService {
   }
 
   async findStoreProducts(storeId: string) {
-    return this.prisma.product.findMany({
+    const products = await this.prisma.product.findMany({
       where: { storeId },
       orderBy: { createdAt: 'desc' },
+      include: {
+        storeInventory: {
+          where: { storeId },
+          select: { stock: true },
+        },
+      },
     });
+
+    // Replace product.stock with store-specific inventory stock
+    return products.map((p) => ({
+      ...p,
+      stock: p.storeInventory?.[0]?.stock ?? p.stock,
+      storeInventory: undefined,
+    }));
   }
 
   private checkOwnership(product: any, storeId?: string) {

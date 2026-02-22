@@ -6,10 +6,11 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { RedisCacheService } from '../common/services/redis-cache.service';
+import { RiderRedisService } from './rider-redis.service';
 import { CreateDeliveryPersonDto } from './dto/create-delivery-person.dto';
 import { DeliveryPersonStatus } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
-import { randomInt } from 'crypto';
+
 
 @Injectable()
 export class DeliveryService {
@@ -19,6 +20,7 @@ export class DeliveryService {
     constructor(
         private readonly prisma: PrismaService,
         private readonly cache: RedisCacheService,
+        private readonly riderRedis: RiderRedisService,
     ) { }
 
     // ── Admin: Manage delivery persons ──────────────────────────────
@@ -33,8 +35,8 @@ export class DeliveryService {
             throw new NotFoundException(`Store ${dto.homeStoreId} not found`);
         }
 
-        // Generate 4-digit PIN
-        const pin = String(randomInt(1000, 10000));
+        // Use admin-provided PIN
+        const pin = dto.pin;
         const pinHash = await bcrypt.hash(pin, 10);
 
         // Check if delivery person with this phone already exists
@@ -148,9 +150,9 @@ export class DeliveryService {
         return profile;
     }
 
-    /** Update GPS location (cached in Redis). */
+    /** Update GPS location (cached in main Redis + riderdb2). */
     async updateLocation(personId: string, lat: number, lng: number) {
-        // Parallel: DB update + Redis cache
+        // Parallel: DB update + main Redis cache + riderdb2 location + riderdb2 presence
         await Promise.all([
             this.prisma.deliveryPerson.update({
                 where: { id: personId },
@@ -161,6 +163,8 @@ export class DeliveryService {
                 { lat, lng, updatedAt: new Date().toISOString() },
                 DeliveryService.LOCATION_TTL,
             ),
+            this.riderRedis.setRiderLocation(personId, lat, lng),
+            this.riderRedis.setRiderOnline(personId),
         ]);
 
         return { lat, lng, updated: true };
@@ -191,6 +195,63 @@ export class DeliveryService {
         });
     }
 
+    /** Accept a delivery assignment. */
+    async acceptAssignment(personId: string, orderId: string) {
+        const assignment = await this.prisma.orderAssignment.findFirst({
+            where: { orderId, deliveryPersonId: personId },
+        });
+        if (!assignment) {
+            throw new NotFoundException('Assignment not found');
+        }
+        if (assignment.acceptedAt) {
+            throw new BadRequestException('Assignment already accepted');
+        }
+        if (assignment.completedAt) {
+            throw new BadRequestException('Assignment already completed');
+        }
+
+        await this.prisma.orderAssignment.update({
+            where: { id: assignment.id },
+            data: { acceptedAt: new Date() },
+        });
+
+        this.logger.log(`Assignment accepted for order ${orderId} by person ${personId}`);
+        return { orderId, accepted: true };
+    }
+
+    /** Reject a delivery assignment. Deletes assignment and frees the person. */
+    async rejectAssignment(personId: string, orderId: string) {
+        const assignment = await this.prisma.orderAssignment.findFirst({
+            where: { orderId, deliveryPersonId: personId },
+        });
+        if (!assignment) {
+            throw new NotFoundException('Assignment not found');
+        }
+        if (assignment.acceptedAt) {
+            throw new BadRequestException('Cannot reject an already accepted assignment');
+        }
+        if (assignment.completedAt) {
+            throw new BadRequestException('Assignment already completed');
+        }
+
+        // Store the rejected personId in Redis so auto-assign skips them
+        const rejectedKey = `order:rejected:${orderId}`;
+        const existing = await this.cache.get<string[]>(rejectedKey);
+        const rejectedIds = existing ? [...existing, personId] : [personId];
+        await this.cache.set(rejectedKey, rejectedIds, 3600); // 1 hour TTL
+
+        await this.prisma.$transaction([
+            this.prisma.orderAssignment.delete({ where: { id: assignment.id } }),
+            this.prisma.deliveryPerson.update({
+                where: { id: personId },
+                data: { status: DeliveryPersonStatus.FREE },
+            }),
+        ]);
+
+        this.logger.log(`Assignment rejected for order ${orderId} by person ${personId}`);
+        return { orderId, rejected: true };
+    }
+
     /** Mark delivery as complete (DELIVERED / NOT_DELIVERED). */
     async completeDelivery(personId: string, orderId: string, result: 'DELIVERED' | 'NOT_DELIVERED') {
         if (result !== 'DELIVERED' && result !== 'NOT_DELIVERED') {
@@ -202,6 +263,9 @@ export class DeliveryService {
         });
         if (!assignment) {
             throw new NotFoundException('Assignment not found');
+        }
+        if (!assignment.acceptedAt) {
+            throw new BadRequestException('You must accept the assignment before completing delivery');
         }
         if (assignment.completedAt) {
             throw new BadRequestException('Delivery already completed');

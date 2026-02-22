@@ -8,10 +8,14 @@ import { DeliveryService } from './delivery.service';
 import { DeliveryAuthService } from './delivery-auth.service';
 import { DeliverySseService } from './delivery-sse.service';
 import { AutoAssignService } from './auto-assign.service';
+import { RiderRedisService } from './rider-redis.service';
+import { OrderPoolService } from './order-pool.service';
+import { OrderClaimService } from './order-claim.service';
 
 @Module({
   imports: [
     PrismaModule,
+    ConfigModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
@@ -27,6 +31,9 @@ import { AutoAssignService } from './auto-assign.service';
     DeliveryAuthService,
     DeliverySseService,
     AutoAssignService,
+    RiderRedisService,
+    OrderPoolService,
+    OrderClaimService,
   ],
   exports: [AutoAssignService, DeliverySseService],
 })

@@ -70,4 +70,40 @@ export class DeliverySseService {
   isConnected(deliveryPersonId: string): boolean {
     return this.connections.has(deliveryPersonId);
   }
+
+  /** Broadcast a new available order to multiple riders for competitive claiming. */
+  broadcastAvailableOrder(riderIds: string[], snapshot: any): void {
+    const message: SSEMessage = {
+      type: 'NEW_AVAILABLE_ORDER',
+      data: snapshot,
+    };
+    let sent = 0;
+    for (const riderId of riderIds) {
+      const subject = this.connections.get(riderId);
+      if (subject) {
+        subject.next({ data: JSON.stringify(message) });
+        sent++;
+      }
+    }
+    this.logger.log(
+      `Broadcast NEW_AVAILABLE_ORDER to ${sent}/${riderIds.length} connected riders`,
+    );
+  }
+
+  /** Notify riders that an order has been claimed (remove from their UI). */
+  broadcastOrderClaimed(riderIds: string[], orderId: string): void {
+    const message: SSEMessage = {
+      type: 'ORDER_CLAIMED',
+      data: { orderId },
+    };
+    for (const riderId of riderIds) {
+      const subject = this.connections.get(riderId);
+      if (subject) {
+        subject.next({ data: JSON.stringify(message) });
+      }
+    }
+    this.logger.log(
+      `Broadcast ORDER_CLAIMED (${orderId}) to ${riderIds.length} riders`,
+    );
+  }
 }

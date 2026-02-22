@@ -12,6 +12,7 @@ import { CartService } from '../cart/cart.service';
 import { RedisCacheService } from '../common/services/redis-cache.service';
 import { OrderFulfillmentService, FulfillmentResult } from './order-fulfillment.service';
 import { AutoAssignService } from '../delivery/auto-assign.service';
+import { LedgerService } from '../ledger/ledger.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { OrderQueryDto } from './dto/order-query.dto';
 import {
@@ -36,6 +37,7 @@ export class OrdersService {
     private readonly config: ConfigService,
     private readonly fulfillmentService: OrderFulfillmentService,
     private readonly autoAssignService: AutoAssignService,
+    private readonly ledgerService: LedgerService,
   ) {
     this.deliveryFee = Number(this.config.get('DELIVERY_FEE', '40'));
     this.taxRate = Number(this.config.get('TAX_RATE', '0.05'));
@@ -52,6 +54,47 @@ export class OrdersService {
     const datePart = now.toISOString().slice(0, 10).replace(/-/g, '');
     const randomPart = randomBytes(4).toString('hex').toUpperCase().slice(0, 6);
     return `UD-${datePart}-${randomPart}`;
+  }
+
+  /**
+   * Create ledger entries for an order, grouped by store.
+   * Fire-and-forget — failures are logged but don't block the order.
+   */
+  private async createLedgerEntries(order: any, paymentMethod: string) {
+    try {
+      const items = order.items || [];
+      // Group order item totals by storeId
+      const storeAmounts = new Map<string, number>();
+      for (const item of items) {
+        const sid = item.storeId;
+        if (!sid) continue;
+        storeAmounts.set(sid, (storeAmounts.get(sid) || 0) + item.total);
+      }
+
+      // If no store-level items, try the delivery address or skip
+      if (storeAmounts.size === 0) return;
+
+      const method = paymentMethod === 'COD' ? 'CASH' : 'OTHER';
+      const now = new Date().toISOString();
+
+      await Promise.all(
+        Array.from(storeAmounts.entries()).map(([storeId, amount]) =>
+          this.ledgerService.create({
+            storeId,
+            date: now,
+            amount,
+            paymentMethod: method,
+            referenceNotes: `Order ${order.orderNumber} (${paymentMethod})`,
+          }).catch((err) =>
+            this.logger.error(`Ledger entry failed for order ${order.orderNumber} store ${storeId}: ${err.message}`),
+          ),
+        ),
+      );
+
+      this.logger.log(`Ledger entries created for order ${order.orderNumber}`);
+    } catch (err) {
+      this.logger.error(`Ledger creation failed for order ${order.orderNumber}: ${err.message}`);
+    }
   }
 
   /**
@@ -440,6 +483,11 @@ export class OrdersService {
       `Order ${order.orderNumber} created for user ${userId} (${dto.paymentMethod})`,
     );
 
+    // COD orders are CONFIRMED immediately — record in ledger
+    if (dto.paymentMethod === PaymentMethod.COD) {
+      this.createLedgerEntries(order, 'COD');
+    }
+
     return order;
   }
 
@@ -463,6 +511,13 @@ export class OrdersService {
         take: limit,
         include: {
           items: true,
+          assignment: {
+            include: {
+              deliveryPerson: {
+                select: { id: true, name: true, phone: true },
+              },
+            },
+          },
         },
       }),
       this.prisma.order.count({ where: { userId } }),
@@ -660,9 +715,10 @@ export class OrdersService {
       orderId,
     );
 
-    // Fetch the order for response (needed regardless)
+    // Fetch the order with items for response + ledger
     const order = await this.prisma.order.findUnique({
       where: { id: orderId },
+      include: { items: true },
     });
     if (!order) throw new NotFoundException('Order not found');
 
@@ -680,6 +736,9 @@ export class OrdersService {
       }
     }
     this.cache.delMany(paidKeysToDelete).catch(() => { });
+
+    // Record online payment in ledger
+    this.createLedgerEntries(order, 'RAZORPAY');
 
     this.logger.log(`Order ${order.orderNumber} marked as PAID`);
 
@@ -802,13 +861,14 @@ export class OrdersService {
     };
   }
 
-  // Valid order status transitions (state machine)
+  // Valid order status transitions (one-way hierarchy)
+  // CONFIRMED → ORDER_PICKED → SHIPPED → DELIVERED
+  // DELIVERED can only be set by delivery person via completeDelivery()
   private static readonly VALID_TRANSITIONS: Record<string, OrderStatus[]> = {
-    PENDING: [OrderStatus.CONFIRMED, OrderStatus.CANCELLED],
-    CONFIRMED: [OrderStatus.PROCESSING, OrderStatus.ORDER_PICKED, OrderStatus.CANCELLED],
-    PROCESSING: [OrderStatus.ORDER_PICKED, OrderStatus.CANCELLED],
-    ORDER_PICKED: [OrderStatus.SHIPPED, OrderStatus.DELIVERED, OrderStatus.CANCELLED],
-    SHIPPED: [OrderStatus.DELIVERED, OrderStatus.CANCELLED],
+    PENDING: [OrderStatus.CONFIRMED],
+    CONFIRMED: [OrderStatus.ORDER_PICKED],
+    ORDER_PICKED: [OrderStatus.SHIPPED],
+    SHIPPED: [],     // DELIVERED is set only by delivery person
     DELIVERED: [],
     CANCELLED: [],
   };
@@ -820,6 +880,13 @@ export class OrdersService {
     });
     if (!order) throw new NotFoundException('Order not found');
 
+    // Block admin from manually setting DELIVERED — only delivery person can
+    if (status === OrderStatus.DELIVERED) {
+      throw new BadRequestException(
+        'DELIVERED status can only be set by the delivery person',
+      );
+    }
+
     if (storeId) {
       const hasStoreItems = order.items.some((i) => i.storeId === storeId);
       if (!hasStoreItems) {
@@ -829,7 +896,7 @@ export class OrdersService {
       }
     }
 
-    // Validate transition
+    // Validate transition (one-way only)
     const allowed = OrdersService.VALID_TRANSITIONS[order.status] ?? [];
     if (!allowed.includes(status)) {
       throw new BadRequestException(
@@ -842,7 +909,7 @@ export class OrdersService {
       data: { status },
     });
 
-    // Trigger auto-assign when status moves to ORDER_PICKED
+    // Auto-trigger delivery search when order is packed
     if (status === OrderStatus.ORDER_PICKED) {
       this.autoAssignService
         .assignOrder(id)
