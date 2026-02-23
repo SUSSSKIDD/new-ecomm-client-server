@@ -20,7 +20,7 @@ NEYOKART (formerly United Deals) is a hyper-local grocery delivery platform with
 |-------|-----------|
 | Framework | NestJS 11 (Express) |
 | Database | PostgreSQL + Prisma ORM 7.4 (via pg adapter) |
-| Cache | Upstash Redis (graceful degradation if unavailable) |
+| Cache | Upstash Redis (app data cache) + 2x Upstash Redis (Rider db1 for locks/pool, db2 for presence) |
 | Auth | JWT (60-day expiry) + MSG91 SMS OTP + Store Manager PIN + Delivery Person PIN |
 | Payment | Razorpay SDK (test mode: `rzp_test_*`, mock mode when credentials absent) |
 | Storage | Supabase Storage (product images, graceful degradation) |
@@ -58,9 +58,10 @@ new grocery/
 │       │   │   ├── AdminProducts.jsx            # Product management (CRUD + images)
 │       │   │   └── AdminStores.jsx              # Store management (ADMIN only)
 │       │   ├── delivery/                        # Delivery Person App
-│       │   │   ├── DeliveryDashboard.jsx        # Delivery person main dashboard
+│       │   │   ├── DeliveryDashboard.jsx        # Dashboard, online presence toggle, assigned & available orders
 │       │   │   ├── DeliveryLogin.jsx            # Delivery person phone+PIN login
-│       │   │   ├── DeliveryOrderCard.jsx        # Individual order card component
+│       │   │   ├── DeliveryOrderCard.jsx        # Individual order card component (assigned)
+│       │   │   ├── AvailableOrderCard.jsx       # Individual order card component (available for claiming)
 │       │   │   └── DeliveryStatusToggle.jsx     # FREE/BUSY/OFFLINE toggle
 │       │   └── BottomTabBar, CategoryGrid, GhostState, PincodeHeader
 │       ├── context/
@@ -150,13 +151,16 @@ new grocery/
         │   ├── dashboard.module.ts
         │   ├── dashboard.controller.ts          # Dashboard analytics endpoints
         │   └── dashboard.service.ts
-        ├── delivery/                            # Delivery system
+        ├── delivery/                            # Competitive Order Claiming System
         │   ├── delivery.module.ts
-        │   ├── delivery.controller.ts           # Delivery person CRUD, profile, orders, SSE
-        │   ├── delivery.service.ts              # Assignment, completion, status management
-        │   ├── delivery-auth.controller.ts      # POST /delivery/auth/login (phone + PIN)
-        │   ├── auto-assign.service.ts           # Haversine nearest-FREE-person assignment
-        │   ├── delivery-events.gateway.ts       # SSE for real-time delivery updates
+        │   ├── delivery.controller.ts           # Profile, active/available orders, claim endpoint
+        │   ├── delivery.service.ts              # Delivery person CRUD, location tracking
+        │   ├── delivery-auth.controller.ts      # Auth (phone + PIN)
+        │   ├── rider-redis.service.ts           # Dual Redis wrapper (db1: pool/locks, db2: presence/location)
+        │   ├── order-pool.service.ts            # Manages available orders pool & timeouts
+        │   ├── order-claim.service.ts           # 3-layer atomic race condition claiming logic
+        │   ├── auto-assign.service.ts           # Now triggers order broadcast instead of direct assignment
+        │   ├── delivery-sse.service.ts          # Real-time SSE streams for NEW_AVAILABLE_ORDER, ORDER_CLAIMED
         │   └── dto/
         ├── common/
         │   ├── common.module.ts                 # Global module (exports Redis + Supabase)
@@ -254,11 +258,13 @@ new grocery/
 ### Delivery — Auth & Self-Service
 - `POST /delivery/auth/login` — Delivery person login (phone + PIN)
 - `GET /delivery/me` — Get own profile (DELIVERY_PERSON)
-- `POST /delivery/location` — Update own GPS location (lat/lng)
+- `POST /delivery/location` — Update own GPS location (lat/lng, dual-written to Redis)
 - `POST /delivery/status` — Set status (FREE/BUSY)
-- `GET /delivery/orders` — Get assigned orders
+- `GET /delivery/available-orders` — Poll for available orders to claim
+- `GET /delivery/orders` — Get your successfully assigned active orders
+- `POST /delivery/orders/:id/claim` — Competitive claim attempt
 - `POST /delivery/orders/:id/complete` — Mark delivery as DELIVERED/NOT_DELIVERED
-- `GET /delivery/sse` — SSE stream for real-time delivery notifications
+- `GET /delivery/sse` — SSE stream (events: `NEW_AVAILABLE_ORDER`, `ORDER_CLAIMED`, `CLAIM_CONFIRMED`)
 
 ### SMS (JWT + ADMIN only)
 - `POST /sms/templates` — Create SMS template (auto-extracts `##VAR##` variables)
@@ -304,16 +310,19 @@ CANCELLED  CANCELLED   CANCELLED    CANCELLED    CANCELLED
 3. `StoreInventory` records are decremented per-store
 4. If no nearby store has stock, falls back to global `Product.stock`
 5. Order is created with fulfillment metadata (which store fulfills which items)
-6. Auto-assignment triggers: finds nearest `FREE` delivery person to fulfilling store
-7. Delivery person gets the assignment, marks order as delivered on completion
+6. Auto-assign triggers `OrderPoolService.broadcastOrder()`, identifying nearby ONLINE+FREE riders.
+7. Event triggers SSE `NEW_AVAILABLE_ORDER` pushing order to selected riders' phones.
+8. Riders view order and tap "Claim". First to hit endpoint claims it.
+9. `OrderClaimService` executes 3-layer atomic lock (Redis SET NX -> Prisma tx -> DB Unique Constraint).
+10. Winner gets `CLAIM_CONFIRMED` SSE, others get `ORDER_CLAIMED` and it un-renders.
 
-### Auto-Assignment Logic (`auto-assign.service.ts`)
-- Uses Haversine distance (max radius: 9km) to find nearest FREE delivery person
-- Runs inside a Prisma transaction with race condition guards:
-  - Re-checks delivery person status (still FREE?)
-  - Re-checks order status (not CANCELLED/DELIVERED?)
-- Sets delivery person to BUSY, creates OrderAssignment record
-- Triggered on: order creation, payment completion, delivery person becoming FREE
+### Competitive Claiming System vs Auto-Assignment
+- **Old System:** Searched for a single nearest FREE person and forced an assignment (`auto-assign.service.ts`).
+- **New System (Competitive Claiming):** 
+  - 2 Dedicated Redis DBs (`riderdb1`: locks/pool, `riderdb2`: presence/location cache).
+  - High concurrency support (e.g. 5+ riders clicking under 10ms variance).
+  - Uses idempotency keys on Redis layer for network retries.
+  - Automatically times out unclaimed orders (e.g. 120 seconds via Env) and re-broadcasts.
 
 ## Payment Flow
 
@@ -410,6 +419,11 @@ CANCELLED  CANCELLED   CANCELLED    CANCELLED    CANCELLED
 | `RAZORPAY_WEBHOOK_SECRET` | (empty) | For webhook signature verification |
 | `SUPABASE_URL` | — | Supabase project URL (empty = image uploads disabled) |
 | `SUPABASE_SERVICE_ROLE_KEY` | — | Supabase service role key for storage access |
+| `RIDER_REDIS1_URL` | — | Upstash Redis URL for Order Pool, Locks, and Idempotency |
+| `RIDER_REDIS1_TOKEN` | — | Upstash Redis Token for Rider DB1 |
+| `RIDER_REDIS2_URL` | — | Upstash Redis URL for Rider Presence and GPS Location Caching |
+| `RIDER_REDIS2_TOKEN` | — | Upstash Redis Token for Rider DB2 |
+| `ORDER_CLAIM_TIMEOUT_SECONDS` | 120 | Unclaimed order pool timeout before retry/re-broadcast |
 
 ## Client-Side Constants (CartSidebar.jsx)
 
