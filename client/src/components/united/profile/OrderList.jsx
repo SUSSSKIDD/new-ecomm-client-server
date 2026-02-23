@@ -1,24 +1,15 @@
 import { RippleButton } from '../../../components/ui/ripple-button';
-import { useState, useEffect } from 'react';
-import axios from 'axios';
+import { useState, useCallback } from 'react';
 import { useAuth } from '../../../context/AuthContext';
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-
-const STATUS_CONFIG = {
-    CONFIRMED: { label: 'Confirmed', color: 'bg-blue-100 text-blue-700', step: 1 },
-    ORDER_PICKED: { label: 'Order Packed', color: 'bg-orange-100 text-orange-700', step: 2 },
-    SHIPPED: { label: 'Shipped', color: 'bg-purple-100 text-purple-700', step: 3 },
-    DELIVERED: { label: 'Delivered', color: 'bg-green-100 text-green-700', step: 4 },
-    PENDING: { label: 'Pending', color: 'bg-yellow-100 text-yellow-700', step: 0 },
-    CANCELLED: { label: 'Cancelled', color: 'bg-red-100 text-red-700', step: -1 },
-};
+import { api } from '../../../lib/api';
+import { STATUS_MAP, getStatusLabel } from '../../../lib/status';
+import { usePolling } from '../../../hooks/usePolling';
 
 const STEPS = ['Confirmed', 'Packed', 'Shipped', 'Delivered'];
 
 const StatusTracker = ({ status }) => {
-    const cfg = STATUS_CONFIG[status] || { step: 0 };
-    if (cfg.step < 1) return null; // Don't show tracker for PENDING/CANCELLED
+    const cfg = STATUS_MAP[status] || { step: 0 };
+    if (cfg.step < 1) return null;
 
     return (
         <div className="flex items-center gap-1 w-full mt-3 mb-1">
@@ -46,27 +37,42 @@ const OrderList = ({ onBack }) => {
     const [orders, setOrders] = useState([]);
     const [loading, setLoading] = useState(true);
     const [expandedId, setExpandedId] = useState(null);
+    const [cancellingId, setCancellingId] = useState(null);
 
-    useEffect(() => {
-        const fetchOrders = async () => {
-            try {
-                setLoading(true);
-                const res = await axios.get(`${API_URL}/orders`, {
-                    headers: { Authorization: `Bearer ${token}` },
-                    params: { limit: 50 }
-                });
-                setOrders(res.data.data);
-            } catch (err) {
-                console.error("Failed to fetch orders", err);
-            } finally {
-                setLoading(false);
-            }
-        };
-
-        if (token) fetchOrders();
+    const handleCancelOrder = useCallback(async (orderId) => {
+        setCancellingId(orderId);
+        try {
+            await api(token).post(`/orders/${orderId}/cancel`);
+            setOrders((prev) => prev.map((o) =>
+                o.id === orderId ? { ...o, status: 'CANCELLED', canCancel: false, canModify: false } : o
+            ));
+        } catch (err) {
+            alert(err.response?.data?.message || 'Failed to cancel order');
+        } finally {
+            setCancellingId(null);
+        }
     }, [token]);
 
-    const getStatusCfg = (status) => STATUS_CONFIG[status] || { label: status, color: 'bg-gray-100 text-gray-700', step: 0 };
+    // Polling: returns true if there are active orders (keep polling)
+    const fetchOrders = useCallback(async () => {
+        try {
+            const res = await api(token).get('/orders', { params: { limit: 50 } });
+            const fetchedOrders = res.data.data || [];
+            setOrders(fetchedOrders);
+            setLoading(false);
+            return fetchedOrders.some(o =>
+                ['PENDING', 'CONFIRMED', 'ORDER_PICKED', 'SHIPPED'].includes(o.status)
+            );
+        } catch (err) {
+            console.error("Failed to fetch orders", err);
+            setLoading(false);
+            return true; // retry on error
+        }
+    }, [token]);
+
+    usePolling(fetchOrders, 15000, !!token);
+
+    const getCfg = (status) => STATUS_MAP[status] || { label: status, color: 'bg-gray-100 text-gray-700', step: 0 };
 
     if (loading) {
         return (
@@ -104,7 +110,7 @@ const OrderList = ({ onBack }) => {
                     </div>
                 ) : (
                     orders.map((order) => {
-                        const cfg = getStatusCfg(order.status);
+                        const cfg = getCfg(order.status);
                         const isExpanded = expandedId === order.id;
                         const items = order.items || [];
                         const addr = order.deliveryAddress;
@@ -163,7 +169,7 @@ const OrderList = ({ onBack }) => {
                                             <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Items</p>
                                             <div className="space-y-2">
                                                 {items.map((item, idx) => (
-                                                    <div key={idx} className="flex justify-between items-start">
+                                                    <div key={item.id || idx} className="flex justify-between items-start">
                                                         <div className="flex-1 min-w-0 pr-3">
                                                             <p className="text-sm text-gray-900 leading-tight">{item.name}</p>
                                                             <p className="text-[11px] text-gray-400">{item.quantity} x ₹{item.price}</p>
@@ -231,7 +237,7 @@ const OrderList = ({ onBack }) => {
 
                                         {/* Delivery Address */}
                                         {addr && (
-                                            <div className="mx-4 pt-2 pb-4 border-t border-gray-100">
+                                            <div className="mx-4 pt-2 pb-3 border-t border-gray-100">
                                                 <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Delivery Address</p>
                                                 <p className="text-xs text-gray-600 leading-relaxed">
                                                     {addr.recipientName && <span className="font-medium text-gray-800">{addr.recipientName}<br /></span>}
@@ -243,6 +249,25 @@ const OrderList = ({ onBack }) => {
                                                         <span className="block mt-0.5 text-gray-400">{addr.recipientPhone}</span>
                                                     )}
                                                 </p>
+                                            </div>
+                                        )}
+
+                                        {/* Cancel button — grace period */}
+                                        {order.canCancel && (
+                                            <div className="mx-4 pb-4">
+                                                <button
+                                                    type="button"
+                                                    onClick={(e) => { e.stopPropagation(); handleCancelOrder(order.id); }}
+                                                    disabled={cancellingId === order.id}
+                                                    className="w-full py-2.5 bg-red-50 text-red-600 text-sm font-bold rounded-xl border border-red-200 hover:bg-red-100 disabled:opacity-50 transition-colors"
+                                                >
+                                                    {cancellingId === order.id ? 'Cancelling...' : 'Cancel Order'}
+                                                </button>
+                                                {order.graceExpiresAt && new Date(order.graceExpiresAt) > new Date() && (
+                                                    <p className="text-[10px] text-amber-600 text-center mt-1">
+                                                        Cancel window expires in {Math.max(0, Math.ceil((new Date(order.graceExpiresAt).getTime() - Date.now()) / 1000))}s
+                                                    </p>
+                                                )}
                                             </div>
                                         )}
                                     </div>

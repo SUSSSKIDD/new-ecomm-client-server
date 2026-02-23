@@ -1,6 +1,6 @@
 import { RippleButton } from '../ui/ripple-button';
 import { useEffect, useState } from 'react';
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+import { adminApi } from '../../lib/api';
 
 const AdminDelivery = () => {
     const [deliveryPersons, setDeliveryPersons] = useState([]);
@@ -12,79 +12,52 @@ const AdminDelivery = () => {
     const [showForm, setShowForm] = useState(false);
     const [formData, setFormData] = useState({ name: '', phone: '', homeStoreId: '', pin: '' });
 
-    useEffect(() => {
-        fetchData();
-        // eslint-disable-next-line
-    }, []);
-
-    const fetchData = async () => {
+    const fetchData = async (signal) => {
         try {
             setLoading(true);
-            const token = localStorage.getItem('ud_admin_token');
             const [delRes, storeRes] = await Promise.all([
-                fetch(`${API_URL}/delivery/persons`, { headers: { Authorization: `Bearer ${token}` } }),
-                fetch(`${API_URL}/stores`, { headers: { Authorization: `Bearer ${token}` } })
+                adminApi().get('/delivery/persons', { signal }),
+                adminApi().get('/stores', { signal }),
             ]);
-
-            if (delRes.ok && storeRes.ok) {
-                setDeliveryPersons(await delRes.json());
-                setStores(await storeRes.json());
-            } else {
-                setError('Failed to fetch data');
-            }
+            setDeliveryPersons(delRes.data);
+            setStores(storeRes.data);
         } catch (err) {
-            console.error(err);
-            setError('Error loading data');
+            if (err.name !== 'CanceledError') {
+                console.error(err);
+                setError('Error loading data');
+            }
         } finally {
             setLoading(false);
         }
     };
 
+    useEffect(() => {
+        const ctrl = new AbortController();
+        fetchData(ctrl.signal);
+        return () => ctrl.abort();
+    }, []);
+
     const handleSubmit = async (e) => {
         e.preventDefault();
         try {
-            const token = localStorage.getItem('ud_admin_token');
             const dataToSubmit = { ...formData };
             if (dataToSubmit.phone && !dataToSubmit.phone.startsWith('+91')) {
                 dataToSubmit.phone = `+91${dataToSubmit.phone}`;
             }
-
-            const res = await fetch(`${API_URL}/delivery/persons`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    Authorization: `Bearer ${token}`
-                },
-                body: JSON.stringify(dataToSubmit)
-            });
-
-            if (res.ok) {
-                const newPerson = await res.json();
-                setDeliveryPersons(prev => [newPerson, ...prev]);
-                setShowForm(false);
-                setFormData({ name: '', phone: '', homeStoreId: '', pin: '' });
-                alert(`Delivery guy created successfully!\nPIN: ${newPerson.pin}`);
-            } else {
-                const data = await res.json();
-                alert(data.message || 'Failed to create');
-            }
+            const res = await adminApi().post('/delivery/persons', dataToSubmit);
+            const newPerson = res.data;
+            setDeliveryPersons(prev => [newPerson, ...prev]);
+            setShowForm(false);
+            setFormData({ name: '', phone: '', homeStoreId: '', pin: '' });
+            alert(`Delivery guy created successfully!\nPIN: ${newPerson.pin}`);
         } catch (err) {
-            console.error(err);
-            alert('Error creating delivery person');
+            alert(err.response?.data?.message || 'Error creating delivery person');
         }
     };
 
     const toggleStatus = async (id, currentStatus) => {
         try {
-            const token = localStorage.getItem('ud_admin_token');
-            await fetch(`${API_URL}/delivery/persons/${id}`, {
-                method: 'PATCH',
-                headers: {
-                    'Content-Type': 'application/json',
-                    Authorization: `Bearer ${token}`
-                },
-                body: JSON.stringify({ isActive: !currentStatus })
-            });
+            await adminApi().patch(`/delivery/persons/${id}`, { isActive: !currentStatus });
             fetchData();
         } catch (err) {
             console.error(err);

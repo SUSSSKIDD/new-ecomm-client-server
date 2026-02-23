@@ -81,7 +81,8 @@ export class SearchService {
       page,
     } = dto;
 
-    const cacheKey = `search:${q ?? ''}|${category ?? ''}|${subCategory ?? ''}|${isGrocery ?? ''}|${inStock}|${sortBy}|${limit}|${cursor ?? ''}|${page ?? ''}`;
+    const normalizedQ = (q ?? '').trim().toLowerCase();
+    const cacheKey = `search:${normalizedQ}|${category ?? ''}|${subCategory ?? ''}|${isGrocery ?? ''}|${inStock}|${sortBy}|${limit}|${cursor ?? ''}|${page ?? ''}`;
     const cached = await this.cache.get<SearchProductsResponse>(cacheKey);
     if (cached) return cached;
 

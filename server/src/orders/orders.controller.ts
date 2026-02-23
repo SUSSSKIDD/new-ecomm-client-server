@@ -27,6 +27,7 @@ import { Request } from 'express';
 import { OrdersService } from './orders.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { OrderQueryDto } from './dto/order-query.dto';
+import { ModifyOrderDto } from './dto/modify-order.dto';
 
 interface AuthenticatedRequest extends Request {
   user: { sub: string; phone: string; role: string };
@@ -96,6 +97,16 @@ export class OrdersController {
     @Param('id', ParseUUIDPipe) id: string,
   ) {
     return this.ordersService.cancel(req.user.sub, id);
+  }
+
+  @Patch(':id/modify')
+  @ApiOperation({ summary: 'Modify order items within 90s grace period' })
+  async modify(
+    @Req() req: AuthenticatedRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: ModifyOrderDto,
+  ) {
+    return this.ordersService.modifyOrder(req.user.sub, id, dto.items);
   }
 
   @Get('admin/store')

@@ -106,13 +106,21 @@ export class OrderClaimService {
         return { orderNumber: order.orderNumber };
       });
 
-      // ── Post-claim cleanup ──
+      // ── Post-claim cleanup (Redis failures must not break the claim) ──
 
-      // Remove order from pool
-      await this.orderPool.removeOrder(orderId);
+      let eligibleRiders: string[] = [];
+      try {
+        await this.orderPool.removeOrder(orderId);
+      } catch (err) {
+        this.logger.error(`REDIS CLEANUP FAILED: removeOrder(${orderId}): ${err.message}`);
+      }
 
-      // Get eligible riders to notify them order is gone
-      const eligibleRiders = await this.riderRedis.getEligibleRiders(orderId);
+      try {
+        eligibleRiders = await this.riderRedis.getEligibleRiders(orderId);
+      } catch (err) {
+        this.logger.error(`REDIS CLEANUP FAILED: getEligibleRiders(${orderId}): ${err.message}`);
+      }
+
       const otherRiders = eligibleRiders.filter((id) => id !== riderId);
 
       // SSE: notify winner
@@ -126,11 +134,17 @@ export class OrderClaimService {
         this.sseService.broadcastOrderClaimed(otherRiders, orderId);
       }
 
-      // Set idempotency key
-      await this.riderRedis.setIdempotency(orderId, riderId);
+      try {
+        await this.riderRedis.setIdempotency(orderId, riderId);
+      } catch (err) {
+        this.logger.error(`REDIS CLEANUP FAILED: setIdempotency(${orderId}): ${err.message}`);
+      }
 
-      // Clean up eligible riders set
-      await this.riderRedis.deleteEligibleRiders(orderId);
+      try {
+        await this.riderRedis.deleteEligibleRiders(orderId);
+      } catch (err) {
+        this.logger.error(`REDIS CLEANUP FAILED: deleteEligibleRiders(${orderId}): ${err.message}`);
+      }
 
       this.logger.log(
         `Order ${result.orderNumber} claimed by rider ${riderId}`,

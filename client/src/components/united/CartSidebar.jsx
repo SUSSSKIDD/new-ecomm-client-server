@@ -2,10 +2,8 @@ import { RippleButton } from '../../components/ui/ripple-button';
 import { InteractiveHoverButton } from '../../components/ui/interactive-hover-button';
 import { useCategory } from '../../context/CategoryContext';
 import { useAuth } from '../../context/AuthContext';
-import { useState, useEffect } from 'react';
-import axios from 'axios';
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { api } from '../../lib/api';
 const DELIVERY_FEE = 40;
 const FREE_DELIVERY_THRESHOLD = 500;
 const TAX_RATE = 0.05;
@@ -41,7 +39,6 @@ const CartSidebar = () => {
         }
     }, [isCartOpen]);
 
-    if (!isCartOpen) return null;
 
     const subTotal = cart.reduce(
         (total, item) => total + parsePrice(item.price) * item.quantity, 0,
@@ -51,14 +48,13 @@ const CartSidebar = () => {
     const tax = Math.round(subTotal * TAX_RATE * 100) / 100;
     const grandTotal = Math.round((subTotal + deliveryFee + tax) * 100) / 100;
 
-    const api = (method, path, data) =>
-        axios({ method, url: `${API_URL}${path}`, data, headers: { Authorization: `Bearer ${token}` } });
+    const http = api(token);
 
     // Go to checkout: load addresses
     const handleProceedToCheckout = async () => {
         if (!isAuthenticated) { openLoginModal(); return; }
         try {
-            const res = await api('get', '/users/addresses');
+            const res = await http.get('/users/addresses');
             setAddresses(res.data);
             // Auto-select first address with GPS or first address
             const defaultAddr = res.data.find((a) => a.lat) || res.data[0] || null;
@@ -75,7 +71,7 @@ const CartSidebar = () => {
         setPreviewLoading(true);
         setError('');
         try {
-            const res = await api('post', '/orders/preview', { addressId: address.id });
+            const res = await http.post('/orders/preview', { addressId: address.id });
             setPreview(res.data);
         } catch (err) {
             setError(err.response?.data?.message || 'Failed to load preview');
@@ -106,8 +102,8 @@ const CartSidebar = () => {
                 }));
             }
 
-            const orderRes = await axios.post(`${API_URL}/orders`, body, {
-                headers: { Authorization: `Bearer ${token}`, 'idempotency-key': idempotencyKey },
+            const orderRes = await http.post('/orders', body, {
+                headers: { 'idempotency-key': idempotencyKey },
             });
 
             const order = orderRes.data;
@@ -121,22 +117,194 @@ const CartSidebar = () => {
         }
     };
 
+    // ── Grace period state ──
+    const [graceSeconds, setGraceSeconds] = useState(0);
+    const [cancelling, setCancelling] = useState(false);
+    const [modifying, setModifying] = useState(false);
+    const [modifyItems, setModifyItems] = useState([]);
+    const [showModify, setShowModify] = useState(false);
+    const graceTimer = useRef(null);
+
+    // Start grace countdown when order succeeds
+    useEffect(() => {
+        if (step === 'success' && orderResult?.graceExpiresAt) {
+            const tick = () => {
+                const remaining = Math.max(0, Math.ceil((new Date(orderResult.graceExpiresAt).getTime() - Date.now()) / 1000));
+                setGraceSeconds(remaining);
+                if (remaining <= 0 && graceTimer.current) {
+                    clearInterval(graceTimer.current);
+                    graceTimer.current = null;
+                }
+            };
+            tick();
+            graceTimer.current = setInterval(tick, 1000);
+            setModifyItems(orderResult.items?.map((i) => ({ ...i })) || []);
+            return () => { if (graceTimer.current) clearInterval(graceTimer.current); };
+        }
+    }, [step, orderResult]);
+
+    const handleCancelOrder = useCallback(async () => {
+        if (!orderResult) return;
+        setCancelling(true);
+        setError('');
+        try {
+            await http.post(`/orders/${orderResult.id}/cancel`);
+            setOrderResult((prev) => ({ ...prev, status: 'CANCELLED', canCancel: false, canModify: false }));
+            if (graceTimer.current) { clearInterval(graceTimer.current); graceTimer.current = null; }
+            setGraceSeconds(0);
+        } catch (err) {
+            setError(err.response?.data?.message || 'Failed to cancel order');
+        } finally {
+            setCancelling(false);
+        }
+    }, [orderResult, token]);
+
+    const handleModifyOrder = useCallback(async () => {
+        if (!orderResult) return;
+        setModifying(true);
+        setError('');
+        try {
+            const items = modifyItems
+                .map((i) => ({ productId: i.productId, quantity: i.quantity }))
+                .filter((i) => {
+                    const orig = orderResult.items.find((o) => o.productId === i.productId);
+                    return !orig || orig.quantity !== i.quantity;
+                });
+            if (items.length === 0) { setShowModify(false); setModifying(false); return; }
+            const res = await http.patch(`/orders/${orderResult.id}/modify`, { items });
+            setOrderResult((prev) => ({ ...prev, ...res.data }));
+            setShowModify(false);
+        } catch (err) {
+            setError(err.response?.data?.message || 'Failed to modify order');
+        } finally {
+            setModifying(false);
+        }
+    }, [orderResult, modifyItems, token]);
+
     // ── RENDER ──
 
     const renderContent = () => {
         // ── SUCCESS ──
         if (step === 'success' && orderResult) {
+            const isCancelled = orderResult.status === 'CANCELLED';
+            const graceActive = graceSeconds > 0 && !isCancelled;
+
             return (
-                <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
-                    <div className="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center mb-6">
-                        <svg className="w-10 h-10 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                        </svg>
-                    </div>
-                    <h3 className="text-xl font-bold text-gray-900 mb-2">Order Placed!</h3>
-                    <p className="text-sm text-gray-500 mb-1">Order #{orderResult.orderNumber}</p>
-                    <p className="text-2xl font-bold text-emerald-600 mb-6">₹{orderResult.total}</p>
-                    <p className="text-xs text-gray-400 mb-6">Your order will be delivered shortly</p>
+                <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
+                    {isCancelled ? (
+                        <>
+                            <div className="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mb-6">
+                                <svg className="w-10 h-10 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </div>
+                            <h3 className="text-xl font-bold text-gray-900 mb-2">Order Cancelled</h3>
+                            <p className="text-sm text-gray-500 mb-6">Order #{orderResult.orderNumber} has been cancelled</p>
+                        </>
+                    ) : (
+                        <>
+                            <div className="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center mb-4">
+                                <svg className="w-10 h-10 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                </svg>
+                            </div>
+                            <h3 className="text-xl font-bold text-gray-900 mb-1">Order Placed!</h3>
+                            <p className="text-sm text-gray-500 mb-1">Order #{orderResult.orderNumber}</p>
+                            <p className="text-2xl font-bold text-emerald-600 mb-3">₹{orderResult.total}</p>
+                        </>
+                    )}
+
+                    {/* Grace period countdown */}
+                    {graceActive && (
+                        <div className="w-full mb-4">
+                            <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 mb-3">
+                                <p className="text-xs font-semibold text-amber-700 mb-1">You can cancel or modify this order</p>
+                                <div className="flex items-center justify-center gap-1">
+                                    <span className="text-2xl font-mono font-bold text-amber-600">{graceSeconds}</span>
+                                    <span className="text-xs text-amber-500">seconds remaining</span>
+                                </div>
+                                {/* Progress bar */}
+                                <div className="w-full bg-amber-200 rounded-full h-1.5 mt-2">
+                                    <div
+                                        className="bg-amber-500 h-1.5 rounded-full transition-all duration-1000"
+                                        style={{ width: `${(graceSeconds / 90) * 100}%` }}
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Cancel / Modify buttons */}
+                            {!showModify && (
+                                <div className="flex gap-2">
+                                    <RippleButton
+                                        onClick={handleCancelOrder}
+                                        disabled={cancelling}
+                                        className="flex-1 py-2.5 bg-red-500 text-white text-sm font-bold rounded-xl hover:bg-red-600 disabled:opacity-50 transition-colors"
+                                    >
+                                        {cancelling ? 'Cancelling...' : 'Cancel Order'}
+                                    </RippleButton>
+                                    <RippleButton
+                                        onClick={() => setShowModify(true)}
+                                        className="flex-1 py-2.5 bg-blue-500 text-white text-sm font-bold rounded-xl hover:bg-blue-600 transition-colors"
+                                    >
+                                        Modify Order
+                                    </RippleButton>
+                                </div>
+                            )}
+
+                            {/* Modify inline editor */}
+                            {showModify && (
+                                <div className="bg-white border border-gray-200 rounded-xl p-3 text-left">
+                                    <p className="text-xs font-bold text-gray-500 uppercase mb-2">Edit Quantities</p>
+                                    <div className="space-y-2 max-h-40 overflow-y-auto">
+                                        {modifyItems.map((item, idx) => (
+                                            <div key={item.productId} className="flex items-center justify-between text-sm">
+                                                <span className="text-gray-700 truncate flex-1 mr-2">{item.name}</span>
+                                                <div className="flex items-center gap-2">
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setModifyItems((prev) => prev.map((it, i) => i === idx ? { ...it, quantity: Math.max(0, it.quantity - 1) } : it))}
+                                                        className="w-7 h-7 rounded-full bg-gray-100 text-gray-600 font-bold hover:bg-gray-200"
+                                                    >-</button>
+                                                    <span className={`w-6 text-center font-bold ${item.quantity === 0 ? 'text-red-500' : 'text-gray-900'}`}>
+                                                        {item.quantity}
+                                                    </span>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setModifyItems((prev) => prev.map((it, i) => i === idx ? { ...it, quantity: it.quantity + 1 } : it))}
+                                                        className="w-7 h-7 rounded-full bg-gray-100 text-gray-600 font-bold hover:bg-gray-200"
+                                                    >+</button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                    {modifyItems.every((i) => i.quantity === 0) && (
+                                        <p className="text-xs text-red-500 mt-2">Cannot remove all items. Use cancel instead.</p>
+                                    )}
+                                    <div className="flex gap-2 mt-3">
+                                        <button
+                                            type="button"
+                                            onClick={() => { setShowModify(false); setModifyItems(orderResult.items?.map((i) => ({ ...i })) || []); }}
+                                            className="flex-1 py-2 text-sm font-semibold text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200"
+                                        >Back</button>
+                                        <RippleButton
+                                            onClick={handleModifyOrder}
+                                            disabled={modifying || modifyItems.every((i) => i.quantity === 0)}
+                                            className="flex-1 py-2 bg-blue-500 text-white text-sm font-bold rounded-lg hover:bg-blue-600 disabled:opacity-50"
+                                        >
+                                            {modifying ? 'Saving...' : 'Save Changes'}
+                                        </RippleButton>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {!graceActive && !isCancelled && (
+                        <p className="text-xs text-gray-400 mb-4">Your order will be delivered shortly</p>
+                    )}
+
+                    {error && <p className="text-xs text-red-500 mb-3">{error}</p>}
+
                     <RippleButton
                         onClick={() => { setIsCartOpen(false); setStep('cart'); }}
                         className="px-8 py-3 bg-ud-primary text-white font-bold rounded-xl hover:bg-emerald-600 transition-colors"
@@ -149,7 +317,6 @@ const CartSidebar = () => {
 
         // ── CHECKOUT (address + summary + payment — all in one) ──
         if (step === 'checkout') {
-            const displayTotal = preview?.total ?? grandTotal;
             const unavailable = preview?.fulfillment?.unavailableItems || [];
 
             return (
@@ -170,11 +337,10 @@ const CartSidebar = () => {
                                             key={addr.id}
                                             type="button"
                                             onClick={() => handleSelectAddress(addr)}
-                                            className={`w-full text-left p-3 rounded-xl border-2 transition-all ${
-                                                selectedAddress?.id === addr.id
+                                            className={`w-full text-left p-3 rounded-xl border-2 transition-all ${selectedAddress?.id === addr.id
                                                     ? 'border-emerald-500 bg-emerald-50'
                                                     : 'border-gray-100 bg-white hover:border-emerald-200'
-                                            }`}
+                                                }`}
                                         >
                                             <div className="flex items-center gap-2 mb-0.5">
                                                 <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded">
@@ -237,26 +403,40 @@ const CartSidebar = () => {
                             </div>
                         )}
 
-                        {/* ─ Price Breakdown ─ */}
+                        {/* ─ Price Breakdown (always use server preview when available) ─ */}
                         <div className="bg-gray-50 rounded-xl p-3 space-y-1.5">
-                            <div className="flex justify-between text-xs">
-                                <span className="text-gray-500">Subtotal</span>
-                                <span>₹{(preview?.subtotal ?? subTotal).toFixed(2)}</span>
-                            </div>
-                            <div className="flex justify-between text-xs">
-                                <span className="text-gray-500">Delivery</span>
-                                <span className={(preview?.deliveryFee ?? deliveryFee) === 0 ? 'text-emerald-600 font-bold' : ''}>
-                                    {(preview?.deliveryFee ?? deliveryFee) === 0 ? 'FREE' : `₹${preview?.deliveryFee ?? deliveryFee}`}
-                                </span>
-                            </div>
-                            <div className="flex justify-between text-xs">
-                                <span className="text-gray-500">Tax (5%)</span>
-                                <span>₹{(preview?.tax ?? tax).toFixed(2)}</span>
-                            </div>
-                            <div className="flex justify-between text-sm font-bold pt-1.5 border-t border-gray-200">
-                                <span>Total</span>
-                                <span className="text-emerald-600">₹{displayTotal.toFixed(2)}</span>
-                            </div>
+                            {preview ? (
+                                <>
+                                    <div className="flex justify-between text-xs">
+                                        <span className="text-gray-500">Subtotal</span>
+                                        <span>₹{preview.subtotal.toFixed(2)}</span>
+                                    </div>
+                                    <div className="flex justify-between text-xs">
+                                        <span className="text-gray-500">Delivery</span>
+                                        <span className={preview.deliveryFee === 0 ? 'text-emerald-600 font-bold' : ''}>
+                                            {preview.deliveryFee === 0 ? 'FREE' : `₹${preview.deliveryFee}`}
+                                        </span>
+                                    </div>
+                                    <div className="flex justify-between text-xs">
+                                        <span className="text-gray-500">Tax</span>
+                                        <span>₹{preview.tax.toFixed(2)}</span>
+                                    </div>
+                                    <div className="flex justify-between text-sm font-bold pt-1.5 border-t border-gray-200">
+                                        <span>Total</span>
+                                        <span className="text-emerald-600">₹{preview.total.toFixed(2)}</span>
+                                    </div>
+                                </>
+                            ) : (
+                                <>
+                                    <div className="flex justify-between text-xs">
+                                        <span className="text-gray-500">Subtotal</span>
+                                        <span>₹{subTotal.toFixed(2)}</span>
+                                    </div>
+                                    <div className="flex justify-between text-xs text-gray-400 italic">
+                                        <span>Select an address for exact totals</span>
+                                    </div>
+                                </>
+                            )}
                         </div>
 
                         {/* ─ Payment Method ─ */}
@@ -287,7 +467,7 @@ const CartSidebar = () => {
                                         ? 'Placing Order...'
                                         : previewLoading
                                             ? 'Loading...'
-                                            : `Pay ₹${(preview?.total ?? grandTotal).toFixed(2)} · Cash on Delivery`
+                                            : preview ? `Pay ₹${preview.total.toFixed(2)} · Cash on Delivery` : 'Loading...'
                                 }
                             />
                         </div>
@@ -345,6 +525,8 @@ const CartSidebar = () => {
             </div>
         );
     };
+
+    if (!isCartOpen) return null;
 
     return (
         <div className="fixed inset-0 z-50 overflow-hidden">

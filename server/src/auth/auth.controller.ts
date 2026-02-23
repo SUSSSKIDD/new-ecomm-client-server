@@ -1,15 +1,18 @@
-import { Controller, Post, Body, HttpCode, HttpStatus } from '@nestjs/common';
+import { Controller, Post, Body, HttpCode, HttpStatus, UseGuards } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { SendOtpDto, VerifyOtpDto, StoreManagerLoginDto } from './dto/auth.dto';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import { ThrottlerGuard, Throttle } from '@nestjs/throttler';
 
 @ApiTags('auth')
 @Controller('auth')
+@UseGuards(ThrottlerGuard)
 export class AuthController {
   constructor(private readonly authService: AuthService) { }
 
   @Post('send-otp')
   @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { ttl: 60000, limit: 5 } })
   @ApiOperation({ summary: 'Send OTP to phone number' })
   @ApiResponse({ status: 200, description: 'OTP sent successfully.' })
   @ApiResponse({ status: 400, description: 'Invalid phone number.' })
@@ -19,6 +22,7 @@ export class AuthController {
 
   @Post('verify-otp')
   @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { ttl: 60000, limit: 10 } })
   @ApiOperation({ summary: 'Verify OTP and login/register' })
   @ApiResponse({ status: 200, description: 'User verified and token issued.' })
   @ApiResponse({ status: 401, description: 'Invalid OTP.' })
@@ -28,6 +32,7 @@ export class AuthController {
 
   @Post('store-manager/login')
   @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { ttl: 60000, limit: 10 } })
   @ApiOperation({ summary: 'Store Manager Login (Phone + PIN)' })
   @ApiResponse({ status: 200, description: 'Token issued.' })
   @ApiResponse({ status: 401, description: 'Invalid credentials.' })
@@ -37,6 +42,7 @@ export class AuthController {
 
   @Post('super-admin/login')
   @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { ttl: 60000, limit: 5 } })
   @ApiOperation({ summary: 'Super Admin Login (Phone + PIN)' })
   @ApiResponse({ status: 200, description: 'Token issued.' })
   @ApiResponse({ status: 401, description: 'Invalid credentials.' })

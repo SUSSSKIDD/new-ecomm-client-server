@@ -1,30 +1,10 @@
 /* eslint-disable react/prop-types */
 import React from 'react';
 import { RippleButton } from '../ui/ripple-button';
-import { useEffect, useState } from 'react';
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-
-const STATUS_COLORS = {
-    CONFIRMED: 'bg-blue-100 text-blue-800',
-    ORDER_PICKED: 'bg-orange-100 text-orange-800',
-    SHIPPED: 'bg-purple-100 text-purple-800',
-    DELIVERED: 'bg-green-100 text-green-800',
-    // Legacy (for old orders)
-    PENDING: 'bg-yellow-100 text-yellow-800',
-    PROCESSING: 'bg-indigo-100 text-indigo-800',
-    CANCELLED: 'bg-red-100 text-red-800',
-};
-
-const STATUS_LABELS = {
-    CONFIRMED: 'Confirmed',
-    ORDER_PICKED: 'Order Packed',
-    SHIPPED: 'Shipped',
-    DELIVERED: 'Delivered',
-    PENDING: 'Pending',
-    PROCESSING: 'Processing',
-    CANCELLED: 'Cancelled',
-};
+import { useState, useCallback } from 'react';
+import { adminApi } from '../../lib/api';
+import { getStatusLabel, getStatusColor } from '../../lib/status';
+import { usePolling } from '../../hooks/usePolling';
 
 // What the admin can transition TO from each status (one-way)
 // DELIVERED is not here — only delivery person can set it
@@ -33,7 +13,7 @@ const NEXT_STATUS = {
     ORDER_PICKED: 'SHIPPED',
 };
 
-const FILTER_STATUSES = ['CONFIRMED', 'ORDER_PICKED', 'SHIPPED', 'DELIVERED'];
+const FILTER_STATUSES = ['PENDING', 'CONFIRMED', 'ORDER_PICKED', 'SHIPPED', 'DELIVERED', 'CANCELLED'];
 
 const AdminOrders = () => {
     const [orders, setOrders] = useState([]);
@@ -45,54 +25,50 @@ const AdminOrders = () => {
     const [expandedId, setExpandedId] = useState(null);
     const limit = 10;
 
-    useEffect(() => {
-        fetchOrders();
-    }, [page, statusFilter]);
-
-    const getToken = () => localStorage.getItem('ud_admin_token');
-
-    const fetchOrders = async () => {
-        setLoading(true);
+    const fetchOrders = useCallback(async () => {
         try {
-            const params = new URLSearchParams({ page, limit });
-            if (statusFilter) params.append('status', statusFilter);
-            const res = await fetch(`${API_URL}/orders/admin/store?${params}`, {
-                headers: { Authorization: `Bearer ${getToken()}` }
+            const res = await adminApi().get('/orders/admin/store', {
+                params: { page, limit, ...(statusFilter && { status: statusFilter }) },
             });
-            if (res.ok) {
-                const data = await res.json();
-                const list = Array.isArray(data) ? data : (data.data || []);
-                setOrders(list);
-                if (data.meta?.totalPages) setTotalPages(data.meta.totalPages);
-                else if (data.totalPages) setTotalPages(data.totalPages);
-                else if (data.total) setTotalPages(Math.ceil(data.total / limit));
-            }
+            const data = res.data;
+            const list = Array.isArray(data) ? data : (data.data || []);
+            setOrders(list);
+            if (data.meta?.totalPages) setTotalPages(data.meta.totalPages);
+            else if (data.totalPages) setTotalPages(data.totalPages);
+            else if (data.total) setTotalPages(Math.ceil(data.total / limit));
+            setLoading(false);
+            return list.some(o =>
+                ['PENDING', 'CONFIRMED', 'ORDER_PICKED', 'SHIPPED'].includes(o.status)
+            );
         } catch (err) {
             console.error(err);
-        } finally {
             setLoading(false);
+            return true;
         }
-    };
+    }, [page, statusFilter]);
+
+    usePolling(fetchOrders, 30000, true);
 
     const advanceStatus = async (orderId, nextStatus) => {
         setUpdatingId(orderId);
         try {
-            const res = await fetch(`${API_URL}/orders/admin/${orderId}/status`, {
-                method: 'PATCH',
-                headers: {
-                    'Content-Type': 'application/json',
-                    Authorization: `Bearer ${getToken()}`
-                },
-                body: JSON.stringify({ status: nextStatus })
-            });
-            if (res.ok) {
-                fetchOrders(); // Refresh to get updated assignment info too
-            } else {
-                const data = await res.json().catch(() => null);
-                alert(data?.message || `Cannot update status`);
-            }
+            await adminApi().patch(`/orders/admin/${orderId}/status`, { status: nextStatus });
+            fetchOrders();
         } catch (err) {
-            console.error(err);
+            alert(err.response?.data?.message || 'Cannot update status');
+        } finally {
+            setUpdatingId(null);
+        }
+    };
+
+    const cancelOrder = async (orderId) => {
+        if (!confirm('Are you sure you want to cancel this order?')) return;
+        setUpdatingId(orderId);
+        try {
+            await adminApi().patch(`/orders/admin/${orderId}/status`, { status: 'CANCELLED' });
+            fetchOrders();
+        } catch (err) {
+            alert(err.response?.data?.message || 'Cannot cancel order');
         } finally {
             setUpdatingId(null);
         }
@@ -102,7 +78,6 @@ const AdminOrders = () => {
 
     const getOrderItems = (o) => o.items || o.orderItems || [];
 
-    const getStatusLabel = (status) => STATUS_LABELS[status] || status;
 
     return (
         <div>
@@ -181,7 +156,7 @@ const AdminOrders = () => {
                                                 )}
                                             </td>
                                             <td className="px-4 py-4 whitespace-nowrap">
-                                                <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${STATUS_COLORS[o.status] || 'bg-gray-100 text-gray-800'}`}>
+                                                <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusColor(o.status)}`}>
                                                     {getStatusLabel(o.status)}
                                                 </span>
                                             </td>
@@ -197,21 +172,34 @@ const AdminOrders = () => {
                                                 )}
                                             </td>
                                             <td className="px-4 py-4 whitespace-nowrap text-sm" onClick={e => e.stopPropagation()}>
-                                                {nextStatus ? (
-                                                    <RippleButton
-                                                        onClick={() => advanceStatus(o.id, nextStatus)}
-                                                        disabled={updatingId === o.id}
-                                                        className="px-3 py-1.5 text-xs bg-ud-primary text-white rounded-lg hover:bg-emerald-600 disabled:opacity-50 font-medium"
-                                                    >
-                                                        {updatingId === o.id ? '...' : getStatusLabel(nextStatus)}
-                                                    </RippleButton>
-                                                ) : o.status === 'SHIPPED' ? (
-                                                    <span className="text-xs text-gray-400 italic">Awaiting delivery</span>
-                                                ) : o.status === 'DELIVERED' ? (
-                                                    <span className="text-xs text-green-600 font-medium">Complete</span>
-                                                ) : (
-                                                    <span className="text-xs text-gray-400">—</span>
-                                                )}
+                                                <div className="flex items-center gap-1.5">
+                                                    {nextStatus ? (
+                                                        <RippleButton
+                                                            onClick={() => advanceStatus(o.id, nextStatus)}
+                                                            disabled={updatingId === o.id}
+                                                            className="px-3 py-1.5 text-xs bg-ud-primary text-white rounded-lg hover:bg-emerald-600 disabled:opacity-50 font-medium"
+                                                        >
+                                                            {updatingId === o.id ? '...' : getStatusLabel(nextStatus)}
+                                                        </RippleButton>
+                                                    ) : o.status === 'SHIPPED' ? (
+                                                        <span className="text-xs text-gray-400 italic">Awaiting delivery</span>
+                                                    ) : o.status === 'DELIVERED' ? (
+                                                        <span className="text-xs text-green-600 font-medium">Complete</span>
+                                                    ) : o.status === 'CANCELLED' ? (
+                                                        <span className="text-xs text-red-500 font-medium">Cancelled</span>
+                                                    ) : (
+                                                        <span className="text-xs text-gray-400">—</span>
+                                                    )}
+                                                    {!['DELIVERED', 'CANCELLED'].includes(o.status) && (
+                                                        <button
+                                                            onClick={() => cancelOrder(o.id)}
+                                                            disabled={updatingId === o.id}
+                                                            className="px-2 py-1.5 text-xs text-red-600 bg-red-50 border border-red-200 rounded-lg hover:bg-red-100 disabled:opacity-50 font-medium"
+                                                        >
+                                                            Cancel
+                                                        </button>
+                                                    )}
+                                                </div>
                                             </td>
                                         </tr>
                                         {isExpanded && items.length > 0 && (

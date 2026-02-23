@@ -192,12 +192,15 @@ const DeliveryDashboard = () => {
     }, [token, api, showToast]);
 
     const handleStatusToggle = async (newStatus) => {
+        const prevStatus = status;
         setStatusLoading(true);
+        setStatus(newStatus); // Optimistic update
         try {
             await api('post', '/delivery/status', { status: newStatus });
-            setStatus(newStatus);
         } catch (err) {
             console.error('Status update failed:', err);
+            setStatus(prevStatus); // Revert on error
+            showToast('Failed to update status');
         } finally {
             setStatusLoading(false);
         }

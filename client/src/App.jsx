@@ -2,7 +2,9 @@ import UnitedDealsHome from './views/UnitedDealsHome';
 import { AuthProvider } from './context/AuthContext';
 import { AdminAuthProvider } from './context/AdminAuthContext';
 import { LocationProvider } from './context/LocationContext';
+import { CartProvider } from './context/CartContext';
 import { CategoryProvider } from './context/CategoryContext';
+import ErrorBoundary from './components/ErrorBoundary';
 import { Routes, Route } from 'react-router-dom';
 import { Suspense, lazy } from 'react';
 
@@ -25,7 +27,9 @@ function App() {
     <AuthProvider>
       <AdminAuthProvider>
         <LocationProvider>
+          <CartProvider>
           <CategoryProvider>
+            <ErrorBoundary>
             <Suspense fallback={
               <div className="min-h-screen flex items-center justify-center">
                 <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-ud-primary"></div>
@@ -55,7 +59,9 @@ function App() {
                 <Route path="*" element={<UnitedDealsHome />} />
               </Routes>
             </Suspense>
+            </ErrorBoundary>
           </CategoryProvider>
+          </CartProvider>
         </LocationProvider>
       </AdminAuthProvider>
     </AuthProvider>

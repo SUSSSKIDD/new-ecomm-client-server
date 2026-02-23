@@ -14,6 +14,7 @@ import { Prisma } from '@prisma/client';
 import { CATEGORY_SUBCATEGORIES, StoreCategoryType, STORE_CATEGORY_LABELS } from '../common/constants/store-categories';
 
 import { RedisCacheService } from '../common/services/redis-cache.service';
+import { paginate } from '../common/utils/pagination.util';
 
 @Injectable()
 export class ProductsService {
@@ -147,20 +148,9 @@ export class ProductsService {
       this.prisma.product.count({ where }),
     ]);
 
-    const result = {
-      data: products,
-      meta: {
-        page: Number(page),
-        limit: Number(limit),
-        total,
-        totalPages: Math.ceil(total / Number(limit)),
-      },
-    };
-
+    const result = paginate(products, total, page, limit);
     await this.cache.set(cacheKey, result, 120);
     return result;
-
-
   }
 
   /**

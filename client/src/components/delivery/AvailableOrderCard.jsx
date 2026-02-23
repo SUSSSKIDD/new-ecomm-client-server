@@ -1,7 +1,7 @@
 import { RippleButton } from '../ui/ripple-button';
-import { useState } from 'react';
+import { useState, memo } from 'react';
 
-const AvailableOrderCard = ({ order, onClaim }) => {
+const AvailableOrderCard = memo(({ order, onClaim }) => {
     const [claiming, setClaiming] = useState(false);
     const [animateOut, setAnimateOut] = useState(false);
 
@@ -104,6 +104,6 @@ const AvailableOrderCard = ({ order, onClaim }) => {
             </div>
         </div>
     );
-};
+});
 
 export default AvailableOrderCard;

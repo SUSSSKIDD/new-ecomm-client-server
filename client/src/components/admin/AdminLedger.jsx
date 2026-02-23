@@ -1,8 +1,7 @@
 import { RippleButton } from '../ui/ripple-button';
 import { useEffect, useState } from 'react';
 import { useAdminAuth } from '../../hooks/useAdminAuth';
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+import { adminApi } from '../../lib/api';
 
 const AdminLedger = () => {
     const { admin } = useAdminAuth();
@@ -13,41 +12,34 @@ const AdminLedger = () => {
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
 
-    useEffect(() => {
-        fetchLedger();
-    }, [startDate, endDate]);
-
-    const fetchLedger = async () => {
+    const fetchLedger = async (signal) => {
         try {
             setLoading(true);
-            const token = localStorage.getItem('ud_admin_token');
-            let url = `${API_URL}/ledger/my-store`;
-            if (admin?.role === 'ADMIN') {
-                url = `${API_URL}/ledger`;
+            const endpoint = admin?.role === 'ADMIN' ? '/ledger' : '/ledger/my-store';
+            const res = await adminApi().get(endpoint, { signal });
+            let filteredData = res.data;
+            if (startDate) {
+                filteredData = filteredData.filter(d => new Date(d.date) >= new Date(startDate));
             }
-            const res = await fetch(url, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-            if (res.ok) {
-                const data = await res.json();
-                let filteredData = data;
-                if (startDate) {
-                    filteredData = filteredData.filter(d => new Date(d.date) >= new Date(startDate));
-                }
-                if (endDate) {
-                    filteredData = filteredData.filter(d => new Date(d.date) <= new Date(endDate));
-                }
-                setLedgerEntries(filteredData);
-            } else {
-                setError('Failed to load ledger entries');
+            if (endDate) {
+                filteredData = filteredData.filter(d => new Date(d.date) <= new Date(endDate));
             }
+            setLedgerEntries(filteredData);
         } catch (err) {
-            console.error(err);
-            setError('Error loading ledger entries');
+            if (err.name !== 'CanceledError') {
+                console.error(err);
+                setError('Error loading ledger entries');
+            }
         } finally {
             setLoading(false);
         }
     };
+
+    useEffect(() => {
+        const ctrl = new AbortController();
+        fetchLedger(ctrl.signal);
+        return () => ctrl.abort();
+    }, [startDate, endDate]);
 
     return (
         <div>

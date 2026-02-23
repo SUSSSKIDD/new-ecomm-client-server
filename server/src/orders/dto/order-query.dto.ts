@@ -1,4 +1,4 @@
-import { IsOptional, IsInt, Min, Max, IsEnum, IsString } from 'class-validator';
+import { IsOptional, IsInt, Min, Max, IsEnum, IsIn } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { OrderStatus } from '@prisma/client';
@@ -24,13 +24,13 @@ export class OrderQueryDto {
   @IsEnum(OrderStatus)
   status?: OrderStatus;
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ enum: ['createdAt', 'total', 'status'] })
   @IsOptional()
-  @IsString()
+  @IsIn(['createdAt', 'total', 'status'])
   sortBy?: string = 'createdAt';
 
-  @ApiPropertyOptional()
+  @ApiPropertyOptional({ enum: ['asc', 'desc'] })
   @IsOptional()
-  @IsString()
+  @IsIn(['asc', 'desc'])
   sortOrder?: 'asc' | 'desc' = 'desc';
 }

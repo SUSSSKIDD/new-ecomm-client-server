@@ -50,8 +50,8 @@ export const LocationProvider = ({ children }) => {
             );
         } catch (err) {
             console.error('Serviceability check failed:', err);
-            // On error, assume serviceable to not block customers
-            setServiceable(true);
+            // On error, default to not serviceable — show retry message
+            setServiceable(false);
         } finally {
             setLoading(false);
         }

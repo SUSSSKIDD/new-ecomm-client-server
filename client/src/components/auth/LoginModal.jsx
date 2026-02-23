@@ -14,6 +14,7 @@ const LoginModal = ({ isOpen, onClose }) => {
 
     const handleSendOtp = async (e) => {
         e.preventDefault();
+        if (loading) return;
         setLoading(true);
         setError(null);
 
@@ -32,6 +33,7 @@ const LoginModal = ({ isOpen, onClose }) => {
 
     const handleVerifyOtp = async (e) => {
         e.preventDefault();
+        if (loading) return;
         setLoading(true);
         setError(null);
 

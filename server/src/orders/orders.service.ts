@@ -3,13 +3,14 @@ import {
   Logger,
   NotFoundException,
   BadRequestException,
-  ConflictException,
   ForbiddenException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma.service';
 import { CartService } from '../cart/cart.service';
 import { RedisCacheService } from '../common/services/redis-cache.service';
+import { StockService } from '../common/services/stock.service';
+import { paginate } from '../common/utils/pagination.util';
 import { OrderFulfillmentService, FulfillmentResult } from './order-fulfillment.service';
 import { AutoAssignService } from '../delivery/auto-assign.service';
 import { LedgerService } from '../ledger/ledger.service';
@@ -38,12 +39,47 @@ export class OrdersService {
     private readonly fulfillmentService: OrderFulfillmentService,
     private readonly autoAssignService: AutoAssignService,
     private readonly ledgerService: LedgerService,
+    private readonly stockService: StockService,
   ) {
     this.deliveryFee = Number(this.config.get('DELIVERY_FEE', '40'));
     this.taxRate = Number(this.config.get('TAX_RATE', '0.05'));
     this.freeDeliveryThreshold = Number(
       this.config.get('FREE_DELIVERY_THRESHOLD', '500'),
     );
+  }
+
+  private static readonly GRACE_PERIOD_MS = 90_000; // 90 seconds
+  private static readonly CACHE_LIMITS = [10, 20, 50];
+  private static readonly CACHE_MAX_PAGES = 5;
+
+  /**
+   * Invalidate paginated order-list cache for a user (+ optional order status key).
+   * Replaces 4 duplicate key-building loops.
+   */
+  private invalidateOrderCache(userId: string, orderId?: string): void {
+    const keys: string[] = [];
+    if (orderId) keys.push(`order:status:${orderId}`);
+    for (const lim of OrdersService.CACHE_LIMITS) {
+      for (let p = 1; p <= OrdersService.CACHE_MAX_PAGES; p++) {
+        keys.push(`orders:${userId}:p${p}:l${lim}`);
+      }
+    }
+    this.cache.delMany(keys).catch(() => {});
+  }
+
+  /**
+   * Compute canCancel / canModify / graceExpiresAt for an order.
+   */
+  private computeGraceFields(order: { status: string; confirmedAt?: Date | null }) {
+    const isConfirmed = order.status === 'CONFIRMED';
+    const confirmedAt = order.confirmedAt ? new Date(order.confirmedAt).getTime() : 0;
+    const expiresAt = confirmedAt + OrdersService.GRACE_PERIOD_MS;
+    const withinGrace = isConfirmed && confirmedAt > 0 && Date.now() < expiresAt;
+    return {
+      canCancel: order.status === 'PENDING' || withinGrace,
+      canModify: withinGrace,
+      graceExpiresAt: withinGrace ? new Date(expiresAt).toISOString() : null,
+    };
   }
 
   /**
@@ -378,64 +414,15 @@ export class OrdersService {
         ? OrderStatus.CONFIRMED
         : OrderStatus.PENDING;
 
+    const confirmedAt =
+      dto.paymentMethod === PaymentMethod.COD ? new Date() : null;
+
     // 9. Atomic transaction: stock decrement + order creation
     const orderNumber = this.generateOrderNumber();
 
     const order = await this.prisma.$transaction(async (tx) => {
       // Batch decrement stock
-      const storeItems = orderItems.filter((i) => i.storeId);
-      const globalItems = orderItems.filter((i) => !i.storeId);
-
-      if (storeItems.length > 0) {
-        const values: string[] = [];
-        const params: any[] = [];
-        storeItems.forEach((item, idx) => {
-          const i = idx * 3; // 3 params per item
-          values.push(`($${i + 1}, $${i + 2}, $${i + 3}::int)`);
-          params.push(item.storeId, item.productId, item.quantity);
-        });
-
-        const updatedCount = await tx.$executeRawUnsafe(
-          `UPDATE "StoreInventory" AS si
-           SET "stock" = "stock" - v.qty
-           FROM (VALUES ${values.join(',')}) AS v("storeId", "productId", "qty")
-           WHERE si."storeId" = v."storeId" 
-             AND si."productId" = v."productId" 
-             AND si."stock" >= v.qty`,
-          ...params,
-        );
-
-        if (updatedCount !== storeItems.length) {
-          throw new ConflictException(
-            'Stock race detected for one or more items at assigned store. Please retry.',
-          );
-        }
-      }
-
-      if (globalItems.length > 0) {
-        const values: string[] = [];
-        const params: any[] = [];
-        globalItems.forEach((item, idx) => {
-          const i = idx * 2; // 2 params per item
-          values.push(`($${i + 1}, $${i + 2}::int)`);
-          params.push(item.productId, item.quantity);
-        });
-
-        const updatedCount = await tx.$executeRawUnsafe(
-          `UPDATE "Product" AS p
-           SET "stock" = "stock" - v.qty
-           FROM (VALUES ${values.join(',')}) AS v("id", "qty")
-           WHERE p."id" = v."id" 
-             AND p."stock" >= v.qty`,
-          ...params,
-        );
-
-        if (updatedCount !== globalItems.length) {
-          throw new ConflictException(
-            'Stock race detected for one or more items. Please retry.',
-          );
-        }
-      }
+      await this.stockService.adjustStock(tx, orderItems, 'decrement');
 
       // Create order with items (including storeId)
       return tx.order.create({
@@ -451,6 +438,7 @@ export class OrdersService {
           tax,
           total,
           idempotencyKey,
+          confirmedAt,
           items: {
             create: orderItems.map((oi) => ({
               productId: oi.productId,
@@ -467,16 +455,9 @@ export class OrdersService {
     });
 
     // 10-11. Parallel: clear cart + invalidate order list cache
-    const createKeysToDelete: string[] = [];
-    const createLimits = [10, 20, 50];
-    for (const lim of createLimits) {
-      for (let p = 1; p <= 5; p++) {
-        createKeysToDelete.push(`orders:${userId}:p${p}:l${lim}`);
-      }
-    }
     await Promise.all([
       this.cartService.clearCart(userId),
-      this.cache.delMany(createKeysToDelete),
+      Promise.resolve(this.invalidateOrderCache(userId)),
     ]);
 
     this.logger.log(
@@ -488,7 +469,7 @@ export class OrdersService {
       this.createLedgerEntries(order, 'COD');
     }
 
-    return order;
+    return { ...order, ...this.computeGraceFields(order) };
   }
 
   /**
@@ -523,16 +504,12 @@ export class OrdersService {
       this.prisma.order.count({ where: { userId } }),
     ]);
 
-    const result = {
-      data: orders,
-      meta: {
-        page,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit),
-      },
-    };
+    const data = orders.map((o) => ({
+      ...o,
+      ...this.computeGraceFields(o),
+    }));
 
+    const result = paginate(data, total, page, limit);
     await this.cache.set(cacheKey, result, 300);
     return result;
   }
@@ -592,7 +569,7 @@ export class OrdersService {
       throw new NotFoundException('Order not found');
     }
 
-    return order;
+    return { ...order, ...this.computeGraceFields(order) };
   }
 
   /**
@@ -608,6 +585,7 @@ export class OrdersService {
         orderNumber: true,
         status: true,
         paymentStatus: true,
+        confirmedAt: true,
         items: {
           select: { productId: true, quantity: true, storeId: true, id: true, name: true, price: true, total: true, orderId: true },
         },
@@ -627,46 +605,18 @@ export class OrdersService {
       );
     }
 
+    // CONFIRMED orders can only be cancelled within the 90-second grace period
+    if (order.status === OrderStatus.CONFIRMED) {
+      const grace = this.computeGraceFields(order);
+      if (!grace.canCancel) {
+        throw new BadRequestException(
+          'Grace period expired. Order can no longer be cancelled.',
+        );
+      }
+    }
+
     const cancelledOrder = await this.prisma.$transaction(async (tx) => {
-      // Batch restore stock
-      const storeItems = order.items.filter((i) => i.storeId);
-      const globalItems = order.items.filter((i) => !i.storeId);
-
-      if (storeItems.length > 0) {
-        const values: string[] = [];
-        const params: any[] = [];
-        storeItems.forEach((item, idx) => {
-          const i = idx * 3;
-          values.push(`($${i + 1}, $${i + 2}, $${i + 3}::int)`);
-          params.push(item.storeId, item.productId, item.quantity);
-        });
-
-        await tx.$executeRawUnsafe(
-          `UPDATE "StoreInventory" AS si
-           SET "stock" = "stock" + v.qty
-           FROM (VALUES ${values.join(',')}) AS v("storeId", "productId", "qty")
-           WHERE si."storeId" = v."storeId" AND si."productId" = v."productId"`,
-          ...params,
-        );
-      }
-
-      if (globalItems.length > 0) {
-        const values: string[] = [];
-        const params: any[] = [];
-        globalItems.forEach((item, idx) => {
-          const i = idx * 2;
-          values.push(`($${i + 1}, $${i + 2}::int)`);
-          params.push(item.productId, item.quantity);
-        });
-
-        await tx.$executeRawUnsafe(
-          `UPDATE "Product" AS p
-           SET "stock" = "stock" + v.qty
-           FROM (VALUES ${values.join(',')}) AS v("id", "qty")
-           WHERE p."id" = v."id"`,
-          ...params,
-        );
-      }
+      await this.stockService.adjustStock(tx, order.items, 'increment');
 
       return tx.order.update({
         where: { id: orderId },
@@ -680,19 +630,122 @@ export class OrdersService {
       });
     });
 
-    // Fire-and-forget cache invalidation (doesn't block response)
-    const cancelKeysToDelete: string[] = [`order:status:${orderId}`];
-    const cancelLimits = [10, 20, 50];
-    for (const lim of cancelLimits) {
-      for (let p = 1; p <= 5; p++) {
-        cancelKeysToDelete.push(`orders:${userId}:p${p}:l${lim}`);
-      }
-    }
-    this.cache.delMany(cancelKeysToDelete).catch(() => { });
+    this.invalidateOrderCache(userId, orderId);
 
     this.logger.log(`Order ${order.orderNumber} cancelled`);
     // Attach items from initial fetch (avoids redundant include in update)
-    return { ...cancelledOrder, items: order.items };
+    return { ...cancelledOrder, items: order.items, ...this.computeGraceFields({ ...cancelledOrder, confirmedAt: order.confirmedAt }) };
+  }
+
+  /**
+   * Modify order items within the 90-second grace period.
+   * Restores old stock, validates + decrements new stock, recalculates totals.
+   */
+  async modifyOrder(
+    userId: string,
+    orderId: string,
+    modifications: { productId: string; quantity: number }[],
+  ) {
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      select: {
+        id: true,
+        userId: true,
+        orderNumber: true,
+        status: true,
+        confirmedAt: true,
+        deliveryFee: true,
+        items: {
+          select: { id: true, productId: true, name: true, price: true, quantity: true, total: true, storeId: true, orderId: true },
+        },
+      },
+    });
+
+    if (!order || order.userId !== userId) {
+      throw new NotFoundException('Order not found');
+    }
+
+    const grace = this.computeGraceFields(order);
+    if (!grace.canModify) {
+      throw new BadRequestException(
+        'Grace period expired. Order can no longer be modified.',
+      );
+    }
+
+    // Build a map of requested changes: productId -> newQuantity
+    const modMap = new Map(modifications.map((m) => [m.productId, m.quantity]));
+
+    // Validate all modification productIds exist in the order
+    for (const productId of modMap.keys()) {
+      if (!order.items.find((i) => i.productId === productId)) {
+        throw new BadRequestException(
+          `Product ${productId} is not in this order`,
+        );
+      }
+    }
+
+    // Must keep at least one item
+    const remainingItems = order.items.filter((i) => {
+      const newQty = modMap.get(i.productId);
+      return newQty === undefined ? true : newQty > 0;
+    });
+    if (remainingItems.length === 0 && order.items.every((i) => modMap.has(i.productId))) {
+      throw new BadRequestException(
+        'Cannot remove all items. Cancel the order instead.',
+      );
+    }
+
+    const updatedOrder = await this.prisma.$transaction(async (tx) => {
+      // 1. Restore stock for ALL current items (simpler than computing deltas)
+      await this.stockService.adjustStock(tx, order.items, 'increment');
+
+      // 2. Compute new items list
+      const newItems = order.items
+        .map((item) => {
+          const newQty = modMap.has(item.productId) ? modMap.get(item.productId)! : item.quantity;
+          return { ...item, quantity: newQty, total: item.price * newQty };
+        })
+        .filter((item) => item.quantity > 0);
+
+      // 3. Decrement stock for new quantities
+      await this.stockService.adjustStock(tx, newItems, 'decrement');
+
+      // 4. Delete removed items
+      const removedIds = order.items
+        .filter((item) => modMap.has(item.productId) && modMap.get(item.productId) === 0)
+        .map((item) => item.id);
+      if (removedIds.length > 0) {
+        await tx.orderItem.deleteMany({ where: { id: { in: removedIds } } });
+      }
+
+      // 5. Update quantities for remaining items
+      for (const newItem of newItems) {
+        const oldItem = order.items.find((i) => i.productId === newItem.productId);
+        if (oldItem && (oldItem.quantity !== newItem.quantity)) {
+          await tx.orderItem.update({
+            where: { id: oldItem.id },
+            data: { quantity: newItem.quantity, total: newItem.total },
+          });
+        }
+      }
+
+      // 6. Recalculate totals
+      const subtotal = newItems.reduce((sum, item) => sum + item.total, 0);
+      const tax = Math.round(subtotal * this.taxRate * 100) / 100;
+      const deliveryFee = subtotal >= this.freeDeliveryThreshold ? 0 : this.deliveryFee;
+      const total = Math.round((subtotal + deliveryFee + tax) * 100) / 100;
+
+      return tx.order.update({
+        where: { id: orderId },
+        data: { subtotal, deliveryFee, tax, total },
+        include: { items: true },
+      });
+    });
+
+    this.invalidateOrderCache(userId, orderId);
+
+    this.logger.log(`Order ${order.orderNumber} modified within grace period`);
+    return { ...updatedOrder, ...this.computeGraceFields({ ...updatedOrder, confirmedAt: order.confirmedAt }) };
   }
 
   /**
@@ -708,7 +761,7 @@ export class OrdersService {
     const updateCount = await this.prisma.$executeRawUnsafe(
       `UPDATE "Order" SET "status" = 'CONFIRMED', "paymentStatus" = 'PAID',
        "razorpayPaymentId" = $1, "razorpaySignature" = $2, "paidAt" = NOW(),
-       "updatedAt" = NOW()
+       "confirmedAt" = NOW(), "updatedAt" = NOW()
        WHERE "id" = $3 AND "paymentStatus" != 'PAID'`,
       razorpayPaymentId,
       razorpaySignature,
@@ -727,15 +780,7 @@ export class OrdersService {
       return order;
     }
 
-    // Fire-and-forget: cache invalidation
-    const paidKeysToDelete: string[] = [`order:status:${orderId}`];
-    const paidLimits = [10, 20, 50];
-    for (const limit of paidLimits) {
-      for (let p = 1; p <= 5; p++) {
-        paidKeysToDelete.push(`orders:${order.userId}:p${p}:l${limit}`);
-      }
-    }
-    this.cache.delMany(paidKeysToDelete).catch(() => { });
+    this.invalidateOrderCache(order.userId, orderId);
 
     // Record online payment in ledger
     this.createLedgerEntries(order, 'RAZORPAY');
@@ -805,15 +850,7 @@ export class OrdersService {
       this.prisma.order.count({ where }),
     ]);
 
-    return {
-      data: orders,
-      meta: {
-        page: Number(page),
-        limit: Number(limit),
-        total,
-        totalPages: Math.ceil(total / Number(limit)),
-      },
-    };
+    return paginate(orders, total, page, limit);
   }
 
   async findAllAdmin(query: OrderQueryDto) {
@@ -850,24 +887,16 @@ export class OrdersService {
       this.prisma.order.count({ where }),
     ]);
 
-    return {
-      data: orders,
-      meta: {
-        page: Number(page),
-        limit: Number(limit),
-        total,
-        totalPages: Math.ceil(total / Number(limit)),
-      },
-    };
+    return paginate(orders, total, page, limit);
   }
 
   // Valid order status transitions (one-way hierarchy)
   // CONFIRMED → ORDER_PICKED → SHIPPED → DELIVERED
   // DELIVERED can only be set by delivery person via completeDelivery()
   private static readonly VALID_TRANSITIONS: Record<string, OrderStatus[]> = {
-    PENDING: [OrderStatus.CONFIRMED],
-    CONFIRMED: [OrderStatus.ORDER_PICKED],
-    ORDER_PICKED: [OrderStatus.SHIPPED],
+    PENDING: [OrderStatus.CONFIRMED, OrderStatus.CANCELLED],
+    CONFIRMED: [OrderStatus.ORDER_PICKED, OrderStatus.CANCELLED],
+    ORDER_PICKED: [OrderStatus.SHIPPED, OrderStatus.CANCELLED],
     SHIPPED: [],     // DELIVERED is set only by delivery person
     DELIVERED: [],
     CANCELLED: [],
@@ -904,9 +933,35 @@ export class OrdersService {
       );
     }
 
+    // If admin cancels, restore stock atomically (same logic as user cancel)
+    if (status === OrderStatus.CANCELLED) {
+      const cancelledOrder = await this.prisma.$transaction(async (tx) => {
+        await this.stockService.adjustStock(tx, order.items, 'increment');
+
+        return tx.order.update({
+          where: { id },
+          data: {
+            status: OrderStatus.CANCELLED,
+            paymentStatus:
+              order.paymentStatus === PaymentStatus.PAID
+                ? PaymentStatus.REFUNDED
+                : PaymentStatus.FAILED,
+          },
+        });
+      });
+
+      this.logger.log(`Order ${order.orderNumber} cancelled by admin with stock restoration`);
+      return cancelledOrder;
+    }
+
+    const updateData: any = { status };
+    if (status === OrderStatus.CONFIRMED && !order.confirmedAt) {
+      updateData.confirmedAt = new Date();
+    }
+
     const updated = await this.prisma.order.update({
       where: { id },
-      data: { status },
+      data: updateData,
     });
 
     // Auto-trigger delivery search when order is packed

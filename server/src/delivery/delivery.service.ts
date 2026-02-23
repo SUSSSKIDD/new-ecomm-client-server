@@ -81,9 +81,10 @@ export class DeliveryService {
         };
     }
 
-    /** List all delivery persons. */
+    /** List all delivery persons (capped at 500). */
     async findAllPersons() {
         return this.prisma.deliveryPerson.findMany({
+            take: 500,
             orderBy: { createdAt: 'desc' },
             select: {
                 id: true,

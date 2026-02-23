@@ -189,6 +189,18 @@ export class PaymentsService {
       throw new ForbiddenException('Order does not belong to this user');
     }
 
+    if (order.paymentStatus === PaymentStatus.PAID) {
+      return { message: 'Order already paid', order };
+    }
+
+    if (order.status === 'CANCELLED') {
+      throw new BadRequestException('Cannot verify payment for a cancelled order');
+    }
+
+    if (order.status === 'DELIVERED') {
+      throw new BadRequestException('Cannot verify payment for an already delivered order');
+    }
+
     if (this.isMockMode) {
       // In mock mode, skip signature verification
       const updated = await this.ordersService.markAsPaid(
@@ -265,10 +277,25 @@ export class PaymentsService {
         const order =
           await this.ordersService.findByRazorpayOrderId(razorpayOrderId);
 
+        if (order.paymentStatus === PaymentStatus.PAID) {
+          this.logger.log(`Webhook: order ${order.orderNumber} already paid, skipping`);
+          return { status: 'already_paid' };
+        }
+
+        if (order.status === 'CANCELLED') {
+          this.logger.warn(`Webhook: order ${order.orderNumber} is cancelled, skipping payment`);
+          return { status: 'order_cancelled' };
+        }
+
+        // Compute the actual payment signature (not the webhook signature)
+        const paymentSignature = createHmac('sha256', this.keySecret)
+          .update(`${razorpayOrderId}|${razorpayPaymentId}`)
+          .digest('hex');
+
         await this.ordersService.markAsPaid(
           order.id,
           razorpayPaymentId,
-          signature,
+          paymentSignature,
         );
 
         this.logger.log(`Webhook: order ${order.orderNumber} marked as paid`);

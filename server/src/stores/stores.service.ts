@@ -122,7 +122,7 @@ export class StoresService {
   }
 
   async create(dto: CreateStoreDto) {
-    let retries = 3;
+    let retries = 5;
     while (retries > 0) {
       try {
         const storeCode = await this.generateStoreCode();
@@ -135,8 +135,8 @@ export class StoresService {
       } catch (error) {
         if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002' && Array.isArray(error.meta?.target) && error.meta.target.includes('storeCode')) {
           retries--;
+          this.logger.warn(`Store code collision, retries left: ${retries}`);
           if (retries === 0) throw new BadRequestException('Failed to generate unique store code. Please try again.');
-          // Let it loop and retry
         } else {
           this.logger.error(`Failed to create store: ${error.message}`, error.stack);
           throw error;
@@ -147,6 +147,7 @@ export class StoresService {
 
   async findAll() {
     return this.prisma.store.findMany({
+      take: 500,
       orderBy: { createdAt: 'desc' },
       include: {
         _count: { select: { inventory: true, deliveryPersons: true } },
@@ -225,6 +226,8 @@ export class StoresService {
     }
   }
 
+  private static readonly BULK_CHUNK_SIZE = 50;
+
   async bulkUpdateInventory(storeId: string, items: UpdateInventoryDto[]) {
     if (items.length > 200) {
       throw new BadRequestException(
@@ -232,36 +235,39 @@ export class StoresService {
       );
     }
     try {
-      const results = await this.prisma.$transaction(
-        items.map((item) =>
-          this.prisma.storeInventory.upsert({
-            where: {
-              storeId_productId: {
+      let totalUpdated = 0;
+      for (let i = 0; i < items.length; i += StoresService.BULK_CHUNK_SIZE) {
+        const chunk = items.slice(i, i + StoresService.BULK_CHUNK_SIZE);
+        const results = await this.prisma.$transaction(
+          chunk.map((item) =>
+            this.prisma.storeInventory.upsert({
+              where: {
+                storeId_productId: {
+                  storeId,
+                  productId: item.productId,
+                },
+              },
+              create: {
                 storeId,
                 productId: item.productId,
+                stock: item.stock,
               },
-            },
-            create: {
-              storeId,
-              productId: item.productId,
-              stock: item.stock,
-            },
-            update: { stock: item.stock },
-          }),
-        ),
-      );
+              update: { stock: item.stock },
+            }),
+          ),
+        );
+        totalUpdated += results.length;
+      }
 
       this.logger.log(
-        `Bulk inventory update: ${results.length} items for store ${storeId}`,
+        `Bulk inventory update: ${totalUpdated} items for store ${storeId}`,
       );
-      return { updated: results.length };
+      return { updated: totalUpdated };
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2003') {
         throw new NotFoundException(`Store ${storeId} or one of the products not found`);
       }
       throw error;
     }
-
-
   }
 }

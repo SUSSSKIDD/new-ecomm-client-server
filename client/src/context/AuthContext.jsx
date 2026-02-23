@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import PropTypes from 'prop-types';
 import axios from 'axios';
 import LoginModal from '../components/auth/LoginModal';
@@ -14,6 +14,32 @@ export const AuthProvider = ({ children }) => {
     const [isAuthenticated, setIsAuthenticated] = useState(false);
     const [loading, setLoading] = useState(true);
     const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
+    const logoutRef = useRef(null);
+
+    const logout = useCallback(() => {
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        setToken(null);
+        setUser(null);
+        setIsAuthenticated(false);
+    }, []);
+
+    // Keep ref in sync so interceptor always calls latest logout
+    logoutRef.current = logout;
+
+    // Global 401 interceptor — triggers logout on expired/invalid JWT
+    useEffect(() => {
+        const interceptorId = axios.interceptors.response.use(
+            (response) => response,
+            (error) => {
+                if (error.response?.status === 401) {
+                    logoutRef.current();
+                }
+                return Promise.reject(error);
+            },
+        );
+        return () => axios.interceptors.response.eject(interceptorId);
+    }, []);
 
     useEffect(() => {
         // Check for token on mount
@@ -65,14 +91,6 @@ export const AuthProvider = ({ children }) => {
         const updated = { ...user, ...updatedFields };
         setUser(updated);
         localStorage.setItem('user', JSON.stringify(updated));
-    };
-
-    const logout = () => {
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
-        setToken(null);
-        setUser(null);
-        setIsAuthenticated(false);
     };
 
     return (

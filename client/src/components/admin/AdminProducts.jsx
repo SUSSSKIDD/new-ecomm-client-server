@@ -3,8 +3,7 @@ import { RippleButton } from '../ui/ripple-button';
 import { useEffect, useState } from 'react';
 import { useAdminAuth } from '../../hooks/useAdminAuth';
 import { STORE_CATEGORY_SUBCATEGORIES } from '../../constants';
-
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+import { adminApi, API_URL } from '../../lib/api';
 
 const emptyForm = { name: '', description: '', price: '', mrp: '', category: '', stock: '', storeLocation: '' };
 
@@ -144,39 +143,30 @@ const AdminProducts = () => {
     const [editingProduct, setEditingProduct] = useState(null);
     const { admin } = useAdminAuth();
 
-    useEffect(() => {
-        fetchProducts();
-    }, []);
-
-    const fetchProducts = async () => {
+    const fetchProducts = async (signal) => {
         try {
-            const token = localStorage.getItem('ud_admin_token');
-            const res = await fetch(`${API_URL}/products/admin/my-store`, {
-                headers: { Authorization: `Bearer ${token}` }
-            });
-            if (res.ok) {
-                const data = await res.json();
-                const productList = Array.isArray(data) ? data : (data.data || []);
-                setProducts(productList);
-            }
+            const res = await adminApi().get('/products/admin/my-store', { signal });
+            const data = res.data;
+            const productList = Array.isArray(data) ? data : (data.data || []);
+            setProducts(productList);
         } catch (err) {
-            console.error(err);
+            if (err.name !== 'CanceledError') console.error(err);
         } finally {
             setLoading(false);
         }
     };
 
+    useEffect(() => {
+        const ctrl = new AbortController();
+        fetchProducts(ctrl.signal);
+        return () => ctrl.abort();
+    }, []);
+
     const handleDelete = async (product) => {
         if (!window.confirm(`Delete "${product.name}"? This cannot be undone.`)) return;
         try {
-            const token = localStorage.getItem('ud_admin_token');
-            const res = await fetch(`${API_URL}/products/${product.id}`, {
-                method: 'DELETE',
-                headers: { Authorization: `Bearer ${token}` }
-            });
-            if (res.ok) {
-                setProducts(prev => prev.filter(p => p.id !== product.id));
-            }
+            await adminApi().delete(`/products/${product.id}`);
+            setProducts(prev => prev.filter(p => p.id !== product.id));
         } catch (err) {
             console.error(err);
         }

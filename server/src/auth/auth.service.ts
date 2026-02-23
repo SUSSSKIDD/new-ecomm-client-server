@@ -5,6 +5,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma.service';
 import { SmsService } from '../sms/sms.service';
 import { SendOtpDto, VerifyOtpDto, StoreManagerLoginDto } from './dto/auth.dto';
@@ -14,12 +15,20 @@ import { Role } from '@prisma/client';
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
+  private readonly superAdminPhone: string;
+  private readonly superAdminPinHash: string;
 
   constructor(
     private prisma: PrismaService,
     private jwtService: JwtService,
     private smsService: SmsService,
-  ) { }
+    private config: ConfigService,
+  ) {
+    this.superAdminPhone = this.config.get<string>('SUPER_ADMIN_PHONE', '');
+    const pin = this.config.get<string>('SUPER_ADMIN_PIN', '');
+    // Pre-hash the pin synchronously at startup for comparison later
+    this.superAdminPinHash = pin ? bcrypt.hashSync(pin, 10) : '';
+  }
 
   async sendOtp(dto: SendOtpDto) {
     // TODO: Add rate limiting here using Redis
@@ -46,24 +55,13 @@ export class AuthService {
     });
 
     if (!user) {
-      const role = dto.phone === '+919999999999' ? Role.ADMIN : Role.USER;
       user = await this.prisma.user.create({
         data: {
           phone: dto.phone,
-          role,
+          role: Role.USER,
         },
       });
       this.logger.log(`New user created: ${user.id}`);
-    } else if (
-      dto.phone === '+919999999999' &&
-      user.role !== Role.ADMIN
-    ) {
-      // Promote to ADMIN if previously created as USER (e.g. during failed tests)
-      user = await this.prisma.user.update({
-        where: { id: user.id },
-        data: { role: Role.ADMIN },
-      });
-      this.logger.log(`Promoted user ${user.id} to ADMIN`);
     }
 
     const payload = { sub: user.id, phone: user.phone, role: user.role };
@@ -116,7 +114,16 @@ export class AuthService {
   }
 
   async superAdminLogin(dto: StoreManagerLoginDto) {
-    if (dto.phone !== '+919999999999' || dto.pin !== '0000') {
+    if (!this.superAdminPhone || !this.superAdminPinHash) {
+      throw new UnauthorizedException('Super Admin not configured');
+    }
+
+    if (dto.phone !== this.superAdminPhone) {
+      throw new UnauthorizedException('Invalid Super Admin credentials');
+    }
+
+    const isPinValid = await bcrypt.compare(dto.pin, this.superAdminPinHash);
+    if (!isPinValid) {
       throw new UnauthorizedException('Invalid Super Admin credentials');
     }
 
@@ -131,6 +138,11 @@ export class AuthService {
           role: Role.ADMIN,
           name: 'Super Admin',
         },
+      });
+    } else if (user.role !== Role.ADMIN) {
+      user = await this.prisma.user.update({
+        where: { id: user.id },
+        data: { role: Role.ADMIN },
       });
     }
 

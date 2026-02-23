@@ -84,6 +84,28 @@ export class OrderPoolService {
       ...locationKeys,
     );
 
+    // Fallback: batch-fetch from riderdb2 for any that missed main cache
+    const missingCacheIds: string[] = [];
+    const missingIndices: number[] = [];
+    for (let i = 0; i < freePersons.length; i++) {
+      if (!cachedLocations[i]) {
+        missingCacheIds.push(freePersons[i].id);
+        missingIndices.push(i);
+      }
+    }
+
+    if (missingCacheIds.length > 0) {
+      const fallbackLocations = await this.riderRedis.getRiderLocations(
+        missingCacheIds,
+      );
+      for (let j = 0; j < fallbackLocations.length; j++) {
+        const fallbackLoc = fallbackLocations[j];
+        if (fallbackLoc) {
+          cachedLocations[missingIndices[j]] = fallbackLoc;
+        }
+      }
+    }
+
     // Filter riders within delivery radius
     const eligibleRiderIds: string[] = [];
     for (let i = 0; i < freePersons.length; i++) {

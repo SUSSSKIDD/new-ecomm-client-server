@@ -207,7 +207,8 @@ new grocery/
 - `POST /orders` — Create order (requires `idempotency-key` header)
 - `GET /orders` — List orders (paginated, cached 5 min)
 - `GET /orders/:id` — Order detail with items
-- `POST /orders/:id/cancel` — Cancel order (PENDING/CONFIRMED only, restores stock)
+- `POST /orders/:id/cancel` — Cancel order (PENDING unconditionally; CONFIRMED within 90s grace period)
+- `PATCH /orders/:id/modify` — Modify item quantities within 90s grace period (restore + re-decrement stock)
 
 ### Orders — Admin (JWT + ADMIN/STORE_MANAGER)
 - `GET /orders/admin/store` — List orders for admin's store (ADMIN sees all)
@@ -299,7 +300,11 @@ CANCELLED  CANCELLED   CANCELLED    CANCELLED    CANCELLED
 | `DELIVERED` | *(terminal)* |
 | `CANCELLED` | *(terminal)* |
 
-**Customer cancel:** Only allowed for `PENDING` and `CONFIRMED` (via `POST /orders/:id/cancel`). Restores stock atomically.
+**Customer cancel:** `PENDING` orders can be cancelled unconditionally. `CONFIRMED` orders can only be cancelled within **90 seconds** of `confirmedAt` (grace period). Restores stock atomically.
+
+**Customer modify:** `PATCH /orders/:id/modify` allows changing item quantities within the 90-second grace period. Atomically restores old stock and decrements new stock in a transaction. Recalculates subtotal, tax, delivery fee, and total.
+
+**Grace period fields:** All order responses include `canCancel`, `canModify`, and `graceExpiresAt` computed from `order.status` and `order.confirmedAt`. No cron jobs — checked at request time.
 
 **Admin cancel:** Via `PATCH /orders/admin/:id/status` with `CANCELLED`. Works from any non-terminal state.
 
@@ -391,7 +396,7 @@ CANCELLED  CANCELLED   CANCELLED    CANCELLED    CANCELLED
 
 | Role | Phone | PIN | Login Endpoint |
 |------|-------|-----|----------------|
-| Super Admin | `+919999999999` | `0000` | `POST /auth/super-admin/login` |
+| Super Admin | `SUPER_ADMIN_PHONE` env var | `SUPER_ADMIN_PIN` env var | `POST /auth/super-admin/login` |
 | Delivery Person | `+917777777777` | *(auto-generated)* | `POST /delivery/auth/login` |
 | Any Customer | `+91[6-9]XXXXXXXXX` | — | `POST /auth/verify-otp` (OTP: `123456`) |
 
@@ -411,6 +416,8 @@ CANCELLED  CANCELLED   CANCELLED    CANCELLED    CANCELLED
 | `UPSTASH_REDIS_REST_URL` | — | Upstash Redis URL (empty = caching disabled) |
 | `UPSTASH_REDIS_REST_TOKEN` | — | Upstash Redis token |
 | `PORT` | 3000 | Server port |
+| `SUPER_ADMIN_PHONE` | — | Super admin phone number (e.g. `+919999999999`) |
+| `SUPER_ADMIN_PIN` | — | Super admin 4-digit PIN (hashed at startup with bcrypt) |
 | `DELIVERY_FEE` | 40 | Delivery fee in INR |
 | `TAX_RATE` | 0.05 | Tax rate (5%) |
 | `FREE_DELIVERY_THRESHOLD` | 500 | Free delivery above this subtotal |
@@ -427,10 +434,12 @@ CANCELLED  CANCELLED   CANCELLED    CANCELLED    CANCELLED
 
 ## Client-Side Constants (CartSidebar.jsx)
 
-Must stay in sync with server `.env`:
+Client-side constants used for display estimates (final totals always come from server preview):
 - `DELIVERY_FEE = 40`
 - `FREE_DELIVERY_THRESHOLD = 500`
 - `TAX_RATE = 0.05`
+
+**Note:** Checkout uses server `POST /orders/preview` response exclusively for pricing. Client constants are only for the pre-checkout estimate display.
 
 ## JWT Strategy
 
@@ -578,6 +587,57 @@ npm run dev                 # Start on :5173 or :5174
 
 Swagger API docs available at: `http://localhost:3000/api`
 
+## Docker Deployment
+
+### Prerequisites
+- Docker 24+ and Docker Compose v2+
+- `server/.env` file with all required environment variables (copy from `.env.example`)
+
+### Building Images
+```bash
+# Build both images
+docker compose build
+
+# Build individually
+docker compose build server   # NestJS API (node:20-alpine, ~149MB)
+docker compose build client   # React + nginx (~22MB)
+```
+
+### Running Containers
+```bash
+# Start all services (detached)
+docker compose up -d
+
+# View logs
+docker compose logs -f
+docker compose logs -f server   # Server logs only
+
+# Check health
+docker ps                       # Shows health status
+curl http://localhost:3000/      # Server health → "Hello World!"
+curl http://localhost:80/        # Client → HTML page
+
+# Stop all
+docker compose down
+
+# Rebuild and restart (after code changes)
+docker compose up -d --build
+```
+
+### Environment Variables for Docker
+```bash
+# Override ports (default: server=3000, client=80)
+PORT=3001 CLIENT_PORT=8080 docker compose up -d
+
+# Set client API URL (baked into build)
+VITE_API_URL=https://api.example.com docker compose build client
+```
+
+### Docker Architecture
+- **Server**: 3-stage build (deps → build → production). Uses `dumb-init` for proper signal handling, runs as non-root `app` user (UID 1001). Healthcheck via wget.
+- **Client**: 2-stage build (node build → nginx:1.27-alpine). Nginx serves SPA with: `try_files` fallback, aggressive caching for `/assets/`, security headers (X-Frame-Options, X-Content-Type-Options, Referrer-Policy), and hidden file denial.
+- **Compose**: Client `depends_on` server with `service_healthy` condition. Both have `restart: unless-stopped`.
+
 ## Fixed Store Categories
 
 Stores have a `storeType` field. Each type has immutable subcategories defined in `server/src/common/constants/store-categories.ts` and `client/src/constants/index.js`:
@@ -592,28 +652,110 @@ Stores have a `storeType` field. Each type has immutable subcategories defined i
 
 Store naming follows auto-generated codes: A1, A2, A3... AN (with retry on unique constraint collision).
 
-## Latency Benchmark (2026-02-22)
+## Latency Benchmark — Docker Production (2026-02-23)
 
 | Endpoint | Avg | Min | Max |
 |----------|-----|-----|-----|
-| `GET /` (health) | 0.6ms | 0.5ms | 0.9ms |
-| `POST /auth/super-admin/login` | 58ms | 45ms | 107ms |
-| `GET /stores` | 48ms | 47ms | 49ms |
-| `GET /dashboard/store` | 1.1ms | 0.9ms | 1.5ms |
-| `GET /products` | 129ms | 29ms | 435ms |
-| `GET /search/products?q=milk` | 66ms | 29ms | 134ms |
-| `GET /store-managers` | 110ms | 94ms | 166ms |
-| `GET /delivery/persons` | 108ms | 92ms | 155ms |
-| `GET /ledger/my-store` | 60ms | 46ms | 106ms |
+| `GET /` (health) | 2.2ms | 1.6ms | 3.1ms |
+| `POST /auth/super-admin/login` | 52.3ms | 1.7ms | 174.2ms |
+| `GET /products?limit=10` | 89.3ms | 26.3ms | 333.1ms |
+| `GET /products?limit=50` | 62.2ms | 27.7ms | 185.7ms |
+| `GET /search/products?q=test` | 78.9ms | 26.2ms | 311.7ms |
+| `GET /cart` | 142.5ms | 82.5ms | 193.4ms |
+| `GET /orders` | 136.1ms | 95.4ms | 179.7ms |
+| `GET /stores` | 181.0ms | 118.5ms | 291.0ms |
+| `GET /dashboard/store` | 112.7ms | 64.4ms | 167.1ms |
+| `GET /orders/admin/store` | 323.3ms | 282.3ms | 387.7ms |
+| `GET /store-managers` | 264.4ms | 191.9ms | 349.7ms |
+| `GET /delivery/persons` | 245.5ms | 230.1ms | 267.0ms |
+| `GET /payments/status` | 3.6ms | 2.6ms | 6.0ms |
+| `GET /search/categories` | 72.5ms | 25.2ms | 311.9ms |
+| `GET /users/addresses` | 172.7ms | 119.4ms | 299.1ms |
 
-*Note: First request for cached endpoints (products, search) is slower; subsequent requests hit Redis cache.*
+### Concurrent Stress Test (Docker)
+| Test | Total Time | Avg/Request |
+|------|-----------|-------------|
+| 50x GET /products | 551ms | 11.0ms |
+| 50x GET /search | 316ms | 6.3ms |
+| 50x GET /cart | 997ms | 19.9ms |
+| 20x POST /auth/login | 89ms | rate-limited |
+
+### Container Resource Usage
+| Container | CPU | Memory | Image Size |
+|-----------|-----|--------|------------|
+| Server (NestJS) | <1% idle | ~98 MB | 149 MB |
+| Client (nginx) | <1% idle | ~7 MB | 22 MB |
+
+*Note: Higher latencies vs local dev due to Docker networking overhead + remote Supabase PostgreSQL. First request for cached endpoints is slower; subsequent requests hit Redis cache.*
+
+## Docker E2E Checkout Flow Test (2026-02-23)
+
+**Mode:** Mock SMS (OTP: 123456) + Mock Payments (auto-succeed)
+
+| Step | Action | Result |
+|------|--------|--------|
+| 1 | Super Admin Login | 200 — Token issued |
+| 2 | Payment Mode Check | `mockMode: true` — "all payments auto-succeed" |
+| 3 | Customer OTP Login (mock) | 200 — Send OTP + Verify with 123456 |
+| 4 | List Products | Products returned with stock/price |
+| 5 | Add to Cart (qty: 2) | 201 — Item added |
+| 6 | View Cart | 1 item in cart |
+| 7 | Create Address | 201 — HOME address with lat/lng |
+| 8 | Order Preview | Subtotal, delivery fee, tax, total calculated |
+| 9 | Create COD Order | 201 — Status: CONFIRMED, orderNumber generated |
+| 10 | List Customer Orders | Orders returned with pagination |
+| 11 | Admin Update → ORDER_PICKED | 200 — Status transition valid |
+| 12 | Create Razorpay Order + Mock Pay | 201 → 201 — paymentStatus: PAID |
+| 13 | Cancel ORDER_PICKED order | 400 — Correctly rejected |
+
+### Edge Case Tests (All Passed)
+| Test | Expected | Actual |
+|------|----------|--------|
+| Invalid phone format | 400 | 400 |
+| Wrong OTP | 401 | 401 |
+| No auth token | 401 | 401 |
+| Wrong super admin PIN | 401 | 401 |
+| Cart quantity > 50 | 400 | 400 |
+| Cart quantity = 0 | 400 | 400 |
+| Cart negative quantity | 400 | 400 |
+| Duplicate idempotency key | 201 (existing) | 201 |
+| Invalid sortBy field | 400 | 400 |
+| Customer on admin endpoint | 403 | 403 |
+| Mock-pay already-paid order | "already paid" | 201 + message |
+| Rate limiting (>5 req/min) | 429 | 429 at request 5 |
+
+## Security Hardening Applied (2026-02-23)
+
+### Critical Fixes
+1. **Super Admin credentials** — Moved from hardcoded values to `SUPER_ADMIN_PHONE` and `SUPER_ADMIN_PIN` env vars with bcrypt hashing (`auth.service.ts`)
+2. **Magic phone auto-promotion removed** — Registration no longer auto-promotes any phone to ADMIN role
+3. **verifyPayment() status check** — Blocks payment verification for CANCELLED/DELIVERED orders, returns early if already PAID (`payments.service.ts`)
+4. **Razorpay webhook signature** — Now computes actual `order_id|payment_id` HMAC instead of storing webhook signature (`payments.service.ts`)
+5. **SSE memory leak** — Added `req.on('error')` cleanup, stale connection sweep every 2 min, `OnModuleDestroy` lifecycle (`delivery-sse.service.ts`)
+6. **Redis cleanup resilience** — Post-claim Redis operations wrapped in individual try-catch blocks (`order-claim.service.ts`)
+7. **Global 401 interceptor** — Client-side axios interceptor auto-logs-out on expired JWT (`AuthContext.jsx`)
+8. **Cart persistence** — Cart synced to localStorage to survive page refresh (`CategoryContext.jsx`)
+9. **React Error Boundary** — Wraps all lazy routes to prevent white screen on chunk load failure (`App.jsx`)
+10. **Server-side pricing** — Client checkout uses server preview totals exclusively, eliminating client-server price mismatch (`CartSidebar.jsx`)
+
+### High Severity Fixes
+1. **Rate limiting** — `@nestjs/throttler` added globally (30 req/min). Auth endpoints: send-otp (5/min), verify-otp (10/min), super-admin (5/min), delivery (10/min)
+2. **JWT role validation** — `jwt.strategy.ts` now checks DB for user existence and active status on every request (STORE_MANAGER, DELIVERY_PERSON active checks)
+3. **sortBy injection** — `@IsIn(['createdAt', 'total', 'status'])` validation on order query DTO
+4. **Admin cancel restores stock** — `updateStatus(CANCELLED)` now atomically restores stock, matching customer cancel behavior
+5. **Store code retries** — Increased from 3 to 5 with warning log
+6. **Ledger transaction ID** — Added random suffix to prevent collision
+7. **Cart quantity limits** — `@Max(50)` on add/update DTOs
+8. **Geo NaN guard** — Haversine returns `Infinity` for invalid coordinates
+9. **Search cache normalization** — Queries trimmed and lowercased before cache key generation
+10. **LocationContext** — Defaults to `serviceable: false` on API error
+11. **Login form** — Blocks submission while loading
+12. **Status toggle** — Optimistic update with revert on error
 
 ## Remaining Recommendations
 
-1. **Rate limiting on OTP endpoints** — No rate limiting on `POST /auth/send-otp`. Add throttling (e.g., 3 attempts per minute per phone).
-2. **Razorpay live integration** — CartSidebar currently uses mock endpoint. For production, integrate the Razorpay checkout SDK widget.
-3. **Customer cancellation scope** — `POST /orders/:id/cancel` only allows PENDING/CONFIRMED. Consider whether customers should request cancellation for PROCESSING/SHIPPED.
-4. **Stock restoration on admin cancel** — When admin cancels via `PATCH /orders/admin/:id/status`, stock is NOT restored (only customer `cancel()` restores stock). The `updateStatus` method should handle stock restoration when transitioning to CANCELLED.
-5. **Super Admin credentials** — Currently hardcoded in auth.service.ts. Move to environment variables for production.
-6. **Token expiration handling** — Frontend has no 401 interceptor. Expired tokens cause silent failures instead of redirect to login.
-7. **Toast notifications** — Frontend uses `alert()` for user feedback in several admin pages. Replace with a proper toast notification system.
+1. **Razorpay live integration** — CartSidebar currently uses mock endpoint. For production, integrate the Razorpay checkout SDK widget.
+2. **Customer cancellation scope** — `POST /orders/:id/cancel` only allows PENDING/CONFIRMED. Consider whether customers should request cancellation for PROCESSING/SHIPPED.
+3. **Toast notifications** — Frontend uses `alert()` for user feedback in several admin pages. Replace with a proper toast notification system.
+4. **httpOnly cookies** — JWTs currently in localStorage (XSS-vulnerable). For highest security, switch to httpOnly cookies with CSRF protection.
+5. **Bundle size** — Main JS chunk is ~468KB gzipped to ~147KB. Consider further code-splitting for admin/delivery routes.

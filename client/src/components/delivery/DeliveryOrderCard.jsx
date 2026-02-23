@@ -1,7 +1,7 @@
 import { RippleButton } from '../ui/ripple-button';
-import { useState } from 'react';
+import { useState, memo } from 'react';
 
-const DeliveryOrderCard = ({ assignment, onAccept, onReject, onComplete }) => {
+const DeliveryOrderCard = memo(({ assignment, onAccept, onReject, onComplete }) => {
     const { order } = assignment;
     const isAccepted = !!assignment.acceptedAt;
     const [actionLoading, setActionLoading] = useState(null);
@@ -154,6 +154,6 @@ const DeliveryOrderCard = ({ assignment, onAccept, onReject, onComplete }) => {
             </div>
         </div>
     );
-};
+});
 
 export default DeliveryOrderCard;

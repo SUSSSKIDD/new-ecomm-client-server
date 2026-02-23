@@ -17,7 +17,9 @@ export class LedgerService {
             where: { createdAt: { gte: startOfDay } },
         });
 
-        return `TXN-${dateStr}-${String(count + 1).padStart(4, '0')}`;
+        // Add random suffix to prevent collisions from concurrent requests
+        const rand = Math.random().toString(36).slice(2, 4).toUpperCase();
+        return `TXN-${dateStr}-${String(count + 1).padStart(4, '0')}${rand}`;
     }
 
     async create(dto: CreateLedgerEntryDto, retries = 3): Promise<any> {

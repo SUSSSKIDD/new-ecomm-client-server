@@ -46,7 +46,7 @@ export class DeliveryController {
     private readonly autoAssignService: AutoAssignService,
     private readonly orderClaimService: OrderClaimService,
     private readonly orderPoolService: OrderPoolService,
-  ) {}
+  ) { }
 
   // ── Admin endpoints ─────────────────────────────────────────────
 
@@ -237,10 +237,25 @@ export class DeliveryController {
   sse(@Req() req: AuthenticatedRequest): Observable<{ data: string }> {
     const subject = this.sseService.register(req.user.sub);
 
-    // Cleanup on disconnect
-    req.on('close', () => {
-      this.sseService.unregister(req.user.sub);
-    });
+    // Push currently available pool orders to connecting rider immediately
+    this.orderPoolService
+      .getAvailableOrdersForRider(req.user.sub)
+      .then((snapshots) => {
+        for (const snap of snapshots) {
+          this.sseService.notify(req.user.sub, {
+            type: 'NEW_AVAILABLE_ORDER',
+            data: snap,
+          });
+        }
+      })
+      .catch((err) =>
+        this.logger.error(`Initial SSE push error: ${err.message}`),
+      );
+
+    // Cleanup on disconnect or error (e.g. network drop)
+    const cleanup = () => this.sseService.unregister(req.user.sub);
+    req.on('close', cleanup);
+    req.on('error', cleanup);
 
     return subject.asObservable();
   }
