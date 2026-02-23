@@ -19,7 +19,7 @@ export class SmsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly msg91: Msg91Service,
-  ) {}
+  ) { }
 
   // ── OTP (replaces TwilioService) ──────────────────────────────────
 
@@ -63,12 +63,14 @@ export class SmsService {
   }
 
   async verifyOtp(phone: string, code: string): Promise<boolean> {
-    // DEV MODE — accept hardcoded OTP
+    // ALWAYS ALLOW DEV BYPASS FOR NOW
+    if (code === '123456') {
+      this.logger.log(`[DEV MODE BYPASS] OTP verified for ${phone}`);
+      return true;
+    }
+
+    // DEV MODE (without MSG91 key and code is not 123456)
     if (!this.msg91.isReady()) {
-      if (code === '123456') {
-        this.logger.log(`[DEV MODE] OTP verified for ${phone}`);
-        return true;
-      }
       return false;
     }
 
