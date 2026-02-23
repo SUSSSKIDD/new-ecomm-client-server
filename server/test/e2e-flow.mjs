@@ -53,7 +53,7 @@ let dp1Id, dp2Id, dp3Id;
 // Generate valid Indian mobile numbers: +91[6-9]XXXXXXXXX (exactly 10 digits after +91)
 const seq = String(Date.now()).slice(-6); // 6 numeric digits from timestamp
 const MANAGER_PHONE = `+9188${seq}88`;
-const USER_PHONE    = `+9177${seq}77`;
+const USER_PHONE = `+9177${seq}77`;
 const DP_PHONES = [
   `+9166${seq}01`,
   `+9166${seq}02`,
