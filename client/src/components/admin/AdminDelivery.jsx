@@ -152,7 +152,8 @@ const AdminDelivery = () => {
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Phone</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">PIN</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Home Store</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Duty Status</th>
+                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Account Status</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
                             </tr>
                         </thead>
@@ -165,6 +166,14 @@ const AdminDelivery = () => {
                                         {p.pin || <span className="text-gray-300">****</span>}
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{p.homeStore?.name || p.homeStoreId}</td>
+                                    <td className="px-6 py-4 whitespace-nowrap text-sm">
+                                        <span className={`px-2 inline-flex text-xs leading-5 font-bold rounded-full ${p.status === 'FREE' ? 'bg-green-100 text-green-800' :
+                                                p.status === 'BUSY' ? 'bg-orange-100 text-orange-800' :
+                                                    'bg-gray-100 text-gray-800'
+                                            }`}>
+                                            {p.status === 'DUTY_OFF' ? 'OFF DUTY' : p.status}
+                                        </span>
+                                    </td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm">
                                         <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${p.isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
                                             {p.isActive ? 'Active' : 'Inactive'}

@@ -346,10 +346,11 @@ for (let i = 0; i < 3; i++) {
 dp1Id = dpIds[0]; dp2Id = dpIds[1]; dp3Id = dpIds[2];
 
 for (let i = 0; i < 3; i++) {
-  await step(`Delivery person ${i + 1} login`, async () => {
+  await step(`Delivery person ${i + 1} login & check DUTY_OFF`, async () => {
     const r = await api.post('/delivery/auth/login', { phone: DP_PHONES[i], pin: `${1000 + i}` });
     assert(r.status === 200 || r.status === 201, `${r.status}: ${r.data?.message}`);
     dpTokens.push(r.data.access_token);
+    assert(r.data.person.status === 'DUTY_OFF', `Expected initial status DUTY_OFF, got ${r.data.person?.status}`);
   });
 }
 dp1Token = dpTokens[0]; dp2Token = dpTokens[1]; dp3Token = dpTokens[2];
@@ -423,6 +424,8 @@ await step('Person 2 rejects order 1', async () => {
 
 await new Promise(r => setTimeout(r, 1000));
 
+let person3HasOrder = false;
+
 // Person 3 claims
 await step('Person 3 claims order 1', async () => {
   const r = await api.post(`/delivery/orders/${order1Id}/claim`, {}, auth(dp3Token));
@@ -431,6 +434,7 @@ await step('Person 3 claims order 1', async () => {
     return;
   }
   assert(r.status === 200 || r.status === 201, `${r.status}: ${r.data?.message}`);
+  person3HasOrder = true;
 });
 
 // Person 3 accepts
@@ -441,16 +445,39 @@ await step('Person 3 accepts order 1', async () => {
     return;
   }
   assert(r.status === 200 || r.status === 201, `${r.status}: ${r.data?.message}`);
+  person3HasOrder = true;
+});
+
+await step('Verify Person 3 is BUSY', async () => {
+  if (!person3HasOrder) {
+    console.log('    ⚠️  Skipping BUSY check since no order was bound to Person 3.');
+    return;
+  }
+  const r = await api.post('/delivery/auth/login', { phone: DP_PHONES[2], pin: `1002` });
+  assert(r.status === 200 || r.status === 201, `${r.status}: ${r.data?.message}`);
+  assert(r.data.person.status === 'BUSY', `Expected BUSY, got ${r.data.person?.status}`);
 });
 
 // Person 3 completes delivery
 await step('Person 3 marks order 1 DELIVERED', async () => {
+  if (!person3HasOrder) {
+    return;
+  }
   const r = await api.post(`/delivery/orders/${order1Id}/complete`, { result: 'DELIVERED' }, auth(dp3Token));
   if (r.status === 400 || r.status === 404) {
     console.log(`    ⚠️  Complete unavailable — ${r.data?.message}`);
     return;
   }
   assert(r.status === 200 || r.status === 201, `${r.status}: ${r.data?.message}`);
+});
+
+await step('Verify Person 3 is FREE', async () => {
+  if (!person3HasOrder) {
+    return;
+  }
+  const r = await api.post('/delivery/auth/login', { phone: DP_PHONES[2], pin: `1002` });
+  assert(r.status === 200 || r.status === 201, `${r.status}: ${r.data?.message}`);
+  assert(r.data.person.status === 'FREE', `Expected FREE, got ${r.data.person?.status}`);
 });
 
 // ── Phase 10: Post-Delivery Verification ─────────────────────────────

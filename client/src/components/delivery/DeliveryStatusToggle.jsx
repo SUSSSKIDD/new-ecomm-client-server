@@ -1,22 +1,37 @@
 import { RippleButton } from '../ui/ripple-button';
+
 const DeliveryStatusToggle = ({ status, onToggle, loading }) => {
-    const isFree = status === 'FREE';
+    let badgeColor = 'bg-gray-200 text-gray-700';
+    let label = 'Off Duty';
+    let btnText = 'Go Online';
+    let nextStatus = 'FREE';
+
+    if (status === 'FREE') {
+        badgeColor = 'bg-emerald-100 text-emerald-700';
+        label = 'Available';
+        btnText = 'Go Off Duty';
+        nextStatus = 'DUTY_OFF';
+    } else if (status === 'BUSY') {
+        badgeColor = 'bg-orange-100 text-orange-700';
+        label = 'Busy - Delivering';
+        btnText = 'Delivering...';
+        nextStatus = null;
+    }
 
     return (
         <div className="flex items-center gap-3">
-            <span className={`text-sm font-bold ${isFree ? 'text-emerald-600' : 'text-orange-500'}`}>
-                {isFree ? 'Available' : 'Busy'}
+            <span className={`px-2.5 py-1 text-xs font-bold rounded-full ${badgeColor}`}>
+                {label}
             </span>
             <RippleButton
-                onClick={() => onToggle(isFree ? 'BUSY' : 'FREE')}
-                disabled={loading}
-                className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors duration-300 focus:outline-none ${isFree ? 'bg-emerald-500' : 'bg-orange-400'
-                    } ${loading ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                onClick={() => nextStatus && onToggle(nextStatus)}
+                disabled={loading || status === 'BUSY'}
+                className={`py-1.5 px-4 text-xs font-bold rounded-full text-white transition-colors duration-300 focus:outline-none shadow-sm ${status === 'BUSY' ? 'bg-orange-400 opacity-60 cursor-not-allowed' :
+                        status === 'FREE' ? 'bg-red-500 hover:bg-red-600' :
+                            'bg-emerald-500 hover:bg-emerald-600'
+                    } ${loading ? 'opacity-50 cursor-not-allowed' : ''}`}
             >
-                <span
-                    className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-md transition-transform duration-300 ${isFree ? 'translate-x-6' : 'translate-x-1'
-                        }`}
-                />
+                {btnText}
             </RippleButton>
         </div>
     );

@@ -62,7 +62,7 @@ new grocery/
 │       │   │   ├── DeliveryLogin.jsx            # Delivery person phone+PIN login
 │       │   │   ├── DeliveryOrderCard.jsx        # Individual order card component (assigned)
 │       │   │   ├── AvailableOrderCard.jsx       # Individual order card component (available for claiming)
-│       │   │   └── DeliveryStatusToggle.jsx     # FREE/BUSY/OFFLINE toggle
+│       │   │   └── DeliveryStatusToggle.jsx     # DUTY_OFF/FREE/BUSY toggle
 │       │   └── BottomTabBar, CategoryGrid, GhostState, PincodeHeader
 │       ├── context/
 │       │   ├── AuthContext.jsx                  # User auth, token, login/logout
@@ -260,8 +260,14 @@ new grocery/
 - `POST /delivery/auth/login` — Delivery person login (phone + PIN)
 - `GET /delivery/me` — Get own profile (DELIVERY_PERSON)
 - `POST /delivery/location` — Update own GPS location (lat/lng, dual-written to Redis)
-- `POST /delivery/status` — Set status (FREE/BUSY)
+- `POST /delivery/status` — Set status (DUTY_OFF/FREE; BUSY is auto-managed)
 - `GET /delivery/available-orders` — Poll for available orders to claim
+
+### Delivery Person Status Flow
+- **DUTY_OFF** → (manual toggle) → **FREE** (online, receives orders)
+- **FREE** → (auto on accept/claim) → **BUSY** (delivering)
+- **BUSY** → (auto on complete) → **FREE**
+- **BUSY** → cannot go DUTY_OFF (must complete delivery first)
 - `GET /delivery/orders` — Get your successfully assigned active orders
 - `POST /delivery/orders/:id/claim` — Competitive claim attempt
 - `POST /delivery/orders/:id/complete` — Mark delivery as DELIVERED/NOT_DELIVERED
@@ -370,7 +376,7 @@ CANCELLED  CANCELLED   CANCELLED    CANCELLED    CANCELLED
 - **OrderStatus**: `PENDING`, `CONFIRMED`, `PROCESSING`, `ORDER_PICKED`, `SHIPPED`, `DELIVERED`, `CANCELLED`
 - **PaymentMethod**: `COD`, `RAZORPAY`
 - **PaymentStatus**: `PENDING`, `COD_PENDING`, `PAID`, `FAILED`, `REFUNDED`
-- **DeliveryPersonStatus**: `FREE`, `BUSY`
+- **DeliveryPersonStatus**: `DUTY_OFF`, `FREE`, `BUSY`
 - **SmsStatus**: `PENDING`, `SENT`, `DELIVERED`, `FAILED`, `REJECTED`
 - **SmsType**: `OTP`, `TRANSACTIONAL`, `PROMOTIONAL`
 
@@ -383,7 +389,7 @@ CANCELLED  CANCELLED   CANCELLED    CANCELLED    CANCELLED
 - **StoreManager** — id, name, phone (unique), pinHash, storeId, isActive, store (relation, onDelete: Cascade)
 - **PaymentLedger** — id, storeId, transactionId (unique, TXN-YYYYMMDD-NNNN), date, amount, paymentMethod, referenceNotes?, store (relation, onDelete: Cascade)
 - **StoreInventory** — id, storeId, productId, stock (unique: [storeId, productId])
-- **DeliveryPerson** — id, name, phone (unique), pinHash, homeStoreId, status (FREE/BUSY), lat?, lng?, isActive, lastLocationAt?, assignments[]
+- **DeliveryPerson** — id, name, phone (unique), pinHash, homeStoreId, status (DUTY_OFF/FREE/BUSY), lat?, lng?, isActive, lastLocationAt?, assignments[]
 - **OrderAssignment** — id, orderId, deliveryPersonId, assignedAt, completedAt, result
 - **Order** — id, userId, orderNumber (UD-YYYYMMDD-XXXX), status, paymentMethod, paymentStatus, deliveryAddress (JSON snapshot), subtotal, deliveryFee, tax, total, idempotencyKey (unique), razorpayOrderId (unique), razorpayPaymentId, razorpaySignature, paidAt, deliveredAt, items[], assignments[], fulfillingStoreId?
   - Indexes: [userId+createdAt], orderNumber, razorpayOrderId, status

@@ -102,7 +102,7 @@ export class RiderRedisService {
     if (!this.db1) return;
     try {
       await this.db1.del(`avail:order:${orderId}`);
-    } catch {}
+    } catch { }
   }
 
   // ── Distributed lock (SET NX) ──
@@ -132,7 +132,7 @@ export class RiderRedisService {
       if (holder === riderId) {
         await this.db1.del(`lock:order:${orderId}`);
       }
-    } catch {}
+    } catch { }
   }
 
   // ── Idempotency ──
@@ -153,7 +153,7 @@ export class RiderRedisService {
     if (!this.db1) return;
     try {
       await this.db1.set(`idempotent:claim:${orderId}:${riderId}`, '1', { ex: 300 });
-    } catch {}
+    } catch { }
   }
 
   // ═══════════════════════════════════════════════════════════════
@@ -165,7 +165,15 @@ export class RiderRedisService {
     if (!this.db2) return;
     try {
       await this.db2.set(`rider:online:${riderId}`, '1', { ex: ttlSeconds });
-    } catch {}
+    } catch { }
+  }
+
+  /** Mark a rider as offline manually. */
+  async setRiderOffline(riderId: string): Promise<void> {
+    if (!this.db2) return;
+    try {
+      await this.db2.del(`rider:online:${riderId}`);
+    } catch { }
   }
 
   /** Check if a rider is currently online. */
@@ -188,7 +196,7 @@ export class RiderRedisService {
         JSON.stringify({ lat, lng, updatedAt: new Date().toISOString() }),
         { ex: 300 },
       );
-    } catch {}
+    } catch { }
   }
 
   /** Get a single rider's cached location. */
@@ -230,7 +238,7 @@ export class RiderRedisService {
     try {
       await (this.db2.sadd as any)(`rider:eligible:${orderId}`, ...riderIds);
       await this.db2.expire(`rider:eligible:${orderId}`, 600); // 10 min TTL
-    } catch {}
+    } catch { }
   }
 
   /** Get all riders who were notified about an order. */
@@ -248,6 +256,6 @@ export class RiderRedisService {
     if (!this.db2) return;
     try {
       await this.db2.del(`rider:eligible:${orderId}`);
-    } catch {}
+    } catch { }
   }
 }

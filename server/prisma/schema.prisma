@@ -37,6 +37,7 @@ enum PaymentStatus {
 }
 
 enum DeliveryPersonStatus {
+  DUTY_OFF
   FREE
   BUSY
 }
@@ -192,7 +193,7 @@ model DeliveryPerson {
   pinHash        String
   homeStoreId    String
   homeStore      Store                @relation(fields: [homeStoreId], references: [id])
-  status         DeliveryPersonStatus @default(FREE)
+  status         DeliveryPersonStatus @default(DUTY_OFF)
   lat            Float?
   lng            Float?
   isActive       Boolean              @default(true)

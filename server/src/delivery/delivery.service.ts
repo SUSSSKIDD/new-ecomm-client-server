@@ -54,7 +54,7 @@ export class DeliveryService {
                     pinHash,
                     homeStoreId: dto.homeStoreId,
                     isActive: true,
-                    status: 'FREE',
+                    status: 'DUTY_OFF',
                 },
             });
             this.logger.log(
@@ -171,14 +171,38 @@ export class DeliveryService {
         return { lat, lng, updated: true };
     }
 
-    /** Set delivery person status (FREE/BUSY). */
+    /** Set delivery person status (DUTY_OFF/FREE). */
     async setStatus(personId: string, status: DeliveryPersonStatus) {
-        const person = await this.prisma.deliveryPerson.update({
+        if (status === DeliveryPersonStatus.BUSY) {
+            throw new BadRequestException('Cannot manually set BUSY');
+        }
+
+        const person = await this.prisma.deliveryPerson.findUnique({
+            where: { id: personId },
+        });
+
+        if (!person) {
+            throw new NotFoundException('Delivery person not found');
+        }
+
+        if (person.status === DeliveryPersonStatus.BUSY && status === DeliveryPersonStatus.DUTY_OFF) {
+            throw new BadRequestException('Complete current delivery first');
+        }
+
+        const updated = await this.prisma.deliveryPerson.update({
             where: { id: personId },
             data: { status },
         });
-        this.logger.log(`Delivery person ${person.name} set to ${status}`);
-        return { status: person.status };
+
+        if (status === DeliveryPersonStatus.DUTY_OFF) {
+            await this.riderRedis.setRiderOffline(personId);
+        } else if (status === DeliveryPersonStatus.FREE && person.lat && person.lng) {
+            await this.riderRedis.setRiderOnline(personId);
+            await this.riderRedis.setRiderLocation(personId, person.lat, person.lng);
+        }
+
+        this.logger.log(`Delivery person ${updated.name} set to ${status}`);
+        return { status: updated.status };
     }
 
     /** Get assigned orders for a delivery person. */
@@ -211,10 +235,16 @@ export class DeliveryService {
             throw new BadRequestException('Assignment already completed');
         }
 
-        await this.prisma.orderAssignment.update({
-            where: { id: assignment.id },
-            data: { acceptedAt: new Date() },
-        });
+        await this.prisma.$transaction([
+            this.prisma.orderAssignment.update({
+                where: { id: assignment.id },
+                data: { acceptedAt: new Date() },
+            }),
+            this.prisma.deliveryPerson.update({
+                where: { id: personId },
+                data: { status: DeliveryPersonStatus.BUSY },
+            }),
+        ]);
 
         this.logger.log(`Assignment accepted for order ${orderId} by person ${personId}`);
         return { orderId, accepted: true };

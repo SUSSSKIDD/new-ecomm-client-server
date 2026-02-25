@@ -192,6 +192,7 @@ const DeliveryDashboard = () => {
     }, [token, api, showToast]);
 
     const handleStatusToggle = async (newStatus) => {
+        if (status === 'BUSY') return;
         const prevStatus = status;
         setStatusLoading(true);
         setStatus(newStatus); // Optimistic update
@@ -223,7 +224,7 @@ const DeliveryDashboard = () => {
                 try {
                     const res = await api('get', '/delivery/available-orders');
                     setAvailableOrders(res.data);
-                } catch {}
+                } catch { }
             }
         }
     };
@@ -327,8 +328,8 @@ const DeliveryDashboard = () => {
             {/* GPS Indicator */}
             <div className="max-w-lg mx-auto px-4 py-2">
                 <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium ${gpsActive
-                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                        : 'bg-yellow-50 text-yellow-700 border border-yellow-200'
+                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                    : 'bg-yellow-50 text-yellow-700 border border-yellow-200'
                     }`}>
                     <span className={`w-2 h-2 rounded-full ${gpsActive ? 'bg-emerald-500 animate-pulse' : 'bg-yellow-500'}`}></span>
                     {gpsActive ? 'GPS Active' : 'GPS Inactive'}
@@ -364,9 +365,11 @@ const DeliveryDashboard = () => {
                             </svg>
                             <p className="text-lg font-medium">No active deliveries</p>
                             <p className="text-sm mt-1">
-                                {status === 'FREE'
-                                    ? "You'll be notified when orders are available"
-                                    : "Set status to 'Available' to receive orders"}
+                                {status === 'BUSY'
+                                    ? "Delivery in progress"
+                                    : status === 'FREE'
+                                        ? "You'll be notified when orders are available"
+                                        : "Go online to start receiving orders"}
                             </p>
                         </div>
                     ) : (
