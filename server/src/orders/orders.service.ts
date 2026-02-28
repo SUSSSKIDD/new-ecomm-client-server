@@ -23,6 +23,7 @@ import {
 } from './interfaces/order-preview.interface';
 import { OrderStatus, PaymentMethod, PaymentStatus, Prisma } from '@prisma/client';
 import { randomBytes } from 'crypto';
+import { TTL } from '../common/redis/ttl.config.js';
 
 @Injectable()
 export class OrdersService {
@@ -238,7 +239,7 @@ export class OrdersService {
 
     // Cache fulfillment result for 5 minutes (reused by order creation)
     const fulfillmentCacheKey = `fulfillment:${userId}:${addressId}`;
-    await this.cache.set(fulfillmentCacheKey, fulfillment, 300);
+    await this.cache.set(fulfillmentCacheKey, fulfillment, TTL.FULFILLMENT);
 
     // Re-calculate totals based on available items only
     const availablePreviewItems: PreviewItem[] = fulfillment.availableItems.map(
@@ -510,7 +511,7 @@ export class OrdersService {
     }));
 
     const result = paginate(data, total, page, limit);
-    await this.cache.set(cacheKey, result, 300);
+    await this.cache.set(cacheKey, result, TTL.ORDER_LIST);
     return result;
   }
 

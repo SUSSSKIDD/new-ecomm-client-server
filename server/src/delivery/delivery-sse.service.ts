@@ -1,15 +1,13 @@
-import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
+import { Inject, Injectable, Logger, OnModuleDestroy, OnModuleInit, ServiceUnavailableException } from '@nestjs/common';
 import { Subject } from 'rxjs';
+import Redis from 'ioredis';
+import { REDIS_CACHE, REDIS_CACHE_SUB } from '../common/redis/redis.constants.js';
 
 export interface SSEMessage {
   type: string;
   data: any;
 }
 
-/**
- * NestJS @Sse() expects objects with { data: string } shape.
- * The browser `MessageEvent` constructor is NOT available in Node.js.
- */
 interface SseEvent {
   data: string;
 }
@@ -21,34 +19,67 @@ interface ConnectionEntry {
 }
 
 @Injectable()
-export class DeliverySseService implements OnModuleDestroy {
+export class DeliverySseService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(DeliverySseService.name);
   private readonly connections = new Map<string, ConnectionEntry>();
   private staleCheckInterval: ReturnType<typeof setInterval>;
 
-  /** Max idle time before a stale connection is swept (5 minutes). */
   private static readonly STALE_TIMEOUT_MS = 5 * 60 * 1000;
+  private static readonly MAX_CONNECTIONS = 500;
+  private static readonly CHANNEL = 'sse:delivery';
 
-  constructor() {
+  constructor(
+    @Inject(REDIS_CACHE) private readonly publisher: Redis | null,
+    @Inject(REDIS_CACHE_SUB) private readonly subscriber: Redis | null,
+  ) {}
+
+  onModuleInit() {
     // Sweep stale connections every 2 minutes
     this.staleCheckInterval = setInterval(() => {
       this.sweepStaleConnections();
     }, 2 * 60 * 1000);
+
+    // Subscribe to Redis Pub/Sub for cross-instance SSE delivery
+    if (this.subscriber) {
+      this.subscriber.subscribe(DeliverySseService.CHANNEL).catch((err) => {
+        this.logger.error(`Failed to subscribe to ${DeliverySseService.CHANNEL}: ${err.message}`);
+      });
+      this.subscriber.on('message', (channel, message) => {
+        if (channel !== DeliverySseService.CHANNEL) return;
+        try {
+          const { targetIds, payload } = JSON.parse(message);
+          for (const id of targetIds) {
+            const entry = this.connections.get(id);
+            if (entry) {
+              entry.subject.next({ data: payload });
+              entry.lastActivity = Date.now();
+            }
+          }
+        } catch (err) {
+          this.logger.error(`Pub/Sub message parse error: ${err.message}`);
+        }
+      });
+      this.logger.log('SSE Pub/Sub subscriber initialized');
+    }
   }
 
   onModuleDestroy() {
     clearInterval(this.staleCheckInterval);
+    if (this.subscriber) {
+      this.subscriber.unsubscribe(DeliverySseService.CHANNEL).catch(() => {});
+    }
     for (const [, entry] of this.connections) {
       entry.subject.complete();
     }
     this.connections.clear();
   }
 
-  /**
-   * Register a new SSE connection for a delivery person.
-   * Returns the Subject to pipe into the SSE response.
-   */
+  /** Register a new SSE connection for a delivery person. */
   register(deliveryPersonId: string): Subject<SseEvent> {
+    if (this.connections.size >= DeliverySseService.MAX_CONNECTIONS) {
+      throw new ServiceUnavailableException('SSE connection limit reached');
+    }
+
     // Close any existing connection
     this.unregister(deliveryPersonId);
 
@@ -73,19 +104,24 @@ export class DeliverySseService implements OnModuleDestroy {
     }
   }
 
-  /** Send an event to a specific delivery person. */
+  /** Send an event to a specific delivery person (local + pub/sub). */
   notify(deliveryPersonId: string, message: SSEMessage): void {
+    const payload = JSON.stringify(message);
+
+    // Local delivery
     const entry = this.connections.get(deliveryPersonId);
     if (entry) {
       try {
-        entry.subject.next({ data: JSON.stringify(message) });
+        entry.subject.next({ data: payload });
         entry.lastActivity = Date.now();
-        this.logger.log(`SSE event sent to ${deliveryPersonId}: ${message.type}`);
       } catch (err) {
         this.logger.error(`SSE notify failed for ${deliveryPersonId}: ${err.message}`);
         this.unregister(deliveryPersonId);
       }
     }
+
+    // Publish for other instances
+    this.publish([deliveryPersonId], payload);
   }
 
   /** Notify a delivery person about a new order assignment. */
@@ -107,18 +143,20 @@ export class DeliverySseService implements OnModuleDestroy {
     return this.connections.has(deliveryPersonId);
   }
 
-  /** Broadcast a new available order to multiple riders for competitive claiming. */
+  /** Broadcast a new available order to multiple riders. */
   broadcastAvailableOrder(riderIds: string[], snapshot: any): void {
     const message: SSEMessage = {
       type: 'NEW_AVAILABLE_ORDER',
       data: snapshot,
     };
+    const payload = JSON.stringify(message);
     let sent = 0;
+
     for (const riderId of riderIds) {
       const entry = this.connections.get(riderId);
       if (entry) {
         try {
-          entry.subject.next({ data: JSON.stringify(message) });
+          entry.subject.next({ data: payload });
           entry.lastActivity = Date.now();
           sent++;
         } catch (err) {
@@ -127,6 +165,10 @@ export class DeliverySseService implements OnModuleDestroy {
         }
       }
     }
+
+    // Publish for other instances
+    this.publish(riderIds, payload);
+
     this.logger.log(
       `Broadcast NEW_AVAILABLE_ORDER to ${sent}/${riderIds.length} connected riders`,
     );
@@ -138,11 +180,13 @@ export class DeliverySseService implements OnModuleDestroy {
       type: 'ORDER_CLAIMED',
       data: { orderId },
     };
+    const payload = JSON.stringify(message);
+
     for (const riderId of riderIds) {
       const entry = this.connections.get(riderId);
       if (entry) {
         try {
-          entry.subject.next({ data: JSON.stringify(message) });
+          entry.subject.next({ data: payload });
           entry.lastActivity = Date.now();
         } catch (err) {
           this.logger.error(`SSE claimed broadcast failed for rider ${riderId}: ${err.message}`);
@@ -150,9 +194,23 @@ export class DeliverySseService implements OnModuleDestroy {
         }
       }
     }
+
+    // Publish for other instances
+    this.publish(riderIds, payload);
+
     this.logger.log(
       `Broadcast ORDER_CLAIMED (${orderId}) to ${riderIds.length} riders`,
     );
+  }
+
+  /** Publish SSE event to Redis for cross-instance delivery. */
+  private publish(targetIds: string[], payload: string): void {
+    if (!this.publisher) return;
+    this.publisher
+      .publish(DeliverySseService.CHANNEL, JSON.stringify({ targetIds, payload }))
+      .catch((err) => {
+        this.logger.error(`Pub/Sub publish error: ${err.message}`);
+      });
   }
 
   /** Remove connections that have been idle beyond the stale timeout. */

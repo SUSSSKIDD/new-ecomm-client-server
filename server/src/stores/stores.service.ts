@@ -14,6 +14,7 @@ import {
   MAX_DELIVERY_RADIUS_KM,
 } from '../common/utils/geo.util';
 import { Prisma } from '@prisma/client';
+import { TTL } from '../common/redis/ttl.config.js';
 
 interface CachedStore {
   id: string;
@@ -31,7 +32,7 @@ export interface NearbyStore extends CachedStore {
 export class StoresService {
   private readonly logger = new Logger(StoresService.name);
   private static readonly STORES_CACHE_KEY = 'stores:all';
-  private static readonly STORES_CACHE_TTL = 3600; // 1 hour
+  private static readonly STORES_CACHE_TTL = TTL.STORES;
 
   constructor(
     private readonly prisma: PrismaService,

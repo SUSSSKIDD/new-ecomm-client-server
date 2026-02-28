@@ -29,10 +29,11 @@ const AdminLayout = () => {
         navItems.push({ name: 'Stores', path: '/admin/stores', icon: '🏪' });
         navItems.push({ name: 'Managers', path: '/admin/managers', icon: '👔' });
         navItems.push({ name: 'Delivery Guys', path: '/admin/delivery', icon: '🛵' });
+        navItems.push({ name: 'Parcels', path: '/admin/parcels', icon: '📬' });
     }
 
     return (
-        <div className="flex h-screen bg-gray-100 font-sans">
+        <div className="flex h-[100dvh] w-full bg-gray-100 font-sans overflow-hidden">
             {/* Sidebar */}
             <aside className="w-64 bg-white shadow-xl flex flex-col fixed inset-y-0 left-0 z-10">
                 <div className="p-6 border-b border-gray-100 bg-ud-primary text-white">
@@ -81,7 +82,7 @@ const AdminLayout = () => {
             </aside>
 
             {/* Main Content Area */}
-            <main className="flex-1 ml-64 overflow-auto bg-gray-50 min-h-screen">
+            <main className="flex-1 ml-64 overflow-y-auto bg-gray-50 min-h-0 relative">
                 <div className="max-w-7xl mx-auto p-8">
                     <Outlet />
                 </div>

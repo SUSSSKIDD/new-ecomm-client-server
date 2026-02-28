@@ -1,10 +1,12 @@
 import { RippleButton } from '../../components/ui/ripple-button';
 import { useCategory } from '../../context/CategoryContext';
+import { useNavigate } from 'react-router-dom';
 import ProductGrid from './ProductGrid';
 import { HOME_CATEGORIES } from '../../constants';
 
 const HomeCategoryList = () => {
     const { selectedCategory, setActiveSubCategory, activeSubCategory } = useCategory();
+    const navigate = useNavigate();
 
     const filteredData = selectedCategory === 'All'
         ? HOME_CATEGORIES
@@ -28,7 +30,7 @@ const HomeCategoryList = () => {
                         )}
                     </div>
 
-                    {section.items.length > 0 ? (
+                    {section.items.length > 0 && (
                         <>
                             <div className="flex overflow-x-auto pb-4 gap-4 no-scrollbar snap-x">
                                 {section.items.map((item, i) => (
@@ -56,17 +58,6 @@ const HomeCategoryList = () => {
                                 </div>
                             )}
                         </>
-                    ) : (
-                        // Special case for Pickup & Drop
-                        <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex items-center justify-between">
-                            <div>
-                                <h4 className="font-bold text-gray-800 mb-1">Send Packages Anywhere</h4>
-                                <p className="text-sm text-gray-500">{section.description}</p>
-                            </div>
-                            <RippleButton className="bg-ud-primary text-white px-4 py-2 rounded-lg text-sm font-bold shadow-lg shadow-blue-500/30 hover:bg-blue-800 transition-colors">
-                                Book Now
-                            </RippleButton>
-                        </div>
                     )}
                 </div>
             ))}

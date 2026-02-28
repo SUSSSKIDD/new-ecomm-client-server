@@ -147,14 +147,24 @@ const AddressForm = ({ onSubmit, onCancel, loading, initialData }) => {
                                     onChange={handleInputChange}
                                     className="w-full p-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-orange-400 transition-colors"
                                 />
-                                <input
-                                    required
-                                    name="recipientPhone"
-                                    placeholder="Phone Number"
-                                    value={formData.recipientPhone}
-                                    onChange={handleInputChange}
-                                    className="w-full p-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-orange-400 transition-colors"
-                                />
+                                <div className="relative group w-full">
+                                    <span className="absolute left-3 top-2.5 text-gray-500 font-medium">+91</span>
+                                    <input
+                                        required
+                                        name="recipientPhone"
+                                        type="tel"
+                                        placeholder="Phone Number"
+                                        value={formData.recipientPhone ? formData.recipientPhone.replace('+91', '') : ''}
+                                        onChange={(e) => {
+                                            const val = e.target.value.replace(/\D/g, '').slice(0, 10);
+                                            handleInputChange({ target: { name: 'recipientPhone', value: '+91' + val } });
+                                        }}
+                                        pattern="[0-9]{10}"
+                                        maxLength="10"
+                                        inputMode="numeric"
+                                        className="w-full pl-12 pr-4 p-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-orange-400 transition-colors"
+                                    />
+                                </div>
                             </div>
                         </div>
                     )}

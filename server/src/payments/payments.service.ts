@@ -261,7 +261,13 @@ export class PaymentsService {
       throw new ForbiddenException('Invalid webhook signature');
     }
 
-    const payload = JSON.parse(rawBody.toString());
+    let payload: any;
+    try {
+      payload = JSON.parse(rawBody.toString());
+    } catch {
+      this.logger.warn('Webhook: malformed JSON body');
+      return { status: 'invalid_payload' };
+    }
     const event = payload.event;
 
     this.logger.log(`Webhook received: ${event}`);

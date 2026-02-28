@@ -33,7 +33,7 @@
     "@nestjs/swagger": "^11.2.6",
     "@nestjs/throttler": "^6.5.0",
     "@prisma/adapter-pg": "^7.4.0",
-    "@prisma/client": "^7.4.0",
+    "@prisma/client": "^7.4.2",
     "@prisma/config": "^7.4.0",
     "@supabase/supabase-js": "^2.95.3",
     "@upstash/redis": "^1.36.2",

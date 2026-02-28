@@ -4,6 +4,8 @@ import { useCategory } from '../../context/CategoryContext';
 import { useAuth } from '../../context/AuthContext';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { api } from '../../lib/api';
+import AddressForm from './profile/AddressForm';
+import { useAddresses } from '../../hooks/useAddresses';
 const DELIVERY_FEE = 40;
 const FREE_DELIVERY_THRESHOLD = 500;
 const TAX_RATE = 0.05;
@@ -15,8 +17,9 @@ const parsePrice = (price) => {
 };
 
 const CartSidebar = () => {
-    const { isCartOpen, setIsCartOpen, cart, updateQuantity, removeFromCart, clearCart } = useCategory();
+    const { isCartOpen, setIsCartOpen, cart, updateQuantity, removeFromCart, clearCart, buyNowMode, setBuyNowMode } = useCategory();
     const { isAuthenticated, token, openLoginModal } = useAuth();
+    const { addAddress, loading: addressLoading } = useAddresses();
 
     // Flow: 'cart' | 'checkout' | 'success'
     const [step, setStep] = useState('cart');
@@ -29,18 +32,63 @@ const CartSidebar = () => {
     const [error, setError] = useState('');
     const paymentMethod = 'COD';
 
+    // Auto-resume checkout after login
+    const [pendingCheckout, setPendingCheckout] = useState(false);
+
+    const loadAddressesAndCheckout = useCallback(async () => {
+        try {
+            const res = await api(token).get('/users/addresses');
+            setAddresses(res.data);
+            setStep('checkout');
+            const defaultAddr = res.data.find((a) => a.lat) || res.data[0] || null;
+            if (defaultAddr) {
+                setSelectedAddress(defaultAddr);
+                setPreviewLoading(true);
+                try {
+                    const pRes = await api(token).post('/orders/preview', { addressId: defaultAddr.id });
+                    setPreview(pRes.data);
+                } catch (err) {
+                    setError(err.response?.data?.message || 'Failed to load preview');
+                } finally {
+                    setPreviewLoading(false);
+                }
+            }
+        } catch {
+            setError('Failed to load addresses.');
+        }
+    }, [token]);
+
     useEffect(() => {
         if (isCartOpen) {
-            setStep('cart');
             setError('');
             setOrderResult(null);
             setSelectedAddress(null);
             setPreview(null);
+            setPendingCheckout(false);
+
+            if (buyNowMode) {
+                setBuyNowMode(false);
+                if (!isAuthenticated) {
+                    openLoginModal();
+                    setStep('cart');
+                    return;
+                }
+                setStep('checkout');
+                loadAddressesAndCheckout();
+            } else {
+                setStep('cart');
+            }
         }
-    }, [isCartOpen]);
+    }, [isCartOpen, buyNowMode, isAuthenticated, openLoginModal, loadAddressesAndCheckout]);
 
-
-    const subTotal = cart.reduce(
+    // Check if we need to resume checkout after authentication
+    useEffect(() => {
+        if (isAuthenticated && pendingCheckout && isCartOpen) {
+            setPendingCheckout(false);
+            setStep('checkout');
+            loadAddressesAndCheckout();
+        }
+    }, [isAuthenticated, pendingCheckout, isCartOpen, loadAddressesAndCheckout]); const subTotal = cart.reduce(
         (total, item) => total + parsePrice(item.price) * item.quantity, 0,
     );
     const isFreeDelivery = subTotal >= FREE_DELIVERY_THRESHOLD;
@@ -52,17 +100,12 @@ const CartSidebar = () => {
 
     // Go to checkout: load addresses
     const handleProceedToCheckout = async () => {
-        if (!isAuthenticated) { openLoginModal(); return; }
-        try {
-            const res = await http.get('/users/addresses');
-            setAddresses(res.data);
-            // Auto-select first address with GPS or first address
-            const defaultAddr = res.data.find((a) => a.lat) || res.data[0] || null;
-            setStep('checkout');
-            if (defaultAddr) handleSelectAddress(defaultAddr);
-        } catch {
-            setError('Failed to load addresses. Please try again.');
+        if (!isAuthenticated) {
+            setPendingCheckout(true);
+            openLoginModal();
+            return;
         }
+        await loadAddressesAndCheckout();
     };
 
     // Select address and fetch preview
@@ -190,7 +233,7 @@ const CartSidebar = () => {
             const graceActive = graceSeconds > 0 && !isCancelled;
 
             return (
-                <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
+                <div className="flex-1 overflow-y-auto min-h-0 flex flex-col items-center justify-center p-6 text-center">
                     {isCancelled ? (
                         <>
                             <div className="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mb-6">
@@ -315,20 +358,63 @@ const CartSidebar = () => {
             );
         }
 
+        // ── ADD ADDRESS ──
+        if (step === 'add_address') {
+            return (
+                <div className="flex-1 overflow-y-auto min-h-0 p-4 bg-gray-50">
+                    <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-4 h-full">
+                        <AddressForm
+                            onSubmit={async (formData) => {
+                                const res = await addAddress(formData);
+                                if (res.success) {
+                                    setStep('checkout');
+                                    loadAddressesAndCheckout();
+                                } else {
+                                    alert(res.error || 'Failed to add address');
+                                }
+                            }}
+                            onCancel={() => setStep('checkout')}
+                            loading={addressLoading}
+                        />
+                    </div>
+                </div>
+            );
+        }
+
         // ── CHECKOUT (address + summary + payment — all in one) ──
         if (step === 'checkout') {
             const unavailable = preview?.fulfillment?.unavailableItems || [];
 
             return (
                 <>
-                    <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                    <div className="flex-1 overflow-y-auto min-h-0 p-4 space-y-4">
                         {/* ─ Address Selection ─ */}
                         <div>
-                            <p className="text-xs font-bold text-gray-500 uppercase mb-2">Delivery Address</p>
+                            <div className="flex items-center justify-between mb-2">
+                                <p className="text-xs font-bold text-gray-500 uppercase">Delivery Address</p>
+                                {addresses.length > 0 && (
+                                    <button
+                                        type="button"
+                                        onClick={() => setStep('add_address')}
+                                        className="text-xs font-bold text-ud-primary hover:underline"
+                                    >
+                                        + Add New
+                                    </button>
+                                )}
+                            </div>
                             {addresses.length === 0 ? (
-                                <div className="text-center py-4 text-gray-400 bg-gray-50 rounded-xl">
-                                    <p className="text-sm">No addresses saved</p>
-                                    <p className="text-xs mt-1">Add one from your profile</p>
+                                <div className="text-center py-6 px-4 bg-gray-50 rounded-xl border-2 border-dashed border-gray-200">
+                                    <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center shadow-sm mx-auto mb-3">
+                                        <svg className="w-6 h-6 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                                    </div>
+                                    <p className="text-sm font-medium text-gray-900">No addresses saved</p>
+                                    <p className="text-xs text-gray-500 mt-1 mb-4">Please add a delivery address to continue.</p>
+                                    <RippleButton
+                                        onClick={() => setStep('add_address')}
+                                        className="py-2.5 px-6 bg-ud-primary text-white text-sm font-bold rounded-lg hover:bg-emerald-600 transition-colors shadow-md shadow-emerald-500/20"
+                                    >
+                                        Add Address
+                                    </RippleButton>
                                 </div>
                             ) : (
                                 <div className="space-y-2">
@@ -338,8 +424,8 @@ const CartSidebar = () => {
                                             type="button"
                                             onClick={() => handleSelectAddress(addr)}
                                             className={`w-full text-left p-3 rounded-xl border-2 transition-all ${selectedAddress?.id === addr.id
-                                                    ? 'border-emerald-500 bg-emerald-50'
-                                                    : 'border-gray-100 bg-white hover:border-emerald-200'
+                                                ? 'border-emerald-500 bg-emerald-50'
+                                                : 'border-gray-100 bg-white hover:border-emerald-200'
                                                 }`}
                                         >
                                             <div className="flex items-center gap-2 mb-0.5">
@@ -478,7 +564,7 @@ const CartSidebar = () => {
 
         // ── CART VIEW ──
         return (
-            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+            <div className="flex-1 overflow-y-auto min-h-0 p-4 space-y-4">
                 {cart.length === 0 ? (
                     <div className="flex flex-col items-center justify-center h-full text-gray-500">
                         <svg className="w-16 h-16 mb-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -529,7 +615,7 @@ const CartSidebar = () => {
     if (!isCartOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-50 overflow-hidden">
+        <div className="fixed inset-0 z-[100] overflow-hidden">
             <div className="absolute inset-0 bg-black bg-opacity-50 transition-opacity" onClick={() => setIsCartOpen(false)} />
 
             <div className="absolute inset-y-0 right-0 w-full md:max-w-sm bg-white shadow-xl flex flex-col transform transition-transform duration-300 ease-in-out translate-x-0">

@@ -9,11 +9,12 @@ import { RedisCacheService } from '../common/services/redis-cache.service';
 import { Cart, CartItem } from './interfaces/cart.interface';
 import { AddToCartDto } from './dto/add-to-cart.dto';
 import { UpdateCartItemDto } from './dto/update-cart-item.dto';
+import { TTL } from '../common/redis/ttl.config.js';
 
 @Injectable()
 export class CartService {
   private readonly logger = new Logger(CartService.name);
-  private static readonly CART_TTL = 604800; // 7 days in seconds
+  private static readonly CART_TTL = TTL.CART; // 48 hours
   private static readonly CART_PREFIX = 'cart:';
 
   constructor(

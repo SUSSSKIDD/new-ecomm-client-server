@@ -7,7 +7,7 @@ import helmet from 'helmet';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
-    rawBody: true, // Required for Razorpay webhook signature verification
+    rawBody: true, // Required for Razorpay webhook @RawBody() decorator
   });
 
   app.use(helmet());

@@ -105,6 +105,27 @@ export const HOME_CATEGORIES = [
     }
 ];
 
+// Parcel Categories
+export const PARCEL_CATEGORIES = [
+    { value: 'DOCUMENTS', label: 'Documents' },
+    { value: 'ELECTRONICS', label: 'Electronics' },
+    { value: 'CLOTHING_ACCESSORIES', label: 'Clothing & Accessories' },
+    { value: 'FOOD_BEVERAGES', label: 'Food & Beverages' },
+    { value: 'MEDICINE_HEALTH', label: 'Medicine & Health' },
+    { value: 'BOOKS_STATIONERY', label: 'Books & Stationery' },
+    { value: 'HOME_KITCHEN', label: 'Home & Kitchen' },
+    { value: 'TOYS_GAMES', label: 'Toys & Games' },
+    { value: 'SPORTS_FITNESS', label: 'Sports & Fitness' },
+    { value: 'PET_SUPPLIES', label: 'Pet Supplies' },
+    { value: 'COSMETICS_PERSONAL_CARE', label: 'Cosmetics & Personal Care' },
+    { value: 'JEWELRY_VALUABLES', label: 'Jewelry & Valuables' },
+    { value: 'AUTO_PARTS', label: 'Auto Parts' },
+    { value: 'AGRICULTURAL_PRODUCTS', label: 'Agricultural Products' },
+    { value: 'INDUSTRIAL_SUPPLIES', label: 'Industrial Supplies' },
+    { value: 'FRAGILE_ITEMS', label: 'Fragile Items' },
+    { value: 'OTHERS', label: 'Others' },
+];
+
 // Product Grid Data
 export const CATEGORY_PRODUCTS_DATA = {
     "Vegetables & Fruits": [

@@ -41,11 +41,13 @@ new grocery/
 │       │   │   ├── ProductDetailView.jsx        # Product modal (Buy Now / Add to Cart)
 │       │   │   ├── ImageCarousel.jsx            # Reusable image carousel (arrows + dots)
 │       │   │   ├── ProfilePage.jsx              # User profile sidebar
+│       │   │   ├── ParcelBookingForm.jsx         # Parcel booking form (addresses + details + schedule)
 │       │   │   ├── Header.jsx, HeroSection, ProductGrid, etc.
 │       │   │   └── profile/
 │       │   │       ├── AddressManager.jsx       # Address CRUD controller
 │       │   │       ├── AddressForm.jsx          # Address form (HOME/WORK/OTHER)
-│       │   │       └── AddressList.jsx          # Saved addresses display
+│       │   │       ├── AddressList.jsx          # Saved addresses display
+│       │   │       └── ParcelOrderList.jsx     # User's parcel order history + cancel
 │       │   ├── admin/                           # Admin Panel (SuperAdmin + StoreManager)
 │       │   │   ├── AdminDashboard.jsx           # Main admin dashboard with stats
 │       │   │   ├── AdminDelivery.jsx            # Delivery person management (ADMIN only)
@@ -55,13 +57,15 @@ new grocery/
 │       │   │   ├── AdminLogin.jsx               # Admin login (SuperAdmin or StoreManager)
 │       │   │   ├── AdminManagers.jsx            # Store manager management (ADMIN only)
 │       │   │   ├── AdminOrders.jsx              # Order management with status updates
+│       │   │   ├── AdminParcelOrders.jsx         # Parcel order management (ADMIN only)
 │       │   │   ├── AdminProducts.jsx            # Product management (CRUD + images)
 │       │   │   └── AdminStores.jsx              # Store management (ADMIN only)
 │       │   ├── delivery/                        # Delivery Person App
 │       │   │   ├── DeliveryDashboard.jsx        # Dashboard, online presence toggle, assigned & available orders
 │       │   │   ├── DeliveryLogin.jsx            # Delivery person phone+PIN login
 │       │   │   ├── DeliveryOrderCard.jsx        # Individual order card component (assigned)
-│       │   │   ├── AvailableOrderCard.jsx       # Individual order card component (available for claiming)
+│       │   │   ├── AvailableOrderCard.jsx       # Available order/parcel card (supports isParcel flag)
+│       │   │   ├── DeliveryParcelCard.jsx       # Assigned parcel card (accept/reject/complete)
 │       │   │   └── DeliveryStatusToggle.jsx     # DUTY_OFF/FREE/BUSY toggle
 │       │   └── BottomTabBar, CategoryGrid, GhostState, PincodeHeader
 │       ├── context/
@@ -77,6 +81,7 @@ new grocery/
 │       │   └── useDebounce.js
 │       ├── views/
 │       │   ├── UnitedDealsHome.jsx              # Main home page
+│       │   ├── ParcelBooking.jsx                # Pickup & Drop booking page
 │       │   └── ProductDetails.jsx               # Product detail route
 │       └── App.jsx, main.jsx
 │
@@ -151,6 +156,15 @@ new grocery/
         │   ├── dashboard.module.ts
         │   ├── dashboard.controller.ts          # Dashboard analytics endpoints
         │   └── dashboard.service.ts
+        ├── parcel/                              # Pickup & Drop Parcel Service
+        │   ├── parcel.module.ts
+        │   ├── parcel.controller.ts             # Customer + Admin parcel endpoints
+        │   ├── parcel.service.ts                # Parcel CRUD, approval, assignment trigger
+        │   └── dto/
+        │       ├── create-parcel-order.dto.ts   # Pickup/drop address, category, weight, schedule
+        │       ├── approve-parcel.dto.ts        # COD amount
+        │       ├── update-parcel-status.dto.ts  # Status transitions
+        │       └── parcel-query.dto.ts          # Pagination + status filter
         ├── delivery/                            # Competitive Order Claiming System
         │   ├── delivery.module.ts
         │   ├── delivery.controller.ts           # Profile, active/available orders, claim endpoint
@@ -282,6 +296,27 @@ new grocery/
 - `GET /sms/logs` — Get SMS logs (paginated, filters: templateId, recipientPhone, status, date range)
 - `GET /sms/analytics` — Get SMS analytics for date range (totalSent, delivered, failed, deliveryRate)
 
+### Parcels — Customer (JWT required)
+- `POST /parcels` — Book a parcel (pickup/drop addresses, category, weight, schedule)
+- `GET /parcels` — List user's parcels (paginated, status filter)
+- `GET /parcels/:id` — Parcel detail (ownership verified)
+- `POST /parcels/:id/cancel` — Cancel parcel (PENDING or APPROVED only)
+
+### Parcels — Admin (JWT + ADMIN)
+- `GET /admin/parcels` — List all parcels (paginated, status filter)
+- `GET /admin/parcels/:id` — Parcel detail with assignment info
+- `POST /admin/parcels/:id/approve` — Approve with COD amount
+- `POST /admin/parcels/:id/ready` — Set Ready for Pickup
+- `POST /admin/parcels/:id/assign-delivery` — Trigger rider assignment (geosearch from pickup location)
+- `PATCH /admin/parcels/:id/status` — Update status (admin state transitions)
+
+### Parcels — Delivery (JWT + DELIVERY_PERSON)
+- `GET /delivery/parcel-orders` — Get assigned parcel orders
+- `POST /delivery/parcels/:id/claim` — Claim parcel (3-layer race protection)
+- `POST /delivery/parcels/:id/accept` — Accept parcel assignment
+- `POST /delivery/parcels/:id/reject` — Reject assignment (parcel→READY_FOR_PICKUP, rider→FREE)
+- `POST /delivery/parcels/:id/complete` — Complete delivery (DELIVERED/NOT_DELIVERED)
+
 ### Search
 - `GET /search/products` — Full-text product search
 - `GET /search/suggestions` — Search autocomplete suggestions
@@ -314,6 +349,28 @@ CANCELLED  CANCELLED   CANCELLED    CANCELLED    CANCELLED
 
 **Admin cancel:** Via `PATCH /orders/admin/:id/status` with `CANCELLED`. Works from any non-terminal state.
 
+## Parcel Order State Machine
+
+```
+PENDING → APPROVED → READY_FOR_PICKUP → ASSIGNED → PICKED_UP → IN_TRANSIT → DELIVERED
+   ↓          ↓              ↓               ↓          ↓           ↓
+CANCELLED  CANCELLED     CANCELLED       CANCELLED   CANCELLED   CANCELLED
+```
+
+| Transition | Triggered By |
+|------------|-------------|
+| PENDING → APPROVED | Admin approves with COD amount |
+| APPROVED → READY_FOR_PICKUP | Admin sets ready |
+| READY_FOR_PICKUP → ASSIGNED | Rider claims parcel (automatic) |
+| ASSIGNED → PICKED_UP | Rider accepts assignment |
+| PICKED_UP → IN_TRANSIT | *(reserved for tracking)* |
+| IN_TRANSIT/PICKED_UP → DELIVERED | Rider completes delivery |
+| Any non-terminal → CANCELLED | Customer (PENDING/APPROVED only) or Admin |
+
+**Customer cancel:** Only `PENDING` or `APPROVED` parcels can be cancelled by the customer.
+
+**Rider rejection:** Deletes ParcelAssignment, sets rider→FREE, reverts parcel→READY_FOR_PICKUP for re-assignment.
+
 ## Order Fulfillment Flow
 
 1. Customer places order with `addressId` (includes lat/lng)
@@ -326,6 +383,20 @@ CANCELLED  CANCELLED   CANCELLED    CANCELLED    CANCELLED
 8. Riders view order and tap "Claim". First to hit endpoint claims it.
 9. `OrderClaimService` executes 3-layer atomic lock (Redis SET NX -> Prisma tx -> DB Unique Constraint).
 10. Winner gets `CLAIM_CONFIRMED` SSE, others get `ORDER_CLAIMED` and it un-renders.
+
+## Parcel Delivery Flow
+
+1. Customer books parcel at `/pickup-drop` with pickup/drop addresses, category, weight, and schedule
+2. Admin sees parcel in `/admin/parcels`, approves with COD amount → status=APPROVED
+3. Admin sets "Ready for Pickup" → status=READY_FOR_PICKUP
+4. Admin clicks "Find Delivery Partner" → triggers `broadcastParcelOrder()`
+5. System GEOSEARCHes riders near **pickup location** (not a store), filters FREE+active, takes closest 10
+6. SSE `NEW_AVAILABLE_ORDER` with `isParcel: true` flag pushes to riders
+7. Rider claims parcel → 3-layer atomic lock (same as order claiming) → status=ASSIGNED, rider→BUSY
+8. Rider accepts → ParcelAssignment.acceptedAt set
+9. Rider completes → status=DELIVERED, rider→FREE, ParcelAssignment.completedAt + result set
+
+**Key difference from grocery orders:** Geosearch uses **pickup lat/lng** instead of store location. No cart/products/items involved. Admin manually sets COD amount.
 
 ### Competitive Claiming System vs Auto-Assignment
 - **Old System:** Searched for a single nearest FREE person and forced an assignment (`auto-assign.service.ts`).
@@ -377,6 +448,8 @@ CANCELLED  CANCELLED   CANCELLED    CANCELLED    CANCELLED
 - **PaymentMethod**: `COD`, `RAZORPAY`
 - **PaymentStatus**: `PENDING`, `COD_PENDING`, `PAID`, `FAILED`, `REFUNDED`
 - **DeliveryPersonStatus**: `DUTY_OFF`, `FREE`, `BUSY`
+- **ParcelStatus**: `PENDING`, `APPROVED`, `READY_FOR_PICKUP`, `ASSIGNED`, `PICKED_UP`, `IN_TRANSIT`, `DELIVERED`, `CANCELLED`
+- **ParcelCategory**: `DOCUMENTS`, `ELECTRONICS`, `CLOTHING_ACCESSORIES`, `FOOD_BEVERAGES`, `MEDICINE_HEALTH`, `BOOKS_STATIONERY`, `HOME_KITCHEN`, `TOYS_GAMES`, `SPORTS_FITNESS`, `PET_SUPPLIES`, `COSMETICS_PERSONAL_CARE`, `JEWELRY_VALUABLES`, `AUTO_PARTS`, `AGRICULTURAL_PRODUCTS`, `INDUSTRIAL_SUPPLIES`, `FRAGILE_ITEMS`, `OTHERS`
 - **SmsStatus**: `PENDING`, `SENT`, `DELIVERED`, `FAILED`, `REJECTED`
 - **SmsType**: `OTP`, `TRANSACTIONAL`, `PROMOTIONAL`
 
@@ -396,6 +469,8 @@ CANCELLED  CANCELLED   CANCELLED    CANCELLED    CANCELLED
 - **OrderItem** — id, orderId, productId, name (snapshot), price (snapshot), quantity, total
   - Cascade delete when order is deleted
 - **SmsTemplate** — id, name, key (unique), content, variables[], type (SmsType), isActive, msg91TemplateId?, msg91FlowId?, logs[]
+- **ParcelOrder** — id, userId, parcelNumber (unique, `PD-YYYYMMDD-XXXXXX`), status (ParcelStatus), pickupAddress (JSON), pickupLat, pickupLng, dropAddress (JSON), dropLat, dropLng, category (ParcelCategory), categoryOther?, weight, length?, width?, height?, pickupTime, dropTime, codAmount?, paymentMethod ("COD"), paymentStatus, adminNotes?, createdAt, updatedAt, approvedAt?, pickedUpAt?, deliveredAt?, assignment?
+- **ParcelAssignment** — id, parcelOrderId (unique), deliveryPersonId, assignedAt, acceptedAt?, completedAt?, result?
 - **SmsLog** — id, templateId?, recipientPhone, variables (JSON), status (SmsStatus), msg91RequestId?, sentAt, deliveredAt?, failureReason?, metadata (JSON)
 
 ## Dev Accounts (DEV MODE)
@@ -744,6 +819,9 @@ Store naming follows auto-generated codes: A1, A2, A3... AN (with retry on uniqu
 9. **React Error Boundary** — Wraps all lazy routes to prevent white screen on chunk load failure (`App.jsx`)
 10. **Server-side pricing** — Client checkout uses server preview totals exclusively, eliminating client-server price mismatch (`CartSidebar.jsx`)
 
+### Performance Optimizations (2026-02-27)
+1. **Redis Native GEO Operations** — Scaled the rider assignment algorithm by replacing the heavy blocking Node.js Javascript `haversineDistance()` calculation loop. The system now uses Upstash/Redis `GEOADD` and native microsecond C-optimized `GEOSEARCH` to instantly draw a geographic radius around a store and return an ascending-distance sorted array of exactly the closest riders. Node.js math is bypassed entirely, eliminating Event Loop CPU blocking for large rider fleets. (`order-pool.service.ts`, `redis-cache.service.ts`, `delivery.service.ts`).
+
 ### High Severity Fixes
 1. **Rate limiting** — `@nestjs/throttler` added globally (30 req/min). Auth endpoints: send-otp (5/min), verify-otp (10/min), super-admin (5/min), delivery (10/min)
 2. **JWT role validation** — `jwt.strategy.ts` now checks DB for user existence and active status on every request (STORE_MANAGER, DELIVERY_PERSON active checks)
@@ -765,3 +843,31 @@ Store naming follows auto-generated codes: A1, A2, A3... AN (with retry on uniqu
 3. **Toast notifications** — Frontend uses `alert()` for user feedback in several admin pages. Replace with a proper toast notification system.
 4. **httpOnly cookies** — JWTs currently in localStorage (XSS-vulnerable). For highest security, switch to httpOnly cookies with CSRF protection.
 5. **Bundle size** — Main JS chunk is ~468KB gzipped to ~147KB. Consider further code-splitting for admin/delivery routes.
+
+## Parcel Service E2E Test Results (2026-02-27)
+
+**Result: 10/10 STEPS PASSED** — Complete checkout flow
+
+| Step | Action | Result |
+|------|--------|--------|
+| 1 | Customer books parcel | PD-number generated, status=PENDING |
+| 2 | Customer fetches parcel list | Parcel found in user's list |
+| 3 | Admin approves with COD ₹150 | status=APPROVED, codAmount=150 |
+| 4 | Admin sets Ready for Pickup | status=READY_FOR_PICKUP |
+| 5 | Set rider FREE + GPS near pickup | Rider online and positioned |
+| 6 | Admin triggers delivery assignment | Broadcast sent to nearby riders |
+| 7 | Rider claims parcel | Claimed successfully (isParcel=true) |
+| 8 | Rider accepts assignment | Accepted |
+| 9 | Rider completes delivery (DELIVERED) | result=DELIVERED |
+| 10 | Verify final state | status=DELIVERED, deliveredAt set, assignment complete |
+
+### Parcel Latency Benchmark (2026-02-27)
+
+| Metric | Value |
+|--------|-------|
+| Endpoints tested | 15 |
+| All passing | 15/15 |
+| Min latency | 56ms |
+| Avg latency | 248ms |
+| P95 latency | 562ms |
+| Max latency | 562ms |

@@ -23,6 +23,37 @@ enum OrderStatus {
   CANCELLED
 }
 
+enum ParcelStatus {
+  PENDING
+  APPROVED
+  READY_FOR_PICKUP
+  ASSIGNED
+  PICKED_UP
+  IN_TRANSIT
+  DELIVERED
+  CANCELLED
+}
+
+enum ParcelCategory {
+  DOCUMENTS
+  ELECTRONICS
+  CLOTHING_ACCESSORIES
+  FOOD_BEVERAGES
+  MEDICINE_HEALTH
+  BOOKS_STATIONERY
+  HOME_KITCHEN
+  TOYS_GAMES
+  SPORTS_FITNESS
+  PET_SUPPLIES
+  COSMETICS_PERSONAL_CARE
+  JEWELRY_VALUABLES
+  AUTO_PARTS
+  AGRICULTURAL_PRODUCTS
+  INDUSTRIAL_SUPPLIES
+  FRAGILE_ITEMS
+  OTHERS
+}
+
 enum PaymentMethod {
   COD
   RAZORPAY
@@ -64,7 +95,8 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   addresses Address[]
-  orders    Order[]
+  orders        Order[]
+  parcelOrders  ParcelOrder[]
 }
 
 model Address {
@@ -201,7 +233,8 @@ model DeliveryPerson {
   createdAt      DateTime             @default(now())
   updatedAt      DateTime             @updatedAt
 
-  assignments OrderAssignment[]
+  assignments       OrderAssignment[]
+  parcelAssignments ParcelAssignment[]
 
   @@index([homeStoreId])
   @@index([status])
@@ -305,4 +338,56 @@ model OrderItem {
 
   @@index([orderId])
   @@index([storeId])
+}
+
+model ParcelOrder {
+  id              String           @id @default(uuid())
+  userId          String
+  user            User             @relation(fields: [userId], references: [id])
+  parcelNumber    String           @unique // PD-YYYYMMDD-XXXX
+  status          ParcelStatus     @default(PENDING)
+  pickupAddress   Json
+  pickupLat       Float
+  pickupLng       Float
+  dropAddress     Json
+  dropLat         Float
+  dropLng         Float
+  category        ParcelCategory
+  categoryOther   String?
+  weight          Float
+  length          Float?
+  width           Float?
+  height          Float?
+  pickupTime      DateTime
+  dropTime        DateTime
+  codAmount       Float?           // Set by admin
+  paymentMethod   PaymentMethod    @default(COD)
+  paymentStatus   PaymentStatus    @default(PENDING)
+  adminNotes      String?
+  assignment      ParcelAssignment?
+
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  approvedAt      DateTime?
+  pickedUpAt      DateTime?
+  deliveredAt     DateTime?
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([parcelNumber])
+  @@index([status])
+}
+
+model ParcelAssignment {
+  id               String         @id @default(uuid())
+  parcelOrderId    String         @unique
+  parcelOrder      ParcelOrder    @relation(fields: [parcelOrderId], references: [id])
+  deliveryPersonId String
+  deliveryPerson   DeliveryPerson @relation(fields: [deliveryPersonId], references: [id])
+  assignedAt       DateTime       @default(now())
+  acceptedAt       DateTime?
+  completedAt      DateTime?
+  result           String?
+
+  @@index([deliveryPersonId])
+  @@index([parcelOrderId])
 }

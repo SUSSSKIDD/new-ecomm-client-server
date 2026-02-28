@@ -1,10 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
 import { PrismaService } from '../prisma.service';
 import { RiderRedisService } from './rider-redis.service';
 import { DeliverySseService } from './delivery-sse.service';
 import { RedisCacheService } from '../common/services/redis-cache.service';
-import { haversineDistance, MAX_DELIVERY_RADIUS_KM } from '../common/utils/geo.util';
+import { MAX_DELIVERY_RADIUS_KM } from '../common/utils/geo.util';
 import { DeliveryPersonStatus } from '@prisma/client';
 
 @Injectable()
@@ -17,6 +19,7 @@ export class OrderPoolService {
     private readonly riderRedis: RiderRedisService,
     private readonly sseService: DeliverySseService,
     private readonly cache: RedisCacheService,
+    @InjectQueue('delivery') private readonly deliveryQueue: Queue,
     config: ConfigService,
   ) {
     this.claimTimeoutMs =
@@ -65,72 +68,48 @@ export class OrderPoolService {
     });
     if (!store || store.lat == null || store.lng == null) return;
 
-    // Get all FREE active riders
-    const freePersons = await this.prisma.deliveryPerson.findMany({
-      where: { status: DeliveryPersonStatus.FREE, isActive: true },
-      take: 100,
-    });
+    // Use Redis Native GEOSEARCH to find nearest riders instantaneously
+    const nearestRiderIds = await this.cache.geoSearchRadius(
+      'riders_location',
+      store.lng,
+      store.lat,
+      MAX_DELIVERY_RADIUS_KM,
+      50,
+      'km',
+    );
 
-    if (freePersons.length === 0) {
-      this.logger.warn(`No free riders for order ${order.orderNumber}`);
-      // Still add to pool so it can be claimed later
+    if (nearestRiderIds.length === 0) {
+      this.logger.warn(`No riders within ${MAX_DELIVERY_RADIUS_KM}km for order ${order.orderNumber}`);
       await this.addToPoolWithSnapshot(orderId, order, store);
       return;
     }
 
-    // Batch-fetch cached locations from main Redis
-    const locationKeys = freePersons.map((p) => `dp:loc:${p.id}`);
-    const cachedLocations = await this.cache.mget<{ lat: number; lng: number }>(
-      ...locationKeys,
-    );
+    // Verify which of these nearest riders are actually FREE and active
+    const freePersons = await this.prisma.deliveryPerson.findMany({
+      where: {
+        id: { in: nearestRiderIds },
+        status: DeliveryPersonStatus.FREE,
+        isActive: true,
+      },
+      select: { id: true },
+    });
 
-    // Fallback: batch-fetch from riderdb2 for any that missed main cache
-    const missingCacheIds: string[] = [];
-    const missingIndices: number[] = [];
-    for (let i = 0; i < freePersons.length; i++) {
-      if (!cachedLocations[i]) {
-        missingCacheIds.push(freePersons[i].id);
-        missingIndices.push(i);
-      }
-    }
+    const freeSet = new Set(freePersons.map((p) => p.id));
 
-    if (missingCacheIds.length > 0) {
-      const fallbackLocations = await this.riderRedis.getRiderLocations(
-        missingCacheIds,
-      );
-      for (let j = 0; j < fallbackLocations.length; j++) {
-        const fallbackLoc = fallbackLocations[j];
-        if (fallbackLoc) {
-          cachedLocations[missingIndices[j]] = fallbackLoc;
-        }
-      }
-    }
-
-    // Filter riders within delivery radius
-    const eligibleRiderIds: string[] = [];
-    for (let i = 0; i < freePersons.length; i++) {
-      const p = freePersons[i];
-      const cached = cachedLocations[i];
-      const lat = cached?.lat ?? p.lat;
-      const lng = cached?.lng ?? p.lng;
-
-      if (lat == null || lng == null) continue;
-
-      const distance = haversineDistance(lat, lng, store.lat, store.lng);
-      if (distance <= MAX_DELIVERY_RADIUS_KM) {
-        eligibleRiderIds.push(p.id);
-      }
-    }
+    // Filter and slice the closest 10 free riders
+    const eligibleRiderIds = nearestRiderIds
+      .filter((id) => freeSet.has(id))
+      .slice(0, 10);
 
     // Store order snapshot + add to pool
     await this.addToPoolWithSnapshot(orderId, order, store);
 
     if (eligibleRiderIds.length === 0) {
-      this.logger.warn(`No riders within ${MAX_DELIVERY_RADIUS_KM}km for order ${order.orderNumber}`);
+      this.logger.warn(`No FREE riders within ${MAX_DELIVERY_RADIUS_KM}km for order ${order.orderNumber}`);
       return;
     }
 
-    // Track eligible riders in riderdb2
+    // Track eligible riders
     await this.riderRedis.addEligibleRiders(orderId, eligibleRiderIds);
 
     // Build snapshot for SSE broadcast
@@ -143,12 +122,16 @@ export class OrderPoolService {
       `Order ${order.orderNumber} broadcast to ${eligibleRiderIds.length} riders`,
     );
 
-    // Schedule claim timeout
-    setTimeout(() => {
-      this.handleClaimTimeout(orderId).catch((err) =>
-        this.logger.error(`Claim timeout handler error: ${err.message}`),
-      );
-    }, this.claimTimeoutMs);
+    // Schedule claim timeout via BullMQ (survives restarts)
+    await this.deliveryQueue.add(
+      'claim-timeout',
+      { orderId },
+      {
+        delay: this.claimTimeoutMs,
+        removeOnComplete: true,
+        removeOnFail: 100,
+      },
+    );
   }
 
   /**
@@ -188,21 +171,14 @@ export class OrderPoolService {
 
   /**
    * Get available orders for a rider (REST fallback for SSE reconnection).
+   * Uses MGET for single round-trip instead of N sequential calls.
    */
-  async getAvailableOrdersForRider(riderId: string): Promise<any[]> {
+  async getAvailableOrdersForRider(_riderId: string): Promise<any[]> {
     const orderIds = await this.riderRedis.getPoolOrderIds();
     if (orderIds.length === 0) return [];
 
-    // Fetch snapshots for all pool orders
-    const snapshots: any[] = [];
-    for (const id of orderIds) {
-      const snapshot = await this.riderRedis.getOrderSnapshot(id);
-      if (snapshot) {
-        snapshots.push(snapshot);
-      }
-    }
-
-    return snapshots;
+    const snapshots = await this.riderRedis.getOrderSnapshots(orderIds);
+    return snapshots.filter(Boolean);
   }
 
   // ── Private helpers ──
@@ -236,6 +212,105 @@ export class OrderPoolService {
       storeLat: store.lat,
       storeLng: store.lng,
       createdAt: order.createdAt,
+    };
+  }
+
+  /**
+   * Broadcast a PARCEL order to all nearby FREE riders.
+   */
+  async broadcastParcelOrder(parcelOrderId: string): Promise<void> {
+    const [parcel, existing] = await Promise.all([
+      this.prisma.parcelOrder.findUnique({
+        where: { id: parcelOrderId },
+      }),
+      this.prisma.parcelAssignment.findUnique({ where: { parcelOrderId: parcelOrderId } }),
+    ]);
+
+    if (!parcel || existing) return;
+
+    const lat = parcel.pickupLat;
+    const lng = parcel.pickupLng;
+
+    if (lat == null || lng == null) return;
+
+    // Use Redis Native GEOSEARCH to find nearest riders instantaneously
+    const nearestRiderIds = await this.cache.geoSearchRadius(
+      'riders_location',
+      lng,
+      lat,
+      MAX_DELIVERY_RADIUS_KM,
+      50,
+      'km',
+    );
+
+    let eligibleRiderIds: string[] = [];
+
+    if (nearestRiderIds.length > 0) {
+      // Verify which of these nearest riders are actually FREE and active
+      const freePersons = await this.prisma.deliveryPerson.findMany({
+        where: {
+          id: { in: nearestRiderIds },
+          status: DeliveryPersonStatus.FREE,
+          isActive: true,
+        },
+        select: { id: true },
+      });
+
+      const freeSet = new Set(freePersons.map((p) => p.id));
+      eligibleRiderIds = nearestRiderIds.filter((id) => freeSet.has(id)).slice(0, 10);
+    }
+
+    if (eligibleRiderIds.length === 0) {
+      this.logger.warn(`No riders within ${MAX_DELIVERY_RADIUS_KM}km for parcel ${parcel.parcelNumber}`);
+    }
+
+    // Build parcel snapshot with isParcel: true discriminator flag
+    const snapshot = this.buildParcelSnapshot(parcel);
+
+    await this.riderRedis.addToPool(parcelOrderId);
+    await this.riderRedis.setOrderSnapshot(parcelOrderId, snapshot);
+
+    if (eligibleRiderIds && eligibleRiderIds.length > 0) {
+      this.sseService.broadcastAvailableOrder(eligibleRiderIds, snapshot);
+      await this.riderRedis.addEligibleRiders(parcelOrderId, eligibleRiderIds);
+    }
+
+    // Queue claim timeout to handle unclaimed parcels
+    await this.deliveryQueue.add(
+      'claim-timeout',
+      { orderId: parcelOrderId, isParcel: true },
+      { delay: this.claimTimeoutMs },
+    );
+
+    this.logger.log(
+      `Parcel ${parcel.parcelNumber} stored in pool. Alerting ${eligibleRiderIds.length} riders.`,
+    );
+  }
+
+  /**
+   * Helper to build a parcel snapshot compatible with rider UI.
+   */
+  private buildParcelSnapshot(parcel: any) {
+    return {
+      orderId: parcel.id,
+      orderNumber: parcel.parcelNumber,
+      isParcel: true,
+
+      // Rider UI backwards compatibility mapping
+      total: parcel.codAmount ?? 0,
+      paymentMethod: parcel.paymentMethod,
+      storeName: 'Pickup Location',
+      storeLat: parcel.pickupLat,
+      storeLng: parcel.pickupLng,
+
+      // Parcel specific details
+      pickupAddress: parcel.pickupAddress,
+      deliveryAddress: parcel.dropAddress, // map drop to delivery for UI
+      dropLat: parcel.dropLat,
+      dropLng: parcel.dropLng,
+      category: parcel.category,
+      weight: parcel.weight,
+      scheduledTime: parcel.pickupTime,
     };
   }
 }

@@ -75,7 +75,7 @@ const LoginModal = ({ isOpen, onClose }) => {
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
             <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden animate-scale-in">
                 <div className="p-6">
                     <div className="flex justify-between items-center mb-6">
@@ -98,7 +98,10 @@ const LoginModal = ({ isOpen, onClose }) => {
                                         className="w-full pl-12 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-ud-primary focus:border-ud-primary outline-none transition-all font-medium text-lg tracking-wide group-hover:border-gray-300"
                                         placeholder="Enter mobile number"
                                         value={phone.replace('+91', '')}
-                                        onChange={(e) => setPhone(e.target.value)}
+                                        onChange={(e) => {
+                                            const val = e.target.value.replace(/\D/g, '').slice(0, 10);
+                                            setPhone('+91' + val);
+                                        }}
                                         pattern="[0-9]{10}"
                                         maxLength="10"
                                         inputMode="numeric"

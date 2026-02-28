@@ -46,14 +46,23 @@ export class Msg91Service {
       return { success: true, requestId: `dev_${Date.now()}` };
     }
 
-    const response = await fetch(`${this.baseUrl}/flow/`, {
-      method: 'POST',
-      headers: {
-        authkey: this.authKey,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(request),
-    });
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 5000);
+
+    let response: Response;
+    try {
+      response = await fetch(`${this.baseUrl}/flow/`, {
+        method: 'POST',
+        headers: {
+          authkey: this.authKey,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(request),
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timeoutId);
+    }
 
     if (!response.ok) {
       const error = await response.text();

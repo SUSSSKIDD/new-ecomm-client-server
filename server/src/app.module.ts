@@ -14,19 +14,20 @@ import { OrdersModule } from './orders/orders.module';
 import { PaymentsModule } from './payments/payments.module';
 import { StoresModule } from './stores/stores.module';
 import { DeliveryModule } from './delivery/delivery.module';
-
 import { DashboardModule } from './dashboard/dashboard.module';
 import { StoreManagerModule } from './store-manager/store-manager.module';
 import { LedgerModule } from './ledger/ledger.module';
 import { SmsModule } from './sms/sms.module';
+import { ParcelModule } from './parcel/parcel.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
-    ThrottlerModule.forRoot([{
-      ttl: 60000,
-      limit: 30,
-    }]),
+    ThrottlerModule.forRoot([
+      { name: 'short', ttl: 1000, limit: 5 },
+      { name: 'medium', ttl: 10000, limit: 30 },
+      { name: 'long', ttl: 60000, limit: 100 },
+    ]),
     CommonModule,
     AuthModule,
     UsersModule,
@@ -43,6 +44,7 @@ import { SmsModule } from './sms/sms.module';
     StoreManagerModule,
     LedgerModule,
     SmsModule,
+    ParcelModule,
   ],
   controllers: [AppController],
   providers: [AppService],

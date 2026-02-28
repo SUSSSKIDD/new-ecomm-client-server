@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import DeliveryOrderCard from './DeliveryOrderCard';
+import DeliveryParcelCard from './DeliveryParcelCard';
 import AvailableOrderCard from './AvailableOrderCard';
 import DeliveryStatusToggle from './DeliveryStatusToggle';
 
@@ -12,6 +13,7 @@ const DeliveryDashboard = () => {
     const navigate = useNavigate();
     const [person, setPerson] = useState(null);
     const [orders, setOrders] = useState([]);
+    const [parcelOrders, setParcelOrders] = useState([]);
     const [availableOrders, setAvailableOrders] = useState([]);
     const [status, setStatus] = useState('FREE');
     const [gpsActive, setGpsActive] = useState(false);
@@ -48,14 +50,16 @@ const DeliveryDashboard = () => {
 
         const init = async () => {
             try {
-                const [profileRes, ordersRes, availableRes] = await Promise.all([
+                const [profileRes, ordersRes, parcelRes, availableRes] = await Promise.all([
                     api('get', '/delivery/me'),
                     api('get', '/delivery/orders'),
+                    api('get', '/delivery/parcel-orders'),
                     api('get', '/delivery/available-orders'),
                 ]);
                 setPerson(profileRes.data);
                 setStatus(profileRes.data.status);
                 setOrders(ordersRes.data);
+                setParcelOrders(parcelRes.data);
                 setAvailableOrders(availableRes.data);
             } catch (err) {
                 console.error('Dashboard init failed:', err);
@@ -145,13 +149,14 @@ const DeliveryDashboard = () => {
                                 }
 
                                 if (event.type === 'NEW_AVAILABLE_ORDER') {
-                                    // Competitive: new order available for claiming
+                                    // Competitive: new order available for claiming (regular or parcel)
                                     setAvailableOrders((prev) => {
                                         // Avoid duplicates
                                         if (prev.some((o) => o.orderId === event.data.orderId)) return prev;
                                         return [...prev, event.data];
                                     });
-                                    showToast(`New order available: ${event.data.orderNumber}`);
+                                    const label = event.data.isParcel ? 'parcel' : 'order';
+                                    showToast(`New ${label} available: ${event.data.orderNumber}`);
                                 }
 
                                 if (event.type === 'ORDER_CLAIMED') {
@@ -162,11 +167,15 @@ const DeliveryDashboard = () => {
                                 }
 
                                 if (event.type === 'CLAIM_CONFIRMED') {
-                                    // We successfully claimed an order — refresh assigned orders
-                                    const res = await api('get', '/delivery/orders');
-                                    setOrders(res.data);
+                                    // We successfully claimed — refresh assigned orders + parcels
+                                    const [ordersRes, parcelRes] = await Promise.all([
+                                        api('get', '/delivery/orders'),
+                                        api('get', '/delivery/parcel-orders'),
+                                    ]);
+                                    setOrders(ordersRes.data);
+                                    setParcelOrders(parcelRes.data);
                                     setStatus('BUSY');
-                                    showToast(`Order ${event.data.orderNumber} claimed!`);
+                                    showToast(`${event.data.orderNumber} claimed!`);
                                 }
                             } catch {
                                 // Parse error — skip
@@ -207,19 +216,23 @@ const DeliveryDashboard = () => {
         }
     };
 
-    const handleClaim = async (orderId) => {
+    const handleClaim = async (orderId, isParcel) => {
         // Optimistic removal from available list
         setAvailableOrders((prev) => prev.filter((o) => o.orderId !== orderId));
 
+        const claimPath = isParcel
+            ? `/delivery/parcels/${orderId}/claim`
+            : `/delivery/orders/${orderId}/claim`;
+
         try {
-            await api('post', `/delivery/orders/${orderId}/claim`);
+            await api('post', claimPath);
             // CLAIM_CONFIRMED SSE event will refresh assigned orders
         } catch (err) {
             if (err.response?.status === 409) {
-                showToast('Order already claimed by another rider');
+                showToast('Already claimed by another rider');
             } else {
                 console.error('Claim failed:', err);
-                showToast('Failed to claim order');
+                showToast('Failed to claim');
                 // Re-fetch available orders to restore state
                 try {
                     const res = await api('get', '/delivery/available-orders');
@@ -267,6 +280,45 @@ const DeliveryDashboard = () => {
         }
     };
 
+    // Parcel-specific handlers
+    const handleParcelAccept = async (parcelOrderId) => {
+        try {
+            await api('post', `/delivery/parcels/${parcelOrderId}/accept`);
+            setParcelOrders((prev) =>
+                prev.map((a) =>
+                    a.parcelOrder?.id === parcelOrderId ? { ...a, acceptedAt: new Date().toISOString() } : a
+                ),
+            );
+            showToast('Parcel accepted!', 3000);
+        } catch (err) {
+            console.error('Parcel accept failed:', err);
+            showToast('Failed to accept parcel', 3000);
+        }
+    };
+
+    const handleParcelReject = async (parcelOrderId) => {
+        try {
+            await api('post', `/delivery/parcels/${parcelOrderId}/reject`);
+            setParcelOrders((prev) => prev.filter((a) => a.parcelOrder?.id !== parcelOrderId));
+            setStatus('FREE');
+            showToast('Parcel rejected — reassigning to another delivery partner');
+        } catch (err) {
+            console.error('Parcel reject failed:', err);
+            showToast('Failed to reject parcel', 3000);
+        }
+    };
+
+    const handleParcelComplete = async (parcelOrderId, result) => {
+        try {
+            await api('post', `/delivery/parcels/${parcelOrderId}/complete`, { result });
+            setParcelOrders((prev) => prev.filter((a) => a.parcelOrder?.id !== parcelOrderId));
+            setStatus('FREE');
+            showToast(`Parcel marked as ${result}`, 3000);
+        } catch (err) {
+            console.error('Complete parcel delivery failed:', err);
+        }
+    };
+
     const handleLogout = () => {
         localStorage.removeItem('delivery_token');
         localStorage.removeItem('delivery_person');
@@ -281,14 +333,16 @@ const DeliveryDashboard = () => {
 
     if (loading) {
         return (
-            <div className="min-h-screen flex items-center justify-center bg-gray-50">
+            <div className="h-[100dvh] flex items-center justify-center bg-gray-50 w-full overflow-hidden">
                 <div className="w-10 h-10 border-4 border-emerald-200 border-t-emerald-600 rounded-full animate-spin"></div>
             </div>
         );
     }
 
+    const totalAssigned = orders.length + parcelOrders.length;
+
     return (
-        <div className="min-h-screen bg-gray-50">
+        <div className="h-[100dvh] w-full bg-gray-50 flex flex-col overflow-hidden overscroll-none">
             {/* Toast */}
             {toast && (
                 <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-emerald-600 text-white px-6 py-3 rounded-xl shadow-lg shadow-emerald-500/30 text-sm font-medium animate-bounce">
@@ -336,7 +390,7 @@ const DeliveryDashboard = () => {
                 </div>
             </div>
 
-            <main className="max-w-lg mx-auto px-4 py-4 space-y-6">
+            <main className="flex-1 w-full max-w-lg mx-auto px-4 py-4 space-y-6 overflow-y-auto min-h-0">
                 {/* Available Orders (Competitive Claiming) */}
                 {availableOrders.length > 0 && (
                     <section>
@@ -356,9 +410,9 @@ const DeliveryDashboard = () => {
                     </section>
                 )}
 
-                {/* Assigned Orders */}
+                {/* Assigned Orders + Parcels */}
                 <section>
-                    {orders.length === 0 && availableOrders.length === 0 ? (
+                    {totalAssigned === 0 && availableOrders.length === 0 ? (
                         <div className="flex flex-col items-center justify-center py-20 text-gray-400">
                             <svg className="w-16 h-16 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
@@ -374,9 +428,9 @@ const DeliveryDashboard = () => {
                         </div>
                     ) : (
                         <>
-                            {orders.length > 0 && (
+                            {totalAssigned > 0 && (
                                 <h2 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-3">
-                                    My Deliveries ({orders.length})
+                                    My Deliveries ({totalAssigned})
                                 </h2>
                             )}
                             <div className="space-y-4">
@@ -387,6 +441,15 @@ const DeliveryDashboard = () => {
                                         onAccept={handleAccept}
                                         onReject={handleReject}
                                         onComplete={handleComplete}
+                                    />
+                                ))}
+                                {parcelOrders.map((assignment) => (
+                                    <DeliveryParcelCard
+                                        key={assignment.id}
+                                        assignment={assignment}
+                                        onAccept={handleParcelAccept}
+                                        onReject={handleParcelReject}
+                                        onComplete={handleParcelComplete}
                                     />
                                 ))}
                             </div>

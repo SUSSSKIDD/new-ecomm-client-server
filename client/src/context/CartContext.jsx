@@ -17,6 +17,7 @@ export const CartProvider = ({ children }) => {
         }
     });
     const [isCartOpen, setIsCartOpen] = useState(false);
+    const [buyNowMode, setBuyNowMode] = useState(false);
     const [toastMessage, setToastMessage] = useState(null);
     const toastTimerRef = useRef(null);
 
@@ -44,7 +45,7 @@ export const CartProvider = ({ children }) => {
     useEffect(() => {
         if (!isAuthenticated || !token) return;
         clientApi().get('/cart')
-            .then((res) => {
+            .then(async (res) => {
                 const serverItems = (res.data?.items || []).map((item) => ({
                     id: item.productId,
                     name: item.name,
@@ -53,12 +54,29 @@ export const CartProvider = ({ children }) => {
                     quantity: item.quantity,
                     category: item.category || null,
                 }));
-                if (serverItems.length > 0) {
+
+                let currentLocalCart = [];
+                try {
+                    const saved = localStorage.getItem('cart');
+                    if (saved) currentLocalCart = JSON.parse(saved);
+                } catch { }
+
+                // Sync local cart to server if server is empty
+                if (serverItems.length === 0 && currentLocalCart.length > 0) {
+                    for (const item of currentLocalCart) {
+                        try {
+                            await clientApi().post('/cart/items', { productId: item.id, quantity: item.quantity });
+                        } catch (err) {
+                            console.error('Failed to sync item', item.id, err);
+                        }
+                    }
+                } else if (serverItems.length > 0) {
+                    // Server has items, overwrite local
                     setCart(serverItems);
                 }
             })
             .catch(() => { /* ignore — cart will sync on next add */ });
-    }, [isAuthenticated, token]);
+    }, [isAuthenticated, token, clientApi]);
 
     const addToCart = (product, category) => {
         const itemCategory = category || product.category;
@@ -77,7 +95,7 @@ export const CartProvider = ({ children }) => {
                 const newQty = existingItem.quantity + 1;
                 showToast(`${product.name} Quantity Updated!`);
                 if (token) {
-                    clientApi().patch(`/cart/items/${product.id}`, { quantity: newQty }).catch(() => {});
+                    clientApi().patch(`/cart/items/${product.id}`, { quantity: newQty }).catch(() => { });
                 }
                 return prevCart.map(item =>
                     item.id === product.id ? { ...item, quantity: newQty } : item
@@ -86,7 +104,7 @@ export const CartProvider = ({ children }) => {
 
             showToast(`${product.name} Added!`);
             if (token) {
-                clientApi().post('/cart/items', { productId: product.id, quantity: 1 }).catch(() => {});
+                clientApi().post('/cart/items', { productId: product.id, quantity: 1 }).catch(() => { });
             }
             return [...prevCart, { ...product, quantity: 1, category: itemCategory }];
         });
@@ -97,7 +115,7 @@ export const CartProvider = ({ children }) => {
             if (item.id === productId) {
                 const newQuantity = Math.max(1, item.quantity + delta);
                 if (token) {
-                    clientApi().patch(`/cart/items/${productId}`, { quantity: newQuantity }).catch(() => {});
+                    clientApi().patch(`/cart/items/${productId}`, { quantity: newQuantity }).catch(() => { });
                 }
                 return { ...item, quantity: newQuantity };
             }
@@ -109,14 +127,14 @@ export const CartProvider = ({ children }) => {
         setCart(prevCart => prevCart.filter(item => item.id !== productId));
         showToast("Item Removed");
         if (token) {
-            clientApi().delete(`/cart/items/${productId}`).catch(() => {});
+            clientApi().delete(`/cart/items/${productId}`).catch(() => { });
         }
     };
 
     const clearCart = () => {
         setCart([]);
         if (token) {
-            clientApi().delete('/cart').catch(() => {});
+            clientApi().delete('/cart').catch(() => { });
         }
     };
 
@@ -124,6 +142,7 @@ export const CartProvider = ({ children }) => {
         <CartContext.Provider value={{
             cart, addToCart, updateQuantity, removeFromCart, clearCart,
             isCartOpen, setIsCartOpen,
+            buyNowMode, setBuyNowMode,
             toastMessage,
         }}>
             {children}

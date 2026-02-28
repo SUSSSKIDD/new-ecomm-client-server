@@ -15,6 +15,7 @@ import { CATEGORY_SUBCATEGORIES, StoreCategoryType, STORE_CATEGORY_LABELS } from
 
 import { RedisCacheService } from '../common/services/redis-cache.service';
 import { paginate } from '../common/utils/pagination.util';
+import { TTL } from '../common/redis/ttl.config.js';
 
 @Injectable()
 export class ProductsService {
@@ -90,7 +91,7 @@ export class ProductsService {
       this.logger.log(
         `Product created: ${product.name} (${product.id}) with ${imageUrls.length} images`,
       );
-      await this.cache.delPattern('products:*');
+      await this.cache.bumpVersion('products');
       return product;
     } catch (error) {
       if (uploadedUrls.length > 0) {
@@ -134,7 +135,8 @@ export class ProductsService {
       where.subCategory = { equals: subCategory, mode: 'insensitive' };
     }
 
-    const cacheKey = `products:q:${search ?? ''}|${category ?? ''}|${subCategory ?? ''}|${sortBy}|${sortOrder}|${page}|${limit}`;
+    const ver = await this.cache.getVersion('products');
+    const cacheKey = `products:v${ver}:q:${search ?? ''}|${category ?? ''}|${subCategory ?? ''}|${sortBy}|${sortOrder}|${page}|${limit}`;
     const cached = await this.cache.get(cacheKey);
     if (cached) return cached;
 
@@ -149,7 +151,7 @@ export class ProductsService {
     ]);
 
     const result = paginate(products, total, page, limit);
-    await this.cache.set(cacheKey, result, 120);
+    await this.cache.set(cacheKey, result, TTL.PRODUCT_LIST);
     return result;
   }
 
@@ -221,7 +223,7 @@ export class ProductsService {
     });
 
     this.logger.log(`Product updated: ${updated.name} (${id})`);
-    await this.cache.delPattern('products:*');
+    await this.cache.bumpVersion('products');
     return updated;
   }
 
@@ -278,7 +280,7 @@ export class ProductsService {
       });
 
       this.logger.log(`Product updated: ${updated.name} (${id}) with ${newImageUrls.length} new images`);
-      await this.cache.delPattern('products:*');
+      await this.cache.bumpVersion('products');
       return updated;
     } catch (error) {
       if (newImageUrls.length > 0) {
@@ -299,7 +301,7 @@ export class ProductsService {
     // Delete DB record first — if this fails, images remain intact
     await this.prisma.product.delete({ where: { id } });
     this.logger.log(`Product deleted: ${product.name} (${id})`);
-    await this.cache.delPattern('products:*');
+    await this.cache.bumpVersion('products');
 
     // Clean up images from storage (non-critical, best effort)
     if (product.images && product.images.length > 0) {
@@ -349,7 +351,7 @@ export class ProductsService {
       this.logger.log(
         `Added ${newUrls.length} images to product ${updated.name} (${id})`,
       );
-      await this.cache.delPattern('products:*');
+      await this.cache.bumpVersion('products');
       return updated;
     } catch (error) {
       // Clean up uploaded images if transaction failed
@@ -380,7 +382,7 @@ export class ProductsService {
     });
 
     this.logger.log(`Removed image from product ${product.name} (${id})`);
-    await this.cache.delPattern('products:*');
+    await this.cache.bumpVersion('products');
     return updated;
   }
 }

@@ -9,7 +9,7 @@ export class AutoAssignService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly orderPool: OrderPoolService,
-  ) {}
+  ) { }
 
   /**
    * Broadcast an order to all nearby FREE riders for competitive claiming.
@@ -44,6 +44,32 @@ export class AutoAssignService {
     for (const order of unassigned) {
       await this.orderPool.broadcastOrder(order.id).catch((err) =>
         this.logger.error(`broadcastOrder error for ${order.id}: ${err.message}`),
+      );
+    }
+  }
+
+  /**
+   * When a rider becomes FREE, broadcast all unassigned READY_FOR_PICKUP parcels.
+   */
+  async checkPendingParcelOrders(personId: string): Promise<void> {
+    const unassignedParcels = await this.prisma.parcelOrder.findMany({
+      where: {
+        status: 'READY_FOR_PICKUP',
+        assignment: null,
+      },
+      orderBy: { createdAt: 'asc' },
+      take: 10,
+    });
+
+    if (unassignedParcels.length === 0) return;
+
+    this.logger.log(
+      `Rider ${personId} went FREE — broadcasting ${unassignedParcels.length} pending parcels`,
+    );
+
+    for (const parcel of unassignedParcels) {
+      await this.orderPool.broadcastParcelOrder(parcel.id).catch((err) =>
+        this.logger.error(`broadcastParcelOrder error for ${parcel.id}: ${err.message}`),
       );
     }
   }

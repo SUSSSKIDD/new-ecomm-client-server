@@ -127,12 +127,17 @@ export class DeliveryController {
       dto.status,
     );
 
-    // If person sets FREE, broadcast pending orders to them
+    // If person sets FREE, broadcast pending orders and parcels to them
     if (dto.status === DeliveryPersonStatus.FREE) {
       this.autoAssignService
         .checkPendingOrders(req.user.sub)
         .catch((err) =>
           this.logger.error(`checkPendingOrders error: ${err.message}`),
+        );
+      this.autoAssignService
+        .checkPendingParcelOrders(req.user.sub)
+        .catch((err) =>
+          this.logger.error(`checkPendingParcelOrders error: ${err.message}`),
         );
     }
 
@@ -146,6 +151,15 @@ export class DeliveryController {
   @ApiOperation({ summary: 'List assigned orders' })
   getOrders(@Req() req: AuthenticatedRequest) {
     return this.deliveryService.getAssignedOrders(req.user.sub);
+  }
+
+  @Get('parcel-orders')
+  @ApiBearerAuth()
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles('DELIVERY_PERSON')
+  @ApiOperation({ summary: 'List assigned parcels' })
+  getAssignedParcelOrders(@Req() req: AuthenticatedRequest) {
+    return this.deliveryService.getAssignedParcelOrders(req.user.sub);
   }
 
   // ── Competitive Claiming ──────────────────────────────────────
@@ -219,10 +233,83 @@ export class DeliveryController {
       dto.result,
     );
 
-    // Person is now FREE — broadcast pending orders
+    // Person is now FREE — broadcast pending orders and parcels
     this.autoAssignService
       .checkPendingOrders(req.user.sub)
       .catch((err) => this.logger.error(`checkPendingOrders error: ${err.message}`));
+    this.autoAssignService
+      .checkPendingParcelOrders(req.user.sub)
+      .catch((err) => this.logger.error(`checkPendingParcelOrders error: ${err.message}`));
+
+    return response;
+  }
+
+  @Post('parcels/:id/claim')
+  @ApiBearerAuth()
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles('DELIVERY_PERSON')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Competitively claim an available parcel' })
+  claimParcelOrder(
+    @Req() req: AuthenticatedRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.orderClaimService.claimParcelOrder(req.user.sub, id);
+  }
+
+  @Post('parcels/:id/accept')
+  @ApiBearerAuth()
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles('DELIVERY_PERSON')
+  @ApiOperation({ summary: 'Accept a parcel assignment' })
+  acceptParcelAssignment(
+    @Req() req: AuthenticatedRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.deliveryService.acceptParcelAssignment(req.user.sub, id);
+  }
+
+  @Post('parcels/:id/reject')
+  @ApiBearerAuth()
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles('DELIVERY_PERSON')
+  @ApiOperation({ summary: 'Reject a parcel assignment' })
+  async rejectParcelAssignment(
+    @Req() req: AuthenticatedRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    const response = await this.deliveryService.rejectParcelAssignment(req.user.sub, id);
+
+    // Broadcast back to pool
+    this.orderPoolService.broadcastParcelOrder(id)
+      .catch(err => this.logger.error(`Re-broadcast parcel after reject error: ${err.message}`));
+
+    return response;
+  }
+
+  @Post('parcels/:id/complete')
+  @ApiBearerAuth()
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles('DELIVERY_PERSON')
+  @ApiOperation({ summary: 'Mark parcel as DELIVERED or NOT_DELIVERED' })
+  async completeParcelDelivery(
+    @Req() req: AuthenticatedRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: CompleteDeliveryDto,
+  ) {
+    const response = await this.deliveryService.completeParcelDelivery(
+      req.user.sub,
+      id,
+      dto.result,
+    );
+
+    // Person is now FREE — broadcast pending orders and parcels
+    this.autoAssignService
+      .checkPendingOrders(req.user.sub)
+      .catch((err) => this.logger.error(`checkPendingOrders error: ${err.message}`));
+    this.autoAssignService
+      .checkPendingParcelOrders(req.user.sub)
+      .catch((err) => this.logger.error(`checkPendingParcelOrders error: ${err.message}`));
 
     return response;
   }

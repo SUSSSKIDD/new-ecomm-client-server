@@ -8,9 +8,11 @@ import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma.service';
 import { SmsService } from '../sms/sms.service';
+import { RedisCacheService } from '../common/services/redis-cache.service';
 import { SendOtpDto, VerifyOtpDto, StoreManagerLoginDto } from './dto/auth.dto';
 import * as bcrypt from 'bcryptjs';
 import { Role } from '@prisma/client';
+import { TTL } from '../common/redis/ttl.config.js';
 
 @Injectable()
 export class AuthService {
@@ -23,6 +25,7 @@ export class AuthService {
     private jwtService: JwtService,
     private smsService: SmsService,
     private config: ConfigService,
+    private cache: RedisCacheService,
   ) {
     this.superAdminPhone = this.config.get<string>('SUPER_ADMIN_PHONE', '');
     const pin = this.config.get<string>('SUPER_ADMIN_PIN', '');
@@ -31,7 +34,13 @@ export class AuthService {
   }
 
   async sendOtp(dto: SendOtpDto) {
-    // TODO: Add rate limiting here using Redis
+    // Rate limit: max 5 OTP requests per phone per 15 minutes
+    const rlKey = `otp:rl:${dto.phone}`;
+    const count = await this.cache.incr(rlKey, TTL.OTP_RATE_LIMIT);
+    if (count > 5) {
+      throw new BadRequestException('Too many OTP requests. Try again later.');
+    }
+
     try {
       await this.smsService.sendOtp(dto.phone);
       return { message: 'OTP sent successfully' };

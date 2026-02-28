@@ -26,7 +26,7 @@ export class OrderClaimService {
     private readonly riderRedis: RiderRedisService,
     private readonly orderPool: OrderPoolService,
     private readonly sseService: DeliverySseService,
-  ) {}
+  ) { }
 
   /**
    * Atomic order claiming with 3-layer race condition protection:
@@ -167,6 +167,132 @@ export class OrderClaimService {
         throw new ConflictException('Order already claimed by another rider');
       }
 
+      throw err;
+    }
+  }
+
+  /**
+   * Atomic PARCEL claiming with identical 3-layer protection.
+   */
+  async claimParcelOrder(riderId: string, parcelOrderId: string): Promise<ClaimResult> {
+    const alreadyClaimed = await this.riderRedis.checkIdempotency(parcelOrderId, riderId);
+    if (alreadyClaimed) {
+      this.logger.log(`Idempotent retry: rider ${riderId} already claimed parcel ${parcelOrderId}`);
+      const parcel = await this.prisma.parcelOrder.findUnique({
+        where: { id: parcelOrderId },
+        select: { parcelNumber: true },
+      });
+      return {
+        success: true,
+        orderId: parcelOrderId,
+        orderNumber: parcel?.parcelNumber,
+        idempotent: true,
+      };
+    }
+
+    const lockAcquired = await this.riderRedis.acquireLock(parcelOrderId, riderId);
+    if (!lockAcquired) {
+      throw new ConflictException('Parcel already being claimed by another rider');
+    }
+
+    try {
+      const result = await this.prisma.$transaction(async (tx) => {
+        const parcel = await tx.parcelOrder.findUnique({
+          where: { id: parcelOrderId },
+          select: { id: true, parcelNumber: true, status: true },
+        });
+
+        if (!parcel) {
+          throw new NotFoundException('Parcel not found');
+        }
+
+        if (parcel.status !== 'READY_FOR_PICKUP') {
+          throw new ConflictException('Parcel is no longer available for claiming');
+        }
+
+        const existingAssignment = await tx.parcelAssignment.findUnique({
+          where: { parcelOrderId },
+        });
+
+        if (existingAssignment) {
+          throw new ConflictException('Parcel already assigned');
+        }
+
+        const rider = await tx.deliveryPerson.findUnique({
+          where: { id: riderId },
+        });
+
+        if (!rider || rider.status !== DeliveryPersonStatus.FREE) {
+          throw new ConflictException('You must be in FREE status to claim parcels');
+        }
+
+        await tx.parcelAssignment.create({
+          data: {
+            parcelOrderId,
+            deliveryPersonId: riderId,
+          },
+        });
+
+        await tx.parcelOrder.update({
+          where: { id: parcelOrderId },
+          data: { status: 'ASSIGNED' },
+        });
+
+        await tx.deliveryPerson.update({
+          where: { id: riderId },
+          data: { status: DeliveryPersonStatus.BUSY },
+        });
+
+        return { orderNumber: parcel.parcelNumber };
+      });
+
+      // Post-claim cleanup
+      let eligibleRiders: string[] = [];
+      try {
+        await this.orderPool.removeOrder(parcelOrderId);
+      } catch (err) {
+        this.logger.error(`REDIS CLEANUP FAILED: removeOrder(${parcelOrderId})`);
+      }
+
+      try {
+        eligibleRiders = await this.riderRedis.getEligibleRiders(parcelOrderId);
+      } catch (err) {
+        this.logger.error(`REDIS CLEANUP FAILED: getEligibleRiders(${parcelOrderId})`);
+      }
+
+      const otherRiders = eligibleRiders.filter((id) => id !== riderId);
+
+      this.sseService.notify(riderId, {
+        type: 'CLAIM_CONFIRMED',
+        data: { orderId: parcelOrderId, orderNumber: result.orderNumber },
+      });
+
+      if (otherRiders.length > 0) {
+        this.sseService.broadcastOrderClaimed(otherRiders, parcelOrderId);
+      }
+
+      try {
+        await this.riderRedis.setIdempotency(parcelOrderId, riderId);
+      } catch (err) { }
+
+      try {
+        await this.riderRedis.deleteEligibleRiders(parcelOrderId);
+      } catch (err) { }
+
+      this.logger.log(`Parcel ${result.orderNumber} claimed by rider ${riderId}`);
+
+      return {
+        success: true,
+        orderId: parcelOrderId,
+        orderNumber: result.orderNumber,
+      };
+    } catch (err) {
+      if (err?.code !== 'P2002') {
+        await this.riderRedis.releaseLock(parcelOrderId, riderId);
+      }
+      if (err?.code === 'P2002') {
+        throw new ConflictException('Parcel already claimed by another rider');
+      }
       throw err;
     }
   }

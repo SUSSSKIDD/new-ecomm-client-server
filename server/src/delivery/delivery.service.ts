@@ -10,12 +10,12 @@ import { RiderRedisService } from './rider-redis.service';
 import { CreateDeliveryPersonDto } from './dto/create-delivery-person.dto';
 import { DeliveryPersonStatus } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
+import { TTL } from '../common/redis/ttl.config.js';
 
 
 @Injectable()
 export class DeliveryService {
     private readonly logger = new Logger(DeliveryService.name);
-    private static readonly LOCATION_TTL = 300; // 5 min
 
     constructor(
         private readonly prisma: PrismaService,
@@ -153,7 +153,7 @@ export class DeliveryService {
 
     /** Update GPS location (cached in main Redis + riderdb2). */
     async updateLocation(personId: string, lat: number, lng: number) {
-        // Parallel: DB update + main Redis cache + riderdb2 location + riderdb2 presence
+        // Parallel: DB update + main Redis cache + riderdb2 location + riderdb2 presence + geo caching
         await Promise.all([
             this.prisma.deliveryPerson.update({
                 where: { id: personId },
@@ -162,8 +162,9 @@ export class DeliveryService {
             this.cache.set(
                 `dp:loc:${personId}`,
                 { lat, lng, updatedAt: new Date().toISOString() },
-                DeliveryService.LOCATION_TTL,
+                TTL.LOCATION,
             ),
+            this.cache.geoAdd('riders_location', lng, lat, personId),
             this.riderRedis.setRiderLocation(personId, lat, lng),
             this.riderRedis.setRiderOnline(personId),
         ]);
@@ -269,7 +270,7 @@ export class DeliveryService {
         const rejectedKey = `order:rejected:${orderId}`;
         const existing = await this.cache.get<string[]>(rejectedKey);
         const rejectedIds = existing ? [...existing, personId] : [personId];
-        await this.cache.set(rejectedKey, rejectedIds, 3600); // 1 hour TTL
+        await this.cache.set(rejectedKey, rejectedIds, TTL.REJECTED_RIDERS);
 
         await this.prisma.$transaction([
             this.prisma.orderAssignment.delete({ where: { id: assignment.id } }),
@@ -325,6 +326,122 @@ export class DeliveryService {
         );
 
         return { orderId, result, completed: true };
+    }
+
+    /** Get assigned parcels for a delivery person. */
+    async getAssignedParcelOrders(personId: string) {
+        return this.prisma.parcelAssignment.findMany({
+            where: { deliveryPersonId: personId, completedAt: null },
+            include: {
+                parcelOrder: true,
+            },
+            orderBy: { assignedAt: 'desc' },
+        });
+    }
+
+    /** Accept a parcel delivery assignment. */
+    async acceptParcelAssignment(personId: string, parcelOrderId: string) {
+        const assignment = await this.prisma.parcelAssignment.findFirst({
+            where: { parcelOrderId, deliveryPersonId: personId },
+        });
+        if (!assignment) {
+            throw new NotFoundException('Assignment not found');
+        }
+        if (assignment.acceptedAt) {
+            throw new BadRequestException('Assignment already accepted');
+        }
+        if (assignment.completedAt) {
+            throw new BadRequestException('Assignment already completed');
+        }
+
+        await this.prisma.$transaction([
+            this.prisma.parcelAssignment.update({
+                where: { id: assignment.id },
+                data: { acceptedAt: new Date() },
+            }),
+            this.prisma.deliveryPerson.update({
+                where: { id: personId },
+                data: { status: DeliveryPersonStatus.BUSY },
+            }),
+        ]);
+
+        this.logger.log(`Assignment accepted for parcel ${parcelOrderId} by person ${personId}`);
+        return { parcelOrderId, accepted: true };
+    }
+
+    /** Reject a parcel delivery assignment. */
+    async rejectParcelAssignment(personId: string, parcelOrderId: string) {
+        const assignment = await this.prisma.parcelAssignment.findFirst({
+            where: { parcelOrderId, deliveryPersonId: personId },
+        });
+        if (!assignment) {
+            throw new NotFoundException('Assignment not found');
+        }
+        if (assignment.acceptedAt) {
+            throw new BadRequestException('Cannot reject an already accepted assignment');
+        }
+        if (assignment.completedAt) {
+            throw new BadRequestException('Assignment already completed');
+        }
+
+        await this.prisma.$transaction([
+            this.prisma.parcelAssignment.delete({ where: { id: assignment.id } }),
+            this.prisma.deliveryPerson.update({
+                where: { id: personId },
+                data: { status: DeliveryPersonStatus.FREE },
+            }),
+            this.prisma.parcelOrder.update({
+                where: { id: parcelOrderId },
+                data: { status: 'READY_FOR_PICKUP' }
+            })
+        ]);
+
+        this.logger.log(`Assignment rejected for parcel ${parcelOrderId} by person ${personId}. Parcel is back to READY_FOR_PICKUP.`);
+        return { parcelOrderId, rejected: true };
+    }
+
+    /** Mark parcel delivery as complete (DELIVERED / NOT_DELIVERED). */
+    async completeParcelDelivery(personId: string, parcelOrderId: string, result: 'DELIVERED' | 'NOT_DELIVERED') {
+        if (result !== 'DELIVERED' && result !== 'NOT_DELIVERED') {
+            throw new BadRequestException('Result must be DELIVERED or NOT_DELIVERED');
+        }
+
+        const assignment = await this.prisma.parcelAssignment.findFirst({
+            where: { parcelOrderId, deliveryPersonId: personId },
+        });
+        if (!assignment) {
+            throw new NotFoundException('Assignment not found');
+        }
+        if (!assignment.acceptedAt) {
+            throw new BadRequestException('You must accept the assignment before completing delivery');
+        }
+        if (assignment.completedAt) {
+            throw new BadRequestException('Delivery already completed');
+        }
+
+        await this.prisma.$transaction([
+            this.prisma.parcelAssignment.update({
+                where: { id: assignment.id },
+                data: { completedAt: new Date(), result },
+            }),
+            this.prisma.parcelOrder.update({
+                where: { id: parcelOrderId },
+                data: {
+                    status: result === 'DELIVERED' ? 'DELIVERED' : 'READY_FOR_PICKUP',
+                    ...(result === 'DELIVERED' ? { deliveredAt: new Date() } : {}),
+                },
+            }),
+            this.prisma.deliveryPerson.update({
+                where: { id: personId },
+                data: { status: DeliveryPersonStatus.FREE },
+            }),
+        ]);
+
+        this.logger.log(
+            `Parcel Delivery ${result} for parcel ${parcelOrderId} by person ${personId}`,
+        );
+
+        return { parcelOrderId, result, completed: true };
     }
 
     /** Get cached location for a delivery person (from Redis). */

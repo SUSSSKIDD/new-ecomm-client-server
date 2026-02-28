@@ -13,6 +13,8 @@ import {
   ProductListItem,
 } from './dto/search-response.dto';
 import { Prisma } from '@prisma/client';
+import { createHash } from 'crypto';
+import { TTL } from '../common/redis/ttl.config.js';
 
 interface CursorPayload {
   score?: number;
@@ -82,7 +84,11 @@ export class SearchService {
     } = dto;
 
     const normalizedQ = (q ?? '').trim().toLowerCase();
-    const cacheKey = `search:${normalizedQ}|${category ?? ''}|${subCategory ?? ''}|${isGrocery ?? ''}|${inStock}|${sortBy}|${limit}|${cursor ?? ''}|${page ?? ''}`;
+    const paramHash = createHash('md5')
+      .update(`${normalizedQ}|${category ?? ''}|${subCategory ?? ''}|${isGrocery ?? ''}|${inStock}|${sortBy}|${limit}|${cursor ?? ''}|${page ?? ''}`)
+      .digest('hex')
+      .slice(0, 12);
+    const cacheKey = `search:${paramHash}`;
     const cached = await this.cache.get<SearchProductsResponse>(cacheKey);
     if (cached) return cached;
 
@@ -179,7 +185,7 @@ export class SearchService {
         cursor: { next: nextCursor },
         meta: { hasMore },
       };
-      await this.cache.set(cacheKey, response, 120);
+      await this.cache.set(cacheKey, response, TTL.SEARCH_RESULTS);
       return response;
     }
 
@@ -207,7 +213,7 @@ export class SearchService {
       meta: { hasMore: pageNum < totalPages, total, page: pageNum, totalPages },
     };
 
-    await this.cache.set(cacheKey, response, 120);
+    await this.cache.set(cacheKey, response, TTL.SEARCH_RESULTS);
     return response;
   }
 
@@ -250,7 +256,7 @@ export class SearchService {
       })),
     };
 
-    await this.cache.set(cacheKey, response, 60);
+    await this.cache.set(cacheKey, response, TTL.SUGGESTIONS);
     return response;
   }
 
@@ -274,7 +280,7 @@ export class SearchService {
       })),
     };
 
-    await this.cache.set(cacheKey, response, 300);
+    await this.cache.set(cacheKey, response, TTL.CATEGORIES);
     return response;
   }
 

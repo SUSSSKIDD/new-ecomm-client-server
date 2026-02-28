@@ -33,7 +33,7 @@ const DeliveryLogin = () => {
     };
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-emerald-50 via-white to-teal-50 flex items-center justify-center p-4">
+        <div className="h-[100dvh] w-full flex flex-col overflow-hidden overscroll-none bg-gradient-to-br from-emerald-50 via-white to-teal-50 flex items-center justify-center p-4">
             <div className="w-full max-w-sm">
                 {/* Logo */}
                 <div className="text-center mb-8">
