@@ -15,13 +15,17 @@ const DeliveryDashboard = () => {
     const [orders, setOrders] = useState([]);
     const [parcelOrders, setParcelOrders] = useState([]);
     const [availableOrders, setAvailableOrders] = useState([]);
+    const [history, setHistory] = useState([]);
+    const [activeTab, setActiveTab] = useState('active');
     const [status, setStatus] = useState('FREE');
     const [gpsActive, setGpsActive] = useState(false);
     const [loading, setLoading] = useState(true);
+    const [historyLoading, setHistoryLoading] = useState(false);
     const [statusLoading, setStatusLoading] = useState(false);
     const [toast, setToast] = useState(null);
     const watchIdRef = useRef(null);
     const sseAbortRef = useRef(null);
+    const historyFetchedRef = useRef(false);
 
     const [token] = useState(() => localStorage.getItem('delivery_token'));
 
@@ -36,10 +40,27 @@ const DeliveryDashboard = () => {
         [token],
     );
 
+    const toastTimerRef = useRef(null);
     const showToast = useCallback((msg, duration = 4000) => {
         setToast(msg);
-        setTimeout(() => setToast(null), duration);
+        if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+        toastTimerRef.current = setTimeout(() => setToast(null), duration);
     }, []);
+
+    // Fetch history when tab is first opened
+    const fetchHistory = useCallback(async () => {
+        if (historyFetchedRef.current) return;
+        setHistoryLoading(true);
+        try {
+            const res = await api('get', '/delivery/history');
+            setHistory(res.data);
+            historyFetchedRef.current = true;
+        } catch (err) {
+            console.error('Failed to fetch history:', err);
+        } finally {
+            setHistoryLoading(false);
+        }
+    }, [api]);
 
     // Redirect if not logged in
     useEffect(() => {
@@ -149,9 +170,8 @@ const DeliveryDashboard = () => {
                                 }
 
                                 if (event.type === 'NEW_AVAILABLE_ORDER') {
-                                    // Competitive: new order available for claiming (regular or parcel)
+                                    // New order available — show with accept/reject
                                     setAvailableOrders((prev) => {
-                                        // Avoid duplicates
                                         if (prev.some((o) => o.orderId === event.data.orderId)) return prev;
                                         return [...prev, event.data];
                                     });
@@ -160,7 +180,7 @@ const DeliveryDashboard = () => {
                                 }
 
                                 if (event.type === 'ORDER_CLAIMED') {
-                                    // Another rider claimed the order — remove from available
+                                    // Another rider claimed — remove from available
                                     setAvailableOrders((prev) =>
                                         prev.filter((o) => o.orderId !== event.data.orderId),
                                     );
@@ -175,7 +195,7 @@ const DeliveryDashboard = () => {
                                     setOrders(ordersRes.data);
                                     setParcelOrders(parcelRes.data);
                                     setStatus('BUSY');
-                                    showToast(`${event.data.orderNumber} claimed!`);
+                                    showToast(`${event.data.orderNumber} accepted!`);
                                 }
                             } catch {
                                 // Parse error — skip
@@ -216,7 +236,8 @@ const DeliveryDashboard = () => {
         }
     };
 
-    const handleClaim = async (orderId, isParcel) => {
+    // Accept broadcast order: claim + auto-accept in sequence
+    const handleAcceptBroadcast = async (orderId, isParcel) => {
         // Optimistic removal from available list
         setAvailableOrders((prev) => prev.filter((o) => o.orderId !== orderId));
 
@@ -224,15 +245,25 @@ const DeliveryDashboard = () => {
             ? `/delivery/parcels/${orderId}/claim`
             : `/delivery/orders/${orderId}/claim`;
 
+        const acceptPath = isParcel
+            ? `/delivery/parcels/${orderId}/accept`
+            : `/delivery/orders/${orderId}/accept`;
+
         try {
             await api('post', claimPath);
+            // Auto-accept immediately after claim
+            try {
+                await api('post', acceptPath);
+            } catch {
+                // Accept may fail if CLAIM_CONFIRMED SSE hasn't processed yet, but assignment is created
+            }
             // CLAIM_CONFIRMED SSE event will refresh assigned orders
         } catch (err) {
             if (err.response?.status === 409) {
                 showToast('Already claimed by another rider');
             } else {
-                console.error('Claim failed:', err);
-                showToast('Failed to claim');
+                console.error('Accept failed:', err);
+                showToast('Failed to accept');
                 // Re-fetch available orders to restore state
                 try {
                     const res = await api('get', '/delivery/available-orders');
@@ -240,6 +271,11 @@ const DeliveryDashboard = () => {
                 } catch { }
             }
         }
+    };
+
+    // Reject broadcast order: just dismiss from local available list
+    const handleRejectBroadcast = async (orderId) => {
+        setAvailableOrders((prev) => prev.filter((o) => o.orderId !== orderId));
     };
 
     const handleAccept = async (orderId) => {
@@ -269,14 +305,17 @@ const DeliveryDashboard = () => {
         }
     };
 
-    const handleComplete = async (orderId, result) => {
+    const handleComplete = async (orderId, result, reason) => {
         try {
-            await api('post', `/delivery/orders/${orderId}/complete`, { result });
+            await api('post', `/delivery/orders/${orderId}/complete`, { result, reason });
             setOrders((prev) => prev.filter((a) => a.order?.id !== orderId));
             setStatus('FREE');
             showToast(`Order marked as ${result}`, 3000);
+            // Invalidate history cache so it refreshes on next tab switch
+            historyFetchedRef.current = false;
         } catch (err) {
             console.error('Complete delivery failed:', err);
+            showToast(err.response?.data?.message || 'Failed to update', 3000);
         }
     };
 
@@ -308,14 +347,16 @@ const DeliveryDashboard = () => {
         }
     };
 
-    const handleParcelComplete = async (parcelOrderId, result) => {
+    const handleParcelComplete = async (parcelOrderId, result, reason) => {
         try {
-            await api('post', `/delivery/parcels/${parcelOrderId}/complete`, { result });
+            await api('post', `/delivery/parcels/${parcelOrderId}/complete`, { result, reason });
             setParcelOrders((prev) => prev.filter((a) => a.parcelOrder?.id !== parcelOrderId));
             setStatus('FREE');
             showToast(`Parcel marked as ${result}`, 3000);
+            historyFetchedRef.current = false;
         } catch (err) {
             console.error('Complete parcel delivery failed:', err);
+            showToast(err.response?.data?.message || 'Failed to update', 3000);
         }
     };
 
@@ -330,6 +371,13 @@ const DeliveryDashboard = () => {
         }
         navigate('/delivery/login');
     };
+
+    // Fetch history when switching to that tab
+    useEffect(() => {
+        if (activeTab === 'history') {
+            fetchHistory();
+        }
+    }, [activeTab, fetchHistory]);
 
     if (loading) {
         return (
@@ -390,73 +438,196 @@ const DeliveryDashboard = () => {
                 </div>
             </div>
 
-            <main className="flex-1 w-full max-w-lg mx-auto px-4 py-4 space-y-6 overflow-y-auto min-h-0">
-                {/* Available Orders (Competitive Claiming) */}
-                {availableOrders.length > 0 && (
-                    <section>
-                        <h2 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-3 flex items-center gap-2">
-                            <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span>
-                            Available Orders ({availableOrders.length})
-                        </h2>
-                        <div className="space-y-3">
-                            {availableOrders.map((order) => (
-                                <AvailableOrderCard
-                                    key={order.orderId}
-                                    order={order}
-                                    onClaim={handleClaim}
-                                />
-                            ))}
-                        </div>
-                    </section>
-                )}
+            {/* Tab Switcher */}
+            <div className="max-w-lg mx-auto px-4 pb-2">
+                <div className="flex bg-gray-200 rounded-xl p-1">
+                    <button
+                        onClick={() => setActiveTab('active')}
+                        className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all ${
+                            activeTab === 'active'
+                                ? 'bg-white text-gray-900 shadow-sm'
+                                : 'text-gray-500 hover:text-gray-700'
+                        }`}
+                    >
+                        Active {(totalAssigned + availableOrders.length) > 0 && (
+                            <span className="ml-1 bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full text-xs">
+                                {totalAssigned + availableOrders.length}
+                            </span>
+                        )}
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('history')}
+                        className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all ${
+                            activeTab === 'history'
+                                ? 'bg-white text-gray-900 shadow-sm'
+                                : 'text-gray-500 hover:text-gray-700'
+                        }`}
+                    >
+                        My Deliveries
+                    </button>
+                </div>
+            </div>
 
-                {/* Assigned Orders + Parcels */}
-                <section>
-                    {totalAssigned === 0 && availableOrders.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center py-20 text-gray-400">
-                            <svg className="w-16 h-16 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-                            </svg>
-                            <p className="text-lg font-medium">No active deliveries</p>
-                            <p className="text-sm mt-1">
-                                {status === 'BUSY'
-                                    ? "Delivery in progress"
-                                    : status === 'FREE'
-                                        ? "You'll be notified when orders are available"
-                                        : "Go online to start receiving orders"}
-                            </p>
-                        </div>
-                    ) : (
-                        <>
-                            {totalAssigned > 0 && (
-                                <h2 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-3">
-                                    My Deliveries ({totalAssigned})
+            <main className="flex-1 w-full max-w-lg mx-auto px-4 py-4 space-y-6 overflow-y-auto min-h-0">
+                {activeTab === 'active' ? (
+                    <>
+                        {/* Available Orders (Accept/Reject) */}
+                        {availableOrders.length > 0 && (
+                            <section>
+                                <h2 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-3 flex items-center gap-2">
+                                    <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span>
+                                    New Orders ({availableOrders.length})
                                 </h2>
+                                <div className="space-y-3">
+                                    {availableOrders.map((order) => (
+                                        <AvailableOrderCard
+                                            key={order.orderId}
+                                            order={order}
+                                            onAccept={handleAcceptBroadcast}
+                                            onReject={handleRejectBroadcast}
+                                        />
+                                    ))}
+                                </div>
+                            </section>
+                        )}
+
+                        {/* Assigned Orders + Parcels */}
+                        <section>
+                            {totalAssigned === 0 && availableOrders.length === 0 ? (
+                                <div className="flex flex-col items-center justify-center py-20 text-gray-400">
+                                    <svg className="w-16 h-16 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+                                    </svg>
+                                    <p className="text-lg font-medium">No active deliveries</p>
+                                    <p className="text-sm mt-1">
+                                        {status === 'BUSY'
+                                            ? "Delivery in progress"
+                                            : status === 'FREE'
+                                                ? "You'll be notified when orders are available"
+                                                : "Go online to start receiving orders"}
+                                    </p>
+                                </div>
+                            ) : (
+                                <>
+                                    {totalAssigned > 0 && (
+                                        <h2 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-3">
+                                            Assigned ({totalAssigned})
+                                        </h2>
+                                    )}
+                                    <div className="space-y-4">
+                                        {orders.map((assignment) => (
+                                            <DeliveryOrderCard
+                                                key={assignment.id}
+                                                assignment={assignment}
+                                                onAccept={handleAccept}
+                                                onReject={handleReject}
+                                                onComplete={handleComplete}
+                                            />
+                                        ))}
+                                        {parcelOrders.map((assignment) => (
+                                            <DeliveryParcelCard
+                                                key={assignment.id}
+                                                assignment={assignment}
+                                                onAccept={handleParcelAccept}
+                                                onReject={handleParcelReject}
+                                                onComplete={handleParcelComplete}
+                                            />
+                                        ))}
+                                    </div>
+                                </>
                             )}
-                            <div className="space-y-4">
-                                {orders.map((assignment) => (
-                                    <DeliveryOrderCard
-                                        key={assignment.id}
-                                        assignment={assignment}
-                                        onAccept={handleAccept}
-                                        onReject={handleReject}
-                                        onComplete={handleComplete}
-                                    />
-                                ))}
-                                {parcelOrders.map((assignment) => (
-                                    <DeliveryParcelCard
-                                        key={assignment.id}
-                                        assignment={assignment}
-                                        onAccept={handleParcelAccept}
-                                        onReject={handleParcelReject}
-                                        onComplete={handleParcelComplete}
-                                    />
+                        </section>
+                    </>
+                ) : (
+                    /* History Tab */
+                    <section>
+                        {historyLoading ? (
+                            <div className="flex items-center justify-center py-20">
+                                <div className="w-8 h-8 border-4 border-gray-200 border-t-emerald-600 rounded-full animate-spin"></div>
+                            </div>
+                        ) : history.length === 0 ? (
+                            <div className="flex flex-col items-center justify-center py-20 text-gray-400">
+                                <svg className="w-16 h-16 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                                <p className="text-lg font-medium">No delivery history</p>
+                                <p className="text-sm mt-1">Completed deliveries will appear here</p>
+                            </div>
+                        ) : (
+                            <div className="space-y-3">
+                                {history.map((item) => (
+                                    <HistoryCard key={item.id} item={item} />
                                 ))}
                             </div>
-                        </>
-                    )}
-                </section>
+                        )}
+                    </section>
+                )}
             </main>
+        </div>
+    );
+};
+
+const HistoryCard = ({ item }) => {
+    const isParcel = item.type === 'parcel';
+    const isDelivered = item.result === 'DELIVERED';
+    const completedDate = new Date(item.completedAt);
+    const addr = item.deliveryAddress || {};
+
+    return (
+        <div className="bg-white rounded-2xl shadow-sm overflow-hidden border border-gray-100">
+            {/* Header */}
+            <div className={`px-4 py-3 flex items-center justify-between ${
+                isParcel
+                    ? 'bg-gradient-to-r from-purple-50 to-violet-50'
+                    : 'bg-gradient-to-r from-blue-50 to-indigo-50'
+            }`}>
+                <div>
+                    <div className="flex items-center gap-2">
+                        <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                            isParcel
+                                ? 'bg-purple-100 text-purple-700'
+                                : 'bg-blue-100 text-blue-700'
+                        }`}>
+                            {isParcel ? 'Parcel' : 'Order'}
+                        </span>
+                        <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                            isDelivered
+                                ? 'bg-emerald-100 text-emerald-700'
+                                : 'bg-red-100 text-red-700'
+                        }`}>
+                            {isDelivered ? 'Delivered' : 'Not Delivered'}
+                        </span>
+                    </div>
+                    <p className="text-sm font-bold text-gray-900 mt-1">{item.orderNumber}</p>
+                </div>
+                <div className="text-right">
+                    <p className="text-xs text-gray-500">
+                        {completedDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
+                    </p>
+                    <p className="text-sm font-bold text-gray-900">
+                        {item.total != null ? `₹${item.total}` : '—'}
+                    </p>
+                </div>
+            </div>
+
+            {/* Address */}
+            <div className="px-4 py-2.5">
+                <p className="text-xs text-gray-500">
+                    {addr.houseNo && `${addr.houseNo}, `}
+                    {addr.street && `${addr.street}, `}
+                    {addr.city}
+                    {(addr.zipCode || addr.pincode) && ` ${addr.zipCode || addr.pincode}`}
+                </p>
+                {isParcel && item.category && (
+                    <p className="text-xs text-purple-600 mt-1">
+                        {item.category} &middot; {item.weight} kg
+                    </p>
+                )}
+                <p className="text-xs text-gray-400 mt-1">
+                    {completedDate.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
+                    {' · '}{item.paymentMethod}
+                </p>
+            </div>
         </div>
     );
 };

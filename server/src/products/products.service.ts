@@ -11,7 +11,8 @@ import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { ProductQueryDto } from './dto/product-query.dto';
 import { Prisma } from '@prisma/client';
-import { CATEGORY_SUBCATEGORIES, StoreCategoryType, STORE_CATEGORY_LABELS } from '../common/constants/store-categories';
+import { StoreCategoryType, STORE_CATEGORY_LABELS } from '../common/constants/store-categories';
+import { SubcategoryService } from '../stores/subcategory.service';
 
 import { RedisCacheService } from '../common/services/redis-cache.service';
 import { paginate } from '../common/utils/pagination.util';
@@ -26,6 +27,7 @@ export class ProductsService {
     private readonly prisma: PrismaService,
     private readonly storage: SupabaseStorageService,
     private readonly cache: RedisCacheService,
+    private readonly subcategoryService: SubcategoryService,
   ) { }
 
   /**
@@ -62,9 +64,10 @@ export class ProductsService {
       const store = await this.prisma.store.findUnique({ where: { id: storeId } });
       if (!store) throw new NotFoundException('Store not found');
 
-      const allowedSubcategories = CATEGORY_SUBCATEGORIES[store.storeType as StoreCategoryType] || [];
-      if (!allowedSubcategories.includes(dto.category) && allowedSubcategories.length > 0) {
-        throw new BadRequestException(`Category "${dto.category}" is not allowed for store type ${store.storeType}. Allowed: ${allowedSubcategories.join(', ')}`);
+      const isValid = await this.subcategoryService.isValidSubcategory(store.storeType, dto.category);
+      if (!isValid) {
+        const allSubs = await this.subcategoryService.getSubcategories(store.storeType);
+        throw new BadRequestException(`Category "${dto.category}" is not allowed for store type ${store.storeType}. Allowed: ${allSubs.join(', ')}`);
       }
       // Set category to main store type label, and subCategory to the specific option selected
       productData.subCategory = dto.category;

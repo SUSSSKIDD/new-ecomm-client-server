@@ -34,6 +34,8 @@ const AdminParcelOrders = () => {
     const [expandedId, setExpandedId] = useState(null);
     const [approveModal, setApproveModal] = useState(null); // { id, parcelNumber }
     const [codAmount, setCodAmount] = useState('');
+    const [actionError, setActionError] = useState('');
+    const [actionSuccess, setActionSuccess] = useState('');
     const limit = 10;
 
     const fetchParcels = useCallback(async () => {
@@ -64,17 +66,18 @@ const AdminParcelOrders = () => {
         if (!approveModal) return;
         const amount = parseFloat(codAmount);
         if (isNaN(amount) || amount < 0) {
-            alert('Please enter a valid COD amount');
+            setActionError('Please enter a valid COD amount');
             return;
         }
         setUpdatingId(approveModal.id);
+        setActionError('');
         try {
             await adminApi().post(`/admin/parcels/${approveModal.id}/approve`, { codAmount: amount });
             setApproveModal(null);
             setCodAmount('');
             fetchParcels();
         } catch (err) {
-            alert(err.response?.data?.message || 'Cannot approve parcel');
+            setActionError(err.response?.data?.message || 'Cannot approve parcel');
         } finally {
             setUpdatingId(null);
         }
@@ -82,11 +85,12 @@ const AdminParcelOrders = () => {
 
     const setReady = async (id) => {
         setUpdatingId(id);
+        setActionError('');
         try {
             await adminApi().post(`/admin/parcels/${id}/ready`);
             fetchParcels();
         } catch (err) {
-            alert(err.response?.data?.message || 'Cannot set ready');
+            setActionError(err.response?.data?.message || 'Cannot set ready');
         } finally {
             setUpdatingId(null);
         }
@@ -94,12 +98,13 @@ const AdminParcelOrders = () => {
 
     const triggerAssign = async (id) => {
         setUpdatingId(id);
+        setActionError('');
         try {
             const res = await adminApi().post(`/admin/parcels/${id}/assign-delivery`);
-            alert(res.data?.message || 'Assignment triggered');
+            setActionSuccess(res.data?.message || 'Assignment triggered');
             fetchParcels();
         } catch (err) {
-            alert(err.response?.data?.message || 'Cannot trigger assignment');
+            setActionError(err.response?.data?.message || 'Cannot trigger assignment');
         } finally {
             setUpdatingId(null);
         }
@@ -108,11 +113,12 @@ const AdminParcelOrders = () => {
     const cancelParcel = async (id) => {
         if (!confirm('Are you sure you want to cancel this parcel?')) return;
         setUpdatingId(id);
+        setActionError('');
         try {
             await adminApi().patch(`/admin/parcels/${id}/status`, { status: 'CANCELLED' });
             fetchParcels();
         } catch (err) {
-            alert(err.response?.data?.message || 'Cannot cancel parcel');
+            setActionError(err.response?.data?.message || 'Cannot cancel parcel');
         } finally {
             setUpdatingId(null);
         }
@@ -204,6 +210,19 @@ const AdminParcelOrders = () => {
                 </select>
             </div>
 
+            {actionError && (
+                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm flex justify-between items-center">
+                    <span>{actionError}</span>
+                    <button onClick={() => setActionError('')} className="text-red-400 hover:text-red-600 ml-2">&times;</button>
+                </div>
+            )}
+            {actionSuccess && (
+                <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg text-green-700 text-sm flex justify-between items-center">
+                    <span>{actionSuccess}</span>
+                    <button onClick={() => setActionSuccess('')} className="text-green-400 hover:text-green-600 ml-2">&times;</button>
+                </div>
+            )}
+
             {loading ? (
                 <div className="text-center p-10 animate-pulse text-gray-500">Loading parcels...</div>
             ) : (
@@ -280,6 +299,10 @@ const AdminParcelOrders = () => {
                                                     {p.assignment?.deliveryPerson ? (
                                                         <span className="text-xs text-green-700 font-medium">
                                                             {p.assignment.deliveryPerson.name}
+                                                        </span>
+                                                    ) : p.notDeliveredReason ? (
+                                                        <span className="text-xs text-red-600 font-medium" title={p.notDeliveredReason}>
+                                                            Delivery failed
                                                         </span>
                                                     ) : p.status === 'ASSIGNED' ? (
                                                         <span className="text-xs text-orange-600 animate-pulse">Searching...</span>
@@ -359,6 +382,22 @@ const AdminParcelOrders = () => {
                                                                     </div>
                                                                 </div>
                                                             </div>
+
+                                                            {/* NOT_DELIVERED warning */}
+                                                            {p.notDeliveredReason && (
+                                                                <div className="flex items-start gap-2 bg-red-50 border border-red-200 rounded-lg px-4 py-2.5">
+                                                                    <svg className="w-4 h-4 text-red-500 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                                                                    </svg>
+                                                                    <div>
+                                                                        <p className="text-xs font-bold text-red-700">Delivery attempt failed</p>
+                                                                        <p className="text-xs text-red-600 mt-0.5">{p.notDeliveredReason}</p>
+                                                                        {p.notDeliveredAt && (
+                                                                            <p className="text-xs text-red-400 mt-0.5">{new Date(p.notDeliveredAt).toLocaleString('en-IN')}</p>
+                                                                        )}
+                                                                    </div>
+                                                                </div>
+                                                            )}
 
                                                             {/* Rider info */}
                                                             {p.assignment?.deliveryPerson && (

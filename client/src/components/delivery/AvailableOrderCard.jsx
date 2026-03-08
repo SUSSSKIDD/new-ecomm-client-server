@@ -7,20 +7,32 @@ const getCategoryLabel = (val) => {
     return cat?.label || val;
 };
 
-const AvailableOrderCard = memo(({ order, onClaim }) => {
-    const [claiming, setClaiming] = useState(false);
+const AvailableOrderCard = memo(({ order, onAccept, onReject }) => {
+    const [actionLoading, setActionLoading] = useState(null);
     const [animateOut, setAnimateOut] = useState(false);
     const isParcel = order.isParcel;
 
-    const handleClaim = async () => {
-        setClaiming(true);
+    const handleAccept = async () => {
+        setActionLoading('accept');
         setAnimateOut(true);
         try {
-            await onClaim(order.orderId, isParcel);
+            await onAccept(order.orderId, isParcel);
         } catch {
             setAnimateOut(false);
         } finally {
-            setClaiming(false);
+            setActionLoading(null);
+        }
+    };
+
+    const handleReject = async () => {
+        setActionLoading('reject');
+        setAnimateOut(true);
+        try {
+            await onReject(order.orderId, isParcel);
+        } catch {
+            setAnimateOut(false);
+        } finally {
+            setActionLoading(null);
         }
     };
 
@@ -37,13 +49,21 @@ const AvailableOrderCard = memo(({ order, onClaim }) => {
             }`}>
                 <div>
                     <p className="text-white/70 text-xs font-medium">
-                        {isParcel ? 'Parcel' : 'Available'}
+                        {isParcel ? 'Parcel' : 'New Order'}
                     </p>
                     <p className="text-white font-bold text-sm">{order.orderNumber}</p>
                 </div>
                 <div className="text-right">
                     <p className="text-white/70 text-xs">{order.paymentMethod}</p>
                     <p className="text-white font-bold">&#8377;{order.total}</p>
+                </div>
+            </div>
+
+            {/* Waiting badge */}
+            <div className="px-4 pt-3">
+                <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                    <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
+                    <span className="text-xs font-medium text-amber-700">Accept or reject this delivery</span>
                 </div>
             </div>
 
@@ -115,7 +135,7 @@ const AvailableOrderCard = memo(({ order, onClaim }) => {
                             <p className="text-sm text-gray-700">
                                 {order.deliveryAddress.houseNo && `${order.deliveryAddress.houseNo}, `}
                                 {order.deliveryAddress.street}, {order.deliveryAddress.city}{' '}
-                                {order.deliveryAddress.zipCode}
+                                {order.deliveryAddress.zipCode || order.deliveryAddress.pincode}
                             </p>
                             {order.deliveryAddress.landmark && (
                                 <p className="text-xs text-gray-500 mt-0.5">
@@ -136,26 +156,38 @@ const AvailableOrderCard = memo(({ order, onClaim }) => {
                 </>
             )}
 
-            {/* Claim Button */}
+            {/* Accept / Reject Buttons */}
             <div className="px-4 py-3">
-                <RippleButton
-                    onClick={handleClaim}
-                    disabled={claiming}
-                    className={`w-full py-3 text-white rounded-xl font-bold text-sm shadow-lg transition-all disabled:opacity-50 ${
-                        isParcel
-                            ? 'bg-gradient-to-r from-purple-500 to-violet-600 shadow-purple-500/20 hover:shadow-purple-500/30'
-                            : 'bg-gradient-to-r from-blue-500 to-indigo-600 shadow-blue-500/20 hover:shadow-blue-500/30'
-                    }`}
-                >
-                    {claiming ? (
-                        <span className="flex items-center justify-center gap-2">
-                            <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
-                            Claiming...
-                        </span>
-                    ) : (
-                        isParcel ? 'Claim Parcel' : 'Claim Order'
-                    )}
-                </RippleButton>
+                <div className="flex gap-2">
+                    <RippleButton
+                        onClick={handleReject}
+                        disabled={!!actionLoading}
+                        className="flex-1 py-3 border-2 border-red-200 text-red-600 rounded-xl font-bold text-sm hover:bg-red-50 transition-colors disabled:opacity-50"
+                    >
+                        {actionLoading === 'reject' ? (
+                            <span className="flex items-center justify-center gap-2">
+                                <span className="w-4 h-4 border-2 border-red-300 border-t-red-600 rounded-full animate-spin"></span>
+                                Rejecting...
+                            </span>
+                        ) : 'Reject'}
+                    </RippleButton>
+                    <RippleButton
+                        onClick={handleAccept}
+                        disabled={!!actionLoading}
+                        className={`flex-1 py-3 text-white rounded-xl font-bold text-sm shadow-lg transition-all disabled:opacity-50 ${
+                            isParcel
+                                ? 'bg-gradient-to-r from-purple-500 to-violet-600 shadow-purple-500/20 hover:shadow-purple-500/30'
+                                : 'bg-gradient-to-r from-blue-500 to-indigo-600 shadow-blue-500/20 hover:shadow-blue-500/30'
+                        }`}
+                    >
+                        {actionLoading === 'accept' ? (
+                            <span className="flex items-center justify-center gap-2">
+                                <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
+                                Accepting...
+                            </span>
+                        ) : 'Accept'}
+                    </RippleButton>
+                </div>
             </div>
         </div>
     );

@@ -11,10 +11,15 @@ export class ClaimTimeoutProcessor extends WorkerHost {
     super();
   }
 
-  async process(job: Job<{ orderId: string }>): Promise<void> {
+  async process(job: Job<{ orderId: string; isParcel?: boolean }>): Promise<void> {
     if (job.name === 'claim-timeout') {
-      this.logger.log(`Processing claim-timeout for order ${job.data.orderId}`);
-      await this.orderPool.handleClaimTimeout(job.data.orderId);
+      const { orderId, isParcel } = job.data;
+      this.logger.log(`Processing claim-timeout for ${isParcel ? 'parcel' : 'order'} ${orderId}`);
+      if (isParcel) {
+        await this.orderPool.handleParcelClaimTimeout(orderId);
+      } else {
+        await this.orderPool.handleClaimTimeout(orderId);
+      }
     }
   }
 }

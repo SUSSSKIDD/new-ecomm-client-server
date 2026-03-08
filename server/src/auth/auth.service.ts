@@ -95,10 +95,18 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials or inactive account');
     }
 
+    const rlKey = `pin:rl:store:${dto.phone}`;
+    const attempts = await this.cache.incr(rlKey, 300);
+    if (attempts > 5) {
+      throw new UnauthorizedException('Too many failed attempts. Lockout for 5 minutes.');
+    }
+
     const isPinValid = await bcrypt.compare(dto.pin, manager.pinHash);
     if (!isPinValid) {
       throw new UnauthorizedException('Invalid credentials');
     }
+
+    await this.cache.del(rlKey);
 
     const payload = {
       sub: manager.id,
@@ -131,10 +139,18 @@ export class AuthService {
       throw new UnauthorizedException('Invalid Super Admin credentials');
     }
 
+    const rlKey = `pin:rl:superadmin:${dto.phone}`;
+    const attempts = await this.cache.incr(rlKey, 300);
+    if (attempts > 5) {
+      throw new UnauthorizedException('Too many failed attempts. Lockout for 5 minutes.');
+    }
+
     const isPinValid = await bcrypt.compare(dto.pin, this.superAdminPinHash);
     if (!isPinValid) {
       throw new UnauthorizedException('Invalid Super Admin credentials');
     }
+
+    await this.cache.del(rlKey);
 
     let user = await this.prisma.user.findUnique({
       where: { phone: dto.phone },
@@ -168,6 +184,45 @@ export class AuthService {
         name: user.name,
         phone: user.phone,
         role: Role.ADMIN,
+      },
+    };
+  }
+
+  async parcelManagerLogin(dto: StoreManagerLoginDto) {
+    const manager = await this.prisma.parcelManager.findUnique({
+      where: { phone: dto.phone },
+    });
+
+    if (!manager || !manager.isActive) {
+      throw new UnauthorizedException('Invalid credentials or inactive account');
+    }
+
+    const rlKey = `pin:rl:parcel:${dto.phone}`;
+    const attempts = await this.cache.incr(rlKey, 300);
+    if (attempts > 5) {
+      throw new UnauthorizedException('Too many failed attempts. Lockout for 5 minutes.');
+    }
+
+    const isPinValid = await bcrypt.compare(dto.pin, manager.pinHash);
+    if (!isPinValid) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+
+    await this.cache.del(rlKey);
+
+    const payload = {
+      sub: manager.id,
+      phone: manager.phone,
+      role: Role.PARCEL_MANAGER,
+    };
+
+    return {
+      access_token: await this.jwtService.signAsync(payload),
+      user: {
+        id: manager.id,
+        name: manager.name,
+        phone: manager.phone,
+        role: Role.PARCEL_MANAGER,
       },
     };
   }

@@ -42,6 +42,14 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
       if (!dp || !dp.isActive) {
         throw new UnauthorizedException('Account deactivated');
       }
+    } else if (payload.role === 'PARCEL_MANAGER') {
+      const pm = await this.prisma.parcelManager.findUnique({
+        where: { id: payload.sub },
+        select: { isActive: true },
+      });
+      if (!pm || !pm.isActive) {
+        throw new UnauthorizedException('Account deactivated');
+      }
     } else {
       // USER or ADMIN — verify user exists and use fresh role from DB
       const user = await this.prisma.user.findUnique({

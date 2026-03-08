@@ -38,16 +38,18 @@ const OrderList = ({ onBack }) => {
     const [loading, setLoading] = useState(true);
     const [expandedId, setExpandedId] = useState(null);
     const [cancellingId, setCancellingId] = useState(null);
+    const [cancelError, setCancelError] = useState('');
 
     const handleCancelOrder = useCallback(async (orderId) => {
         setCancellingId(orderId);
+        setCancelError('');
         try {
             await api(token).post(`/orders/${orderId}/cancel`);
             setOrders((prev) => prev.map((o) =>
                 o.id === orderId ? { ...o, status: 'CANCELLED', canCancel: false, canModify: false } : o
             ));
         } catch (err) {
-            alert(err.response?.data?.message || 'Failed to cancel order');
+            setCancelError(err.response?.data?.message || 'Failed to cancel order');
         } finally {
             setCancellingId(null);
         }
@@ -100,6 +102,12 @@ const OrderList = ({ onBack }) => {
             </div>
 
             <div className="flex-1 overflow-y-auto p-4 bg-gray-50 space-y-4">
+                {cancelError && (
+                    <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm flex justify-between items-center">
+                        <span>{cancelError}</span>
+                        <button onClick={() => setCancelError('')} className="text-red-400 hover:text-red-600 ml-2">&times;</button>
+                    </div>
+                )}
                 {orders.length === 0 ? (
                     <div className="text-center py-10">
                         <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -149,7 +157,15 @@ const OrderList = ({ onBack }) => {
                                     {!isExpanded && (
                                         <div className="mt-2 flex justify-between items-center">
                                             <span className="text-xs text-gray-500">
-                                                {items.length} item{items.length !== 1 ? 's' : ''}
+                                                {order.isParent
+                                                    ? `${order.childOrders?.length || 0} sub-orders`
+                                                    : `${items.length} item${items.length !== 1 ? 's' : ''}`
+                                                }
+                                                {order.isParent && (
+                                                    <span className="ml-1.5 px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded text-[10px] font-bold">
+                                                        Multi-store
+                                                    </span>
+                                                )}
                                             </span>
                                             <span className="text-sm font-bold text-gray-900">₹{order.total}</span>
                                         </div>
@@ -164,21 +180,96 @@ const OrderList = ({ onBack }) => {
                                             <StatusTracker status={order.status} />
                                         </div>
 
-                                        {/* Items */}
-                                        <div className="px-4 pt-3 pb-2">
-                                            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Items</p>
-                                            <div className="space-y-2">
-                                                {items.map((item, idx) => (
-                                                    <div key={item.id || idx} className="flex justify-between items-start">
-                                                        <div className="flex-1 min-w-0 pr-3">
-                                                            <p className="text-sm text-gray-900 leading-tight">{item.name}</p>
-                                                            <p className="text-[11px] text-gray-400">{item.quantity} x ₹{item.price}</p>
-                                                        </div>
-                                                        <span className="text-sm font-semibold text-gray-800">₹{item.total || (item.price * item.quantity)}</span>
-                                                    </div>
-                                                ))}
+                                        {/* Items or Sub-orders */}
+                                        {order.isParent && (!order.childOrders || order.childOrders.length === 0) ? (
+                                            <div className="px-4 pt-3 pb-2">
+                                                <p className="text-xs text-gray-400 text-center py-2">Sub-orders loading...</p>
                                             </div>
-                                        </div>
+                                        ) : order.isParent && order.childOrders?.length > 0 ? (
+                                            <div className="px-4 pt-3 pb-2 space-y-3">
+                                                <p className="text-[10px] font-bold text-blue-500 uppercase tracking-wider">
+                                                    {order.childOrders.length} Sub-orders
+                                                </p>
+                                                {order.childOrders.map((child) => {
+                                                    const childCfg = getCfg(child.status);
+                                                    return (
+                                                        <div key={child.id} className="bg-gray-50 rounded-lg p-3 border border-gray-100">
+                                                            <div className="flex justify-between items-center mb-2">
+                                                                <span className="text-xs font-medium text-gray-600">#{child.orderNumber}</span>
+                                                                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${childCfg.color}`}>
+                                                                    {childCfg.label}
+                                                                </span>
+                                                            </div>
+                                                            <StatusTracker status={child.status} />
+                                                            <div className="space-y-1 mt-2">
+                                                                {(child.items || []).map((item, idx) => (
+                                                                    <div key={item.id || idx} className="text-xs">
+                                                                        <div className="flex justify-between items-start">
+                                                                            <div className="flex-1 min-w-0 pr-2">
+                                                                                <span className="text-gray-800">{item.name}</span>
+                                                                                <span className="text-gray-400 ml-1">{item.quantity}x</span>
+                                                                            </div>
+                                                                            <span className="font-medium text-gray-700">₹{item.total || (item.price * item.quantity)}</span>
+                                                                        </div>
+                                                                        {(item.selectedSize || item.userUploadUrls?.length > 0) && (
+                                                                            <div className="flex flex-wrap gap-1 mt-0.5 ml-0.5">
+                                                                                {item.selectedSize && (
+                                                                                    <span className="text-[10px] px-1 py-0.5 bg-blue-50 text-blue-600 rounded">Size: {item.selectedSize}</span>
+                                                                                )}
+                                                                                {item.userUploadUrls?.map((url, ui) => (
+                                                                                    <a key={ui} href={url} target="_blank" rel="noopener noreferrer" className="w-6 h-6 rounded overflow-hidden border border-gray-200 inline-block">
+                                                                                        <img src={url} alt={`Upload ${ui + 1}`} className="w-full h-full object-cover" />
+                                                                                    </a>
+                                                                                ))}
+                                                                            </div>
+                                                                        )}
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                            <div className="flex justify-between text-xs font-bold text-gray-900 mt-2 pt-1.5 border-t border-gray-200">
+                                                                <span>Subtotal</span>
+                                                                <span>₹{child.subtotal}</span>
+                                                            </div>
+                                                            {child.assignment?.deliveryPerson && (
+                                                                <div className="flex justify-between text-[11px] text-gray-500 mt-1">
+                                                                    <span>Delivery by</span>
+                                                                    <span className="font-medium text-gray-700">{child.assignment.deliveryPerson.name}</span>
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        ) : (
+                                            <div className="px-4 pt-3 pb-2">
+                                                <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-2">Items</p>
+                                                <div className="space-y-2">
+                                                    {items.map((item, idx) => (
+                                                        <div key={item.id || idx}>
+                                                            <div className="flex justify-between items-start">
+                                                                <div className="flex-1 min-w-0 pr-3">
+                                                                    <p className="text-sm text-gray-900 leading-tight">{item.name}</p>
+                                                                    <p className="text-[11px] text-gray-400">{item.quantity} x ₹{item.price}</p>
+                                                                </div>
+                                                                <span className="text-sm font-semibold text-gray-800">₹{item.total || (item.price * item.quantity)}</span>
+                                                            </div>
+                                                            {(item.selectedSize || item.userUploadUrls?.length > 0) && (
+                                                                <div className="flex flex-wrap gap-1 mt-1">
+                                                                    {item.selectedSize && (
+                                                                        <span className="text-[10px] px-1.5 py-0.5 bg-blue-50 text-blue-600 rounded font-medium">Size: {item.selectedSize}</span>
+                                                                    )}
+                                                                    {item.userUploadUrls?.map((url, ui) => (
+                                                                        <a key={ui} href={url} target="_blank" rel="noopener noreferrer" className="w-8 h-8 rounded overflow-hidden border border-gray-200 inline-block">
+                                                                            <img src={url} alt={`Upload ${ui + 1}`} className="w-full h-full object-cover" />
+                                                                        </a>
+                                                                    ))}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
 
                                         {/* Price Breakdown */}
                                         <div className="mx-4 pt-2 pb-3 border-t border-dashed border-gray-200 space-y-1.5">

@@ -13,21 +13,7 @@ export const LocationProvider = ({ children }) => {
     const [nearestStore, setNearestStore] = useState(null); // { id, name, distance, pincode }
     const [loading, setLoading] = useState(false);
 
-    // Check sessionStorage on mount
-    useEffect(() => {
-        const cached = sessionStorage.getItem('homdrop_location');
-        if (cached) {
-            try {
-                const data = JSON.parse(cached);
-                setLocation(data.location);
-                setServiceable(data.serviceable);
-                setNearestStore(data.nearestStore);
-                setLocationStatus('granted');
-            } catch {
-                sessionStorage.removeItem('homdrop_location');
-            }
-        }
-    }, []);
+    // Removed sessionStorage cache block to always refetch on load
 
     const checkServiceability = useCallback(async (lat, lng) => {
         setLoading(true);
@@ -39,15 +25,7 @@ export const LocationProvider = ({ children }) => {
             setServiceable(isServiceable);
             setNearestStore(nearest);
 
-            // Cache in sessionStorage
-            sessionStorage.setItem(
-                'homdrop_location',
-                JSON.stringify({
-                    location: { lat, lng },
-                    serviceable: isServiceable,
-                    nearestStore: nearest,
-                }),
-            );
+            // Removed sessionStorage.setItem
         } catch (err) {
             console.error('Serviceability check failed:', err);
             // On error, default to not serviceable — show retry message
@@ -80,7 +58,7 @@ export const LocationProvider = ({ children }) => {
                 // On denial, assume serviceable to not block customers
                 setServiceable(true);
             },
-            { enableHighAccuracy: true, timeout: 10000, maximumAge: 300000 },
+            { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 },
         );
     }, [checkServiceability]);
 

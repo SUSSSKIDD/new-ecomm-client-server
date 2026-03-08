@@ -2,45 +2,13 @@ import { RippleButton } from '../../components/ui/ripple-button';
 import { useState } from 'react';
 import { useCategory } from '../../context/CategoryContext';
 import { useAuth } from '../../context/AuthContext';
-import axios from 'axios';
 import AddressManager from './profile/AddressManager';
 import OrderList from './profile/OrderList';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
-
 const ProfileSideBar = () => {
     const { activePage, setActivePage } = useCategory();
-    const { user, isAuthenticated, token, logout, openLoginModal, updateUser } = useAuth();
+    const { user, isAuthenticated, logout, openLoginModal } = useAuth();
     const [view, setView] = useState('main'); // 'main', 'addresses', 'orders', 'support'
-    const [isEditingName, setIsEditingName] = useState(false);
-    const [nameInput, setNameInput] = useState('');
-    const [nameSaving, setNameSaving] = useState(false);
-    const [nameError, setNameError] = useState('');
-
-    const canEditName = !user?.name;
-
-    const handleSaveName = async () => {
-        const trimmed = nameInput.trim();
-        if (trimmed.length < 2) {
-            setNameError('Name must be at least 2 characters');
-            return;
-        }
-        setNameSaving(true);
-        setNameError('');
-        try {
-            const res = await axios.patch(
-                `${API_URL}/users/me/name`,
-                { name: trimmed },
-                { headers: { Authorization: `Bearer ${token}` } },
-            );
-            updateUser({ name: res.data.name });
-            setIsEditingName(false);
-        } catch (err) {
-            setNameError(err.response?.data?.message || 'Failed to update name');
-        } finally {
-            setNameSaving(false);
-        }
-    };
 
     if (activePage !== 'profile') return null;
 
@@ -102,53 +70,12 @@ const ProfileSideBar = () => {
                                             {user?.name ? user.name.charAt(0).toUpperCase() : (user?.phone ? user.phone.charAt(3) : 'U')}
                                         </div>
                                         <div className="flex-1 min-w-0">
-                                            {!isEditingName ? (
-                                                <div className="flex items-center gap-2">
-                                                    <h3 className="text-sm font-bold text-gray-900 truncate">
-                                                        {user?.name || 'User'}
-                                                    </h3>
-                                                    {canEditName && (
-                                                        <RippleButton
-                                                            onClick={() => { setIsEditingName(true); setNameInput(''); setNameError(''); }}
-                                                            className="text-xs text-ud-primary font-medium hover:underline"
-                                                        >
-                                                            Set name
-                                                        </RippleButton>
-                                                    )}
-                                                </div>
-                                            ) : (
-                                                <div className="flex items-center gap-2">
-                                                    <input
-                                                        type="text"
-                                                        value={nameInput}
-                                                        onChange={(e) => setNameInput(e.target.value)}
-                                                        onKeyDown={(e) => e.key === 'Enter' && handleSaveName()}
-                                                        placeholder="Enter your name"
-                                                        autoFocus
-                                                        className="text-sm border border-gray-200 rounded-lg px-2 py-1 flex-1 min-w-0 focus:outline-none focus:border-ud-primary"
-                                                        maxLength={50}
-                                                    />
-                                                    <RippleButton
-                                                        onClick={handleSaveName}
-                                                        disabled={nameSaving}
-                                                        className="text-xs bg-ud-primary text-white px-3 py-1 rounded-lg font-medium disabled:opacity-50"
-                                                    >
-                                                        {nameSaving ? '...' : 'Save'}
-                                                    </RippleButton>
-                                                    <RippleButton
-                                                        onClick={() => setIsEditingName(false)}
-                                                        className="text-xs text-gray-400 hover:text-gray-600"
-                                                    >
-                                                        Cancel
-                                                    </RippleButton>
-                                                </div>
-                                            )}
+                                            <h3 className="text-sm font-bold text-gray-900 truncate">
+                                                {user?.name || 'User'}
+                                            </h3>
                                             <p className="text-xs text-gray-500">{user?.phone}</p>
                                         </div>
                                     </div>
-                                    {nameError && (
-                                        <p className="text-xs text-red-500 mt-2 pl-16">{nameError}</p>
-                                    )}
                                 </div>
 
                                 {/* Info Sections */}

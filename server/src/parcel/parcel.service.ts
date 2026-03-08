@@ -7,6 +7,7 @@ import {
 import { PrismaService } from '../prisma.service';
 import { AutoAssignService } from '../delivery/auto-assign.service';
 import { OrderPoolService } from '../delivery/order-pool.service';
+import { DeliverySseService } from '../delivery/delivery-sse.service';
 import { paginate } from '../common/utils/pagination.util';
 import { CreateParcelOrderDto } from './dto/create-parcel-order.dto';
 import { ApproveParcelDto } from './dto/approve-parcel.dto';
@@ -23,6 +24,7 @@ export class ParcelService {
         private readonly prisma: PrismaService,
         private readonly autoAssignService: AutoAssignService,
         private readonly orderPoolService: OrderPoolService,
+        private readonly sseService: DeliverySseService,
     ) { }
 
     private generateParcelNumber(): string {
@@ -242,18 +244,82 @@ export class ParcelService {
         return updated;
     }
 
+    // Valid parcel status transitions (admin-controlled)
+    private static readonly VALID_PARCEL_TRANSITIONS: Record<string, ParcelStatus[]> = {
+        PENDING: [ParcelStatus.APPROVED, ParcelStatus.CANCELLED],
+        APPROVED: [ParcelStatus.READY_FOR_PICKUP, ParcelStatus.CANCELLED],
+        READY_FOR_PICKUP: [ParcelStatus.CANCELLED], // ASSIGNED set by claim system
+        ASSIGNED: [ParcelStatus.PICKED_UP, ParcelStatus.CANCELLED],
+        PICKED_UP: [ParcelStatus.IN_TRANSIT, ParcelStatus.CANCELLED],
+        IN_TRANSIT: [ParcelStatus.CANCELLED], // DELIVERED set by rider only
+        DELIVERED: [],
+        CANCELLED: [],
+    };
+
     async updateStatus(id: string, dto: UpdateParcelStatusDto) {
-        const parcel = await this.prisma.parcelOrder.findUnique({ where: { id } });
+        const parcel = await this.prisma.parcelOrder.findUnique({
+            where: { id },
+            include: { assignment: true },
+        });
         if (!parcel) throw new NotFoundException('Parcel not found');
 
         if (dto.status === ParcelStatus.DELIVERED) {
             throw new BadRequestException('DELIVERED status can only be set by rider');
         }
 
+        const allowed = ParcelService.VALID_PARCEL_TRANSITIONS[parcel.status] ?? [];
+        if (!allowed.includes(dto.status)) {
+            throw new BadRequestException(
+                `Cannot transition from ${parcel.status} to ${dto.status}`,
+            );
+        }
+
+        // Cancellation cleanup: remove from pool, notify riders, free assigned rider
+        if (dto.status === ParcelStatus.CANCELLED) {
+            return this.cancelParcel(id, parcel);
+        }
+
         return this.prisma.parcelOrder.update({
             where: { id },
             data: { status: dto.status },
         });
+    }
+
+    /** Handle all cancellation side-effects in one place. */
+    private async cancelParcel(
+        id: string,
+        parcel: { parcelNumber: string; assignment?: { id: string; deliveryPersonId: string } | null },
+    ) {
+        const updates: Prisma.PrismaPromise<any>[] = [
+            this.prisma.parcelOrder.update({
+                where: { id },
+                data: { status: ParcelStatus.CANCELLED },
+            }),
+        ];
+
+        // If assigned to a rider, delete assignment and free the rider
+        if (parcel.assignment) {
+            updates.push(
+                this.prisma.parcelAssignment.delete({ where: { id: parcel.assignment.id } }),
+                this.prisma.deliveryPerson.update({
+                    where: { id: parcel.assignment.deliveryPersonId },
+                    data: { status: 'FREE' },
+                }),
+            );
+        }
+
+        const [cancelled] = await this.prisma.$transaction(updates);
+
+        // Remove from delivery pool (no-op if not in pool)
+        this.orderPoolService.removeOrder(id).catch((err) =>
+            this.logger.error(`Failed to remove cancelled parcel ${id} from pool: ${err.message}`),
+        );
+
+        // Notify all connected riders to remove from their UI
+        this.sseService.broadcastOrderClaimed('', id);
+
+        this.logger.log(`Parcel ${parcel.parcelNumber} CANCELLED — pool + riders cleaned up`);
+        return cancelled;
     }
 
     /** Admin manually triggers the broadcast sequence to nearby riders. */

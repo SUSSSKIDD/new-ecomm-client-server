@@ -36,7 +36,8 @@ export class RedisCacheService implements OnModuleDestroy {
       } catch {
         return raw as unknown as T;
       }
-    } catch {
+    } catch (e) {
+      this.logger.error(`get failed for ${key}: ${e}`);
       this.misses++;
       return null;
     }
@@ -46,8 +47,8 @@ export class RedisCacheService implements OnModuleDestroy {
     if (!this.client) return;
     try {
       await this.client.set(key, JSON.stringify(value), 'EX', ttlSeconds);
-    } catch {
-      // Graceful degradation
+    } catch (e) {
+      this.logger.error(`set failed for ${key}: ${e}`);
     }
   }
 
@@ -55,8 +56,8 @@ export class RedisCacheService implements OnModuleDestroy {
     if (!this.client) return;
     try {
       await this.client.del(key);
-    } catch {
-      // no-op
+    } catch (e) {
+      this.logger.error(`del failed for ${key}: ${e}`);
     }
   }
 
@@ -65,8 +66,8 @@ export class RedisCacheService implements OnModuleDestroy {
     if (!this.client || keys.length === 0) return;
     try {
       await this.client.del(...keys);
-    } catch {
-      // no-op
+    } catch (e) {
+      this.logger.error(`delMany failed: ${e}`);
     }
   }
 
@@ -85,7 +86,8 @@ export class RedisCacheService implements OnModuleDestroy {
           return raw as unknown as T;
         }
       });
-    } catch {
+    } catch (e) {
+      this.logger.error(`mget failed: ${e}`);
       return keys.map(() => null);
     }
   }
@@ -116,7 +118,8 @@ export class RedisCacheService implements OnModuleDestroy {
       }
       const results = await pipe.exec();
       return (results || []).map(([err, val]) => (err ? null : val));
-    } catch {
+    } catch (e) {
+      this.logger.error(`pipeline failed: ${e}`);
       return [];
     }
   }
@@ -144,8 +147,8 @@ export class RedisCacheService implements OnModuleDestroy {
       if (count > 0) {
         await pipeline.exec();
       }
-    } catch {
-      // no-op
+    } catch (e) {
+      this.logger.error(`delPattern failed for ${pattern}: ${e}`);
     }
   }
 
@@ -156,7 +159,8 @@ export class RedisCacheService implements OnModuleDestroy {
     try {
       const v = await this.client.get(`v:${prefix}`);
       return v ? parseInt(v, 10) : 0;
-    } catch {
+    } catch (e) {
+      this.logger.error(`getVersion failed for ${prefix}: ${e}`);
       return 0;
     }
   }
@@ -165,21 +169,25 @@ export class RedisCacheService implements OnModuleDestroy {
     if (!this.client) return;
     try {
       await this.client.incr(`v:${prefix}`);
-    } catch {
-      // no-op
+    } catch (e) {
+      this.logger.error(`bumpVersion failed for ${prefix}: ${e}`);
     }
   }
 
-  /** Increment a key and set TTL on first creation. Returns the new count. */
+  /** Increment a key and set TTL on first creation using atomic Lua script. Returns the new count. */
   async incr(key: string, ttlSeconds: number): Promise<number> {
     if (!this.client) return 0;
     try {
-      const count = await this.client.incr(key);
-      if (count === 1) {
-        await this.client.expire(key, ttlSeconds);
-      }
-      return count;
-    } catch {
+      const script = `
+        local count = redis.call("incr", KEYS[1])
+        if count == 1 then
+          redis.call("expire", KEYS[1], ARGV[1])
+        end
+        return count
+      `;
+      return await this.client.eval(script, 1, key, ttlSeconds) as number;
+    } catch (e) {
+      this.logger.error(`incr failed for ${key}: ${e}`);
       return 0;
     }
   }
@@ -190,8 +198,8 @@ export class RedisCacheService implements OnModuleDestroy {
     if (!this.client) return;
     try {
       await this.client.geoadd(key, longitude, latitude, member);
-    } catch {
-      // no-op
+    } catch (e) {
+      this.logger.error(`geoAdd failed for ${key} member ${member}: ${e}`);
     }
   }
 
@@ -199,8 +207,8 @@ export class RedisCacheService implements OnModuleDestroy {
     if (!this.client) return;
     try {
       await this.client.zrem(key, member);
-    } catch {
-      // no-op
+    } catch (e) {
+      this.logger.error(`geoRemove failed for ${key} member ${member}: ${e}`);
     }
   }
 
@@ -228,7 +236,8 @@ export class RedisCacheService implements OnModuleDestroy {
         String(limitCount),
       ) as string[];
       return results || [];
-    } catch {
+    } catch (e) {
+      this.logger.error(`geoSearchRadius failed for ${key}: ${e}`);
       return [];
     }
   }

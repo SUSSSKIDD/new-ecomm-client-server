@@ -30,7 +30,7 @@ import { OrderQueryDto } from './dto/order-query.dto';
 import { ModifyOrderDto } from './dto/modify-order.dto';
 
 interface AuthenticatedRequest extends Request {
-  user: { sub: string; phone: string; role: string };
+  user: { sub: string; phone: string; role: string; storeId?: string };
 }
 
 @ApiTags('orders')
@@ -117,17 +117,11 @@ export class OrdersController {
     @Req() req: AuthenticatedRequest,
     @Query() query: OrderQueryDto,
   ) {
-    const user = req.user as any;
-    const storeId = user.storeId;
-
-    if (user.role === 'ADMIN') {
-      // Super admin sees all orders? Or reuse findAll?
-      // Let's reuse findAll logic but without userId filter?
-      // Currently findAll filters by userId.
-      // We need a generic findAll.
+    if (req.user.role === 'ADMIN') {
       return this.ordersService.findAllAdmin(query);
     }
 
+    const storeId = req.user.storeId;
     if (!storeId) return { data: [], meta: { total: 0, page: 1, limit: 10, totalPages: 0 } };
     return this.ordersService.findStoreOrders(storeId, query);
   }
@@ -141,8 +135,7 @@ export class OrdersController {
     @Param('id', ParseUUIDPipe) id: string,
     @Body('status') status: OrderStatus,
   ) {
-    const user = req.user as any;
-    return this.ordersService.updateStatus(id, status, user.storeId);
+    return this.ordersService.updateStatus(id, status, req.user.storeId);
   }
 
   @Post('admin/:id/assign-delivery')
@@ -154,7 +147,6 @@ export class OrdersController {
     @Req() req: AuthenticatedRequest,
     @Param('id', ParseUUIDPipe) id: string,
   ) {
-    const user = req.user as any;
-    return this.ordersService.triggerDeliveryAssignment(id, user.storeId);
+    return this.ordersService.triggerDeliveryAssignment(id, req.user.storeId);
   }
 }

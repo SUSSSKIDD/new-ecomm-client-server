@@ -35,6 +35,7 @@ export class BullConfigModule {
               connection: {
                 host: host || 'localhost',
                 port: config.get<number>('BULL_REDIS_PORT', 6379),
+                db: config.get<number>('BULL_REDIS_DB', 0),
               },
             };
           },

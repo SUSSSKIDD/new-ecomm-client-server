@@ -21,8 +21,14 @@ const AdminLayout = () => {
         { name: 'Products', path: '/admin/products', icon: '📦' },
         { name: 'Orders', path: '/admin/orders', icon: '🛒' },
         { name: 'Inventory', path: '/admin/inventory', icon: '📋' },
+        { name: 'Categories', path: '/admin/subcategories', icon: '🏷️' },
         { name: 'Ledger', path: '/admin/ledger', icon: '📒' },
     ];
+
+    // Show Print Products for DROP_IN_FACTORY store managers
+    if (admin?.storeType === 'DROP_IN_FACTORY' && admin?.role !== 'ADMIN') {
+        navItems.push({ name: 'Print Products', path: '/admin/print-products', icon: '🖨️' });
+    }
 
     if (admin?.role === 'ADMIN') {
         navItems = navItems.filter(i => i.name !== 'Products' && i.name !== 'Inventory');
@@ -30,6 +36,14 @@ const AdminLayout = () => {
         navItems.push({ name: 'Managers', path: '/admin/managers', icon: '👔' });
         navItems.push({ name: 'Delivery Guys', path: '/admin/delivery', icon: '🛵' });
         navItems.push({ name: 'Parcels', path: '/admin/parcels', icon: '📬' });
+        navItems.push({ name: 'Print Products', path: '/admin/print-products', icon: '🖨️' });
+    } else if (admin?.role === 'PARCEL_MANAGER') {
+        navItems = [
+            { name: 'Dashboard', path: '/admin/dashboard', icon: '📊' },
+            { name: 'Parcels', path: '/admin/parcels', icon: '📬' },
+            { name: 'Delivery Guys', path: '/admin/delivery', icon: '🛵' },
+            { name: 'Stores', path: '/admin/stores', icon: '🏪' }
+        ];
     }
 
     return (

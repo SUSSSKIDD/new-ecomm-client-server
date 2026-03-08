@@ -19,6 +19,7 @@ import { StoreManagerModule } from './store-manager/store-manager.module';
 import { LedgerModule } from './ledger/ledger.module';
 import { SmsModule } from './sms/sms.module';
 import { ParcelModule } from './parcel/parcel.module';
+import { PrintModule } from './print/print.module';
 
 @Module({
   imports: [
@@ -45,6 +46,7 @@ import { ParcelModule } from './parcel/parcel.module';
     LedgerModule,
     SmsModule,
     ParcelModule,
+    PrintModule,
   ],
   controllers: [AppController],
   providers: [AppService],

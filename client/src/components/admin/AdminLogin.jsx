@@ -24,6 +24,7 @@ const AdminLogin = () => {
             let endpoint = '';
             if (role === 'MANAGER') endpoint = 'store-manager/login';
             else if (role === 'SUPER_ADMIN') endpoint = 'super-admin/login';
+            else if (role === 'PARCEL_MANAGER') endpoint = 'parcel-manager/login';
 
             const res = await fetch(`${API_URL}/auth/${endpoint}`, {
                 method: 'POST',
@@ -65,6 +66,7 @@ const AdminLogin = () => {
                         >
                             <option value="SUPER_ADMIN">Super Admin</option>
                             <option value="MANAGER">Store Manager</option>
+                            <option value="PARCEL_MANAGER">Parcel Manager</option>
                         </select>
                     </div>
                     <div className="mb-4">

@@ -20,8 +20,8 @@ NEYOKART (formerly United Deals) is a hyper-local grocery delivery platform with
 |-------|-----------|
 | Framework | NestJS 11 (Express) |
 | Database | PostgreSQL + Prisma ORM 7.4 (via pg adapter) |
-| Cache | Upstash Redis (app data cache) + 2x Upstash Redis (Rider db1 for locks/pool, db2 for presence) |
-| Auth | JWT (60-day expiry) + MSG91 SMS OTP + Store Manager PIN + Delivery Person PIN |
+| Cache | Redis (ioredis TCP, single instance via Docker `neyokart-redis` on port 6379) — app cache, rider pool/locks, presence/location |
+| Auth | JWT (60-day expiry) + MSG91 SMS OTP + Store Manager PIN + Parcel Manager PIN + Delivery Person PIN |
 | Payment | Razorpay SDK (test mode: `rzp_test_*`, mock mode when credentials absent) |
 | Storage | Supabase Storage (product images, graceful degradation) |
 | Security | Helmet, CORS, ValidationPipe (whitelist + transform), RolesGuard, StoreGuard |
@@ -58,7 +58,9 @@ new grocery/
 │       │   │   ├── AdminManagers.jsx            # Store manager management (ADMIN only)
 │       │   │   ├── AdminOrders.jsx              # Order management with status updates
 │       │   │   ├── AdminParcelOrders.jsx         # Parcel order management (ADMIN only)
+│       │   │   ├── AdminPrintProducts.jsx        # Print product management (DROP_IN_FACTORY)
 │       │   │   ├── AdminProducts.jsx            # Product management (CRUD + images)
+│       │   │   ├── AdminSubcategories.jsx        # Subcategory + upload type config management
 │       │   │   └── AdminStores.jsx              # Store management (ADMIN only)
 │       │   ├── delivery/                        # Delivery Person App
 │       │   │   ├── DeliveryDashboard.jsx        # Dashboard, online presence toggle, assigned & available orders
@@ -115,7 +117,8 @@ new grocery/
         │   ├── orders.module.ts
         │   ├── orders.controller.ts             # Customer + Admin endpoints
         │   ├── orders.service.ts                # Atomic stock, idempotency, state machine, admin ops
-        │   ├── order-fulfillment.service.ts     # Store-level inventory allocation & nearest store
+        │   ├── allocation.service.ts             # Two-phase allocation (single-store → multi-store split)
+        │   ├── order-fulfillment.service.ts     # Delegates to AllocationService, backward-compat adapter
         │   ├── dto/ (CreateOrderDto, OrderQueryDto)
         │   └── interfaces/order-preview.interface.ts
         ├── payments/                            # Razorpay + COD + mock
@@ -136,11 +139,17 @@ new grocery/
         │   ├── users.module.ts
         │   ├── users.controller.ts
         │   └── users.service.ts
-        ├── stores/                              # Store CRUD + inventory
+        ├── stores/                              # Store CRUD + inventory + subcategories
         │   ├── stores.module.ts
-        │   ├── stores.controller.ts             # Store CRUD, inventory bulk update
+        │   ├── stores.controller.ts             # Store CRUD, inventory, subcategories, category config
         │   ├── stores.service.ts
+        │   ├── subcategory.service.ts           # Custom subcategory + category config CRUD
         │   └── dto/
+        ├── print/                               # Print Products (DROP_IN_FACTORY)
+        │   ├── print.module.ts
+        │   ├── print.controller.ts              # Print product CRUD + activate/deactivate
+        │   ├── print.service.ts                 # Print product business logic
+        │   └── dto/print-product.dto.ts         # Create/Update DTOs with size validation
 
         ├── store-manager/                       # Store Manager CRUD (ADMIN only)
         │   ├── store-manager.module.ts
@@ -170,7 +179,7 @@ new grocery/
         │   ├── delivery.controller.ts           # Profile, active/available orders, claim endpoint
         │   ├── delivery.service.ts              # Delivery person CRUD, location tracking
         │   ├── delivery-auth.controller.ts      # Auth (phone + PIN)
-        │   ├── rider-redis.service.ts           # Dual Redis wrapper (db1: pool/locks, db2: presence/location)
+        │   ├── rider-redis.service.ts           # Single Redis wrapper with key prefixes (avail:*/lock:*/idempotent:* — pool/locks, rider:* — presence/location)
         │   ├── order-pool.service.ts            # Manages available orders pool & timeouts
         │   ├── order-claim.service.ts           # 3-layer atomic race condition claiming logic
         │   ├── auto-assign.service.ts           # Now triggers order broadcast instead of direct assignment
@@ -194,6 +203,7 @@ new grocery/
 - `POST /auth/send-otp` — Send OTP to phone (`+91[6-9]XXXXXXXXX` format)
 - `POST /auth/verify-otp` — Verify OTP, returns JWT + user
 - `POST /auth/store-manager/login` — Store Manager login (phone + 4-digit PIN)
+- `POST /auth/parcel-manager/login` — Parcel Manager login (phone + 4-digit PIN)
 - `POST /auth/super-admin/login` — Super Admin login (hardcoded: +919999999999/0000)
 
 ### Store Managers (JWT + ADMIN only)
@@ -265,9 +275,9 @@ new grocery/
 - `GET /dashboard/delivery/:id` — Delivery person stats
 
 ### Delivery — Admin (JWT + ADMIN)
-- `POST /delivery/persons` — Create delivery person (returns auto-generated PIN once)
+- `POST /delivery/persons` — Create delivery person (admin provides PIN, stored as bcrypt hash)
 - `GET /delivery/persons` — List all delivery persons
-- `PATCH /delivery/persons/:id` — Update delivery person (name, isActive, homeStoreId)
+- `PATCH /delivery/persons/:id` — Update delivery person (name, isActive, pin)
 - `DELETE /delivery/persons/:id` — Delete delivery person
 
 ### Delivery — Auth & Self-Service
@@ -371,18 +381,55 @@ CANCELLED  CANCELLED     CANCELLED       CANCELLED   CANCELLED   CANCELLED
 
 **Rider rejection:** Deletes ParcelAssignment, sets rider→FREE, reverts parcel→READY_FOR_PICKUP for re-assignment.
 
-## Order Fulfillment Flow
+## Order Fulfillment Flow (Smart Order Allocation Engine)
 
+### Two-Phase Allocation Algorithm (`AllocationService`)
+- **Phase 1 — Single-Store Check:** Iterates nearby stores (nearest-first). If any single store has sufficient stock for ALL items, assigns entire order there. O(S × P).
+- **Phase 2 — Multi-Store Split:** If no single store can fulfill everything, uses greedy biggest-contributor algorithm to minimize store fragmentation. Each round picks the store covering the most remaining item quantity, assigns those items, and repeats until all items are covered. Rejects order entirely if any item remains unfulfillable.
+
+### Order Model for Multi-Store
+- `Order.parentOrderId` (nullable self-ref FK) + `Order.isParent` (boolean) enable parent/child hierarchy.
+- **Single-store order:** `parentOrderId=null`, `isParent=false` (unchanged from legacy).
+- **Multi-store parent:** `parentOrderId=null`, `isParent=true`, holds aggregate totals, NO items.
+- **Multi-store child:** `parentOrderId=<parent.id>`, `isParent=false`, holds items for ONE store.
+- All created atomically in one `$transaction` with batch stock decrement.
+
+### Flow
 1. Customer places order with `addressId` (includes lat/lng)
-2. `OrderFulfillmentService` finds nearest store(s) with required inventory using Haversine distance
-3. `StoreInventory` records are decremented per-store
-4. If no nearby store has stock, falls back to global `Product.stock`
-5. Order is created with fulfillment metadata (which store fulfills which items)
-6. Auto-assign triggers `OrderPoolService.broadcastOrder()`, identifying nearby ONLINE+FREE riders.
-7. Event triggers SSE `NEW_AVAILABLE_ORDER` pushing order to selected riders' phones.
-8. Riders view order and tap "Claim". First to hit endpoint claims it.
-9. `OrderClaimService` executes 3-layer atomic lock (Redis SET NX -> Prisma tx -> DB Unique Constraint).
-10. Winner gets `CLAIM_CONFIRMED` SSE, others get `ORDER_CLAIMED` and it un-renders.
+2. `AllocationService.allocate()` runs two-phase algorithm against nearby stores' `StoreInventory`
+3. `OrderFulfillmentService` delegates to `AllocationService`, returns backward-compatible `FulfillmentResult`
+4. If single-store: one Order created with all items (legacy path)
+5. If multi-store: parent Order + N child Orders created atomically, stock decremented per-store
+6. Each child order gets independent delivery assignment via `OrderPoolService.broadcastOrder()`
+7. Parent orders are skipped by `broadcastOrder()` and `AutoAssignService` — only children are deliverable
+8. Riders claim individual child orders via the standard competitive claiming system
+9. Parent order status is derived from children: `syncParentStatus()` called after every child status change
+
+### Parent Status Derivation
+- All children DELIVERED → parent DELIVERED
+- All children CANCELLED → parent CANCELLED
+- Any child SHIPPED → parent SHIPPED
+- Any child ORDER_PICKED → parent ORDER_PICKED
+- Otherwise → parent CONFIRMED
+
+### Cancel/Modify Rules
+- Cancel parent → cascades to all non-terminal children (atomic, restores all stock)
+- Cancel child → cancels just that child, syncs parent status
+- Modify only allowed on single-store or individual child orders (not parent directly)
+- Grace period uses parent's `confirmedAt` for child orders
+
+### Store Manager Visibility
+- `findStoreOrders()` filters by `items: { some: { storeId } }` — naturally returns only relevant child orders
+- Parent orders have no items, so they never appear for store managers
+
+### User Order List
+- `findAll()` excludes child orders (`parentOrderId: null`) so users see one entry per logical order
+- Parent orders include `childOrders` relation with items and assignments
+- Frontend shows sub-order cards with independent status tracking for each store
+
+### Preview Endpoint
+- Returns `allocation` object: `{ type: 'SINGLE_STORE' | 'MULTI_STORE', storeCount, stores: [{storeName, itemCount, subtotal}] }`
+- Frontend shows multi-store info box when `allocation.type === 'MULTI_STORE'`
 
 ## Parcel Delivery Flow
 
@@ -401,7 +448,7 @@ CANCELLED  CANCELLED     CANCELLED       CANCELLED   CANCELLED   CANCELLED
 ### Competitive Claiming System vs Auto-Assignment
 - **Old System:** Searched for a single nearest FREE person and forced an assignment (`auto-assign.service.ts`).
 - **New System (Competitive Claiming):** 
-  - 2 Dedicated Redis DBs (`riderdb1`: locks/pool, `riderdb2`: presence/location cache).
+  - Single Redis instance (Docker `neyokart-redis`, ioredis TCP) — handles pool, locks, presence, and location cache.
   - High concurrency support (e.g. 5+ riders clicking under 10ms variance).
   - Uses idempotency keys on Redis layer for network retries.
   - Automatically times out unclaimed orders (e.g. 120 seconds via Env) and re-broadcasts.
@@ -443,7 +490,7 @@ CANCELLED  CANCELLED     CANCELLED       CANCELLED   CANCELLED   CANCELLED
 ## Database Models (Prisma)
 
 ### Enums
-- **Role**: `USER`, `STORE_MANAGER`, `DELIVERY_PERSON`, `ADMIN`
+- **Role**: `USER`, `STORE_MANAGER`, `PARCEL_MANAGER`, `DELIVERY_PERSON`, `ADMIN`
 - **OrderStatus**: `PENDING`, `CONFIRMED`, `PROCESSING`, `ORDER_PICKED`, `SHIPPED`, `DELIVERED`, `CANCELLED`
 - **PaymentMethod**: `COD`, `RAZORPAY`
 - **PaymentStatus**: `PENDING`, `COD_PENDING`, `PAID`, `FAILED`, `REFUNDED`
@@ -462,12 +509,15 @@ CANCELLED  CANCELLED     CANCELLED       CANCELLED   CANCELLED   CANCELLED
 - **StoreManager** — id, name, phone (unique), pinHash, storeId, isActive, store (relation, onDelete: Cascade)
 - **PaymentLedger** — id, storeId, transactionId (unique, TXN-YYYYMMDD-NNNN), date, amount, paymentMethod, referenceNotes?, store (relation, onDelete: Cascade)
 - **StoreInventory** — id, storeId, productId, stock (unique: [storeId, productId])
-- **DeliveryPerson** — id, name, phone (unique), pinHash, homeStoreId, status (DUTY_OFF/FREE/BUSY), lat?, lng?, isActive, lastLocationAt?, assignments[]
+- **DeliveryPerson** — id, name, phone (unique), pinHash, status (DUTY_OFF/FREE/BUSY), lat?, lng?, isActive, lastLocationAt?, assignments[], parcelAssignments[]
 - **OrderAssignment** — id, orderId, deliveryPersonId, assignedAt, completedAt, result
 - **Order** — id, userId, orderNumber (UD-YYYYMMDD-XXXX), status, paymentMethod, paymentStatus, deliveryAddress (JSON snapshot), subtotal, deliveryFee, tax, total, idempotencyKey (unique), razorpayOrderId (unique), razorpayPaymentId, razorpaySignature, paidAt, deliveredAt, items[], assignments[], fulfillingStoreId?
   - Indexes: [userId+createdAt], orderNumber, razorpayOrderId, status
-- **OrderItem** — id, orderId, productId, name (snapshot), price (snapshot), quantity, total
+- **OrderItem** — id, orderId, productId, name (snapshot), price (snapshot), quantity, total, selectedSize?, userUploadUrls[], printProductId?
   - Cascade delete when order is deleted
+- **CategoryConfig** — id, storeType, subcategory, uploadType (NONE/PHOTO_UPLOAD/DESIGN_UPLOAD), @@unique([storeType, subcategory])
+- **PrintProduct** — id, name, productType, sizes (JSON), basePrice, image?, isActive, createdAt, updatedAt
+- **CustomSubcategory** — id, storeType, name, @@unique([storeType, name])
 - **SmsTemplate** — id, name, key (unique), content, variables[], type (SmsType), isActive, msg91TemplateId?, msg91FlowId?, logs[]
 - **ParcelOrder** — id, userId, parcelNumber (unique, `PD-YYYYMMDD-XXXXXX`), status (ParcelStatus), pickupAddress (JSON), pickupLat, pickupLng, dropAddress (JSON), dropLat, dropLng, category (ParcelCategory), categoryOther?, weight, length?, width?, height?, pickupTime, dropTime, codAmount?, paymentMethod ("COD"), paymentStatus, adminNotes?, createdAt, updatedAt, approvedAt?, pickedUpAt?, deliveredAt?, assignment?
 - **ParcelAssignment** — id, parcelOrderId (unique), deliveryPersonId, assignedAt, acceptedAt?, completedAt?, result?
@@ -494,8 +544,10 @@ CANCELLED  CANCELLED     CANCELLED       CANCELLED   CANCELLED   CANCELLED
 | `JWT_SECRET` | — | Secret for JWT signing |
 | `MSG91_AUTH_KEY` | (empty) | MSG91 auth key (empty = DEV MODE, OTP 123456 accepted) |
 | `MSG91_BASE_URL` | `https://control.msg91.com/api/v5` | MSG91 API base URL |
-| `UPSTASH_REDIS_REST_URL` | — | Upstash Redis URL (empty = caching disabled) |
-| `UPSTASH_REDIS_REST_TOKEN` | — | Upstash Redis token |
+| `REDIS_URL` | `redis://localhost:6379` | ioredis TCP connection for app cache |
+| `RIDER_REDIS_URL` | `redis://localhost:6379` | ioredis TCP connection for rider pool/locks/presence |
+| `BULL_REDIS_HOST` | `localhost` | BullMQ Redis host |
+| `BULL_REDIS_PORT` | `6379` | BullMQ Redis port |
 | `PORT` | 3000 | Server port |
 | `SUPER_ADMIN_PHONE` | — | Super admin phone number (e.g. `+919999999999`) |
 | `SUPER_ADMIN_PIN` | — | Super admin 4-digit PIN (hashed at startup with bcrypt) |
@@ -507,11 +559,8 @@ CANCELLED  CANCELLED     CANCELLED       CANCELLED   CANCELLED   CANCELLED
 | `RAZORPAY_WEBHOOK_SECRET` | (empty) | For webhook signature verification |
 | `SUPABASE_URL` | — | Supabase project URL (empty = image uploads disabled) |
 | `SUPABASE_SERVICE_ROLE_KEY` | — | Supabase service role key for storage access |
-| `RIDER_REDIS1_URL` | — | Upstash Redis URL for Order Pool, Locks, and Idempotency |
-| `RIDER_REDIS1_TOKEN` | — | Upstash Redis Token for Rider DB1 |
-| `RIDER_REDIS2_URL` | — | Upstash Redis URL for Rider Presence and GPS Location Caching |
-| `RIDER_REDIS2_TOKEN` | — | Upstash Redis Token for Rider DB2 |
 | `ORDER_CLAIM_TIMEOUT_SECONDS` | 120 | Unclaimed order pool timeout before retry/re-broadcast |
+| `MAX_DELIVERY_RADIUS_KM` | 9 | Maximum delivery radius in km (configurable) |
 
 ## Client-Side Constants (CartSidebar.jsx)
 
@@ -567,12 +616,13 @@ Use `StoreGuard` for store-scoped operations (validates `req.user.storeId` match
 |------|------------|
 | `USER` | Cart, orders, payments, addresses, browse products |
 | `STORE_MANAGER` | Product CRUD, order management, inventory, ledger, dashboard — scoped to assigned store |
+| `PARCEL_MANAGER` | Parcel dashboard, manage parcels, drivers, and view stores — isolated from grocery system |
 | `DELIVERY_PERSON` | View assigned orders, update location/status, complete deliveries |
 | `ADMIN` | Full access — create/manage stores, store managers, delivery persons. Bypasses store ownership checks |
 
 ### Guards
 - **RolesGuard**: Reads `@Roles()` metadata → if no decorator, passes through (auth-only). If roles specified, checks `req.user.role`.
-- **StoreGuard**: ADMIN bypasses. STORE_MANAGER must match storeId from route params or use their `req.user.storeId` for scoped queries. USER and DELIVERY_PERSON are explicitly denied with ForbiddenException.
+- **StoreGuard**: ADMIN bypasses. STORE_MANAGER must match storeId from route params or use their `req.user.storeId` for scoped queries. PARCEL_MANAGER has read-only access (GET only). USER and DELIVERY_PERSON are explicitly denied with ForbiddenException.
 
 ## Image Upload
 
@@ -820,7 +870,7 @@ Store naming follows auto-generated codes: A1, A2, A3... AN (with retry on uniqu
 10. **Server-side pricing** — Client checkout uses server preview totals exclusively, eliminating client-server price mismatch (`CartSidebar.jsx`)
 
 ### Performance Optimizations (2026-02-27)
-1. **Redis Native GEO Operations** — Scaled the rider assignment algorithm by replacing the heavy blocking Node.js Javascript `haversineDistance()` calculation loop. The system now uses Upstash/Redis `GEOADD` and native microsecond C-optimized `GEOSEARCH` to instantly draw a geographic radius around a store and return an ascending-distance sorted array of exactly the closest riders. Node.js math is bypassed entirely, eliminating Event Loop CPU blocking for large rider fleets. (`order-pool.service.ts`, `redis-cache.service.ts`, `delivery.service.ts`).
+1. **Redis Native GEO Operations** — Scaled the rider assignment algorithm by replacing the heavy blocking Node.js `haversineDistance()` calculation loop. The system now uses Redis (ioredis TCP) `GEOADD` and native microsecond C-optimized `GEOSEARCH` to instantly draw a geographic radius around a store and return an ascending-distance sorted array of exactly the closest riders. Node.js math is bypassed entirely, eliminating Event Loop CPU blocking for large rider fleets. (`order-pool.service.ts`, `redis-cache.service.ts`, `delivery.service.ts`).
 
 ### High Severity Fixes
 1. **Rate limiting** — `@nestjs/throttler` added globally (30 req/min). Auth endpoints: send-otp (5/min), verify-otp (10/min), super-admin (5/min), delivery (10/min)
@@ -840,9 +890,8 @@ Store naming follows auto-generated codes: A1, A2, A3... AN (with retry on uniqu
 
 1. **Razorpay live integration** — CartSidebar currently uses mock endpoint. For production, integrate the Razorpay checkout SDK widget.
 2. **Customer cancellation scope** — `POST /orders/:id/cancel` only allows PENDING/CONFIRMED. Consider whether customers should request cancellation for PROCESSING/SHIPPED.
-3. **Toast notifications** — Frontend uses `alert()` for user feedback in several admin pages. Replace with a proper toast notification system.
-4. **httpOnly cookies** — JWTs currently in localStorage (XSS-vulnerable). For highest security, switch to httpOnly cookies with CSRF protection.
-5. **Bundle size** — Main JS chunk is ~468KB gzipped to ~147KB. Consider further code-splitting for admin/delivery routes.
+3. **httpOnly cookies** — JWTs currently in localStorage (XSS-vulnerable). For highest security, switch to httpOnly cookies with CSRF protection.
+4. **Bundle size** — Main JS chunk is ~503KB gzipped to ~155KB. Consider further code-splitting for admin/delivery routes.
 
 ## Parcel Service E2E Test Results (2026-02-27)
 
@@ -871,3 +920,96 @@ Store naming follows auto-generated codes: A1, A2, A3... AN (with retry on uniqu
 | Avg latency | 248ms |
 | P95 latency | 562ms |
 | Max latency | 562ms |
+
+## Bug Fixes Applied (2026-03-01)
+
+### Critical
+1. **Parcel claim-timeout processor** (`claim-timeout.processor.ts`): Added `isParcel` flag handling. Parcel timeouts now call `handleParcelClaimTimeout()` which checks `parcelAssignment` table (previously all timeouts queried `orderAssignment`, silently failing for parcels).
+2. **Delivery person PIN security** (`delivery-auth.service.ts`, `delivery.service.ts`, `schema.prisma`): Replaced plaintext `pin` field with `pinHash` using bcrypt (consistent with StoreManager/ParcelManager). All existing PINs migrated. PIN no longer exposed in API responses.
+3. **Razorpay webhook error handling** (`payments.service.ts`): Webhook handler now logs errors instead of throwing (was causing 500 responses to Razorpay, triggering retries and potential double-processing).
+
+### High
+4. **Parcel status transition validation** (`parcel.service.ts`): Added `VALID_PARCEL_TRANSITIONS` state machine. Admin can no longer jump to arbitrary statuses — only valid forward transitions allowed.
+5. **SHIPPED→CANCELLED transition** (`orders.service.ts`): Admin can now cancel SHIPPED orders (previously SHIPPED had empty transitions, making orders stuck if delivery failed).
+6. **PARCEL_MANAGER StoreGuard access** (`store.guard.ts`): PARCEL_MANAGER now gets read-only (GET) access to store resources instead of being blocked with ForbiddenException.
+
+### Medium
+7. **Regular order NOT_DELIVERED** (`delivery.service.ts`): `completeDelivery()` with NOT_DELIVERED now deletes the assignment (like parcels) so the order reverts to ORDER_PICKED and can be re-assigned. Previously kept a "completed" assignment, making re-assignment impossible.
+8. **AvailableOrderCard zipCode fallback** (`AvailableOrderCard.jsx`): Regular order addresses now use `zipCode || pincode` fallback (consistent with parcel drop address rendering).
+
+## Print Factory Feature (2026-03-06)
+
+### Overview
+Added custom upload and design printing capabilities for the `DROP_IN_FACTORY` store type. Two upload modes:
+- **PHOTO_UPLOAD** — Subcategories (e.g. Photo Frames) where users upload ONE photo that gets printed on the product
+- **DESIGN_UPLOAD** — "Get Your Own Design Printed" subcategories where users upload up to 3 design images, select a print product (T-Shirt, Frame, Mug) and choose a size
+
+### Schema Changes
+- **CategoryConfig** — Per-subcategory config: `{ storeType, subcategory, uploadType: NONE|PHOTO_UPLOAD|DESIGN_UPLOAD }` with `@@unique([storeType, subcategory])`
+- **PrintProduct** — Admin-managed products for custom printing: `{ name, productType, sizes (JSON), basePrice, image?, isActive }`
+- **CustomSubcategory** — Custom subcategories per store type: `{ storeType, name }` with `@@unique([storeType, name])`
+- **OrderItem** extended — `selectedSize`, `userUploadUrls[]`, `printProductId` fields for print orders
+
+### New Backend Modules
+- **Print Module** (`server/src/print/`) — Full CRUD for print products with DTOs, size validation, activation/deactivation
+- **Subcategory Service** (`server/src/stores/subcategory.service.ts`) — Custom subcategory CRUD + category config upsert
+- **User Uploads** (`server/src/products/uploads.controller.ts`) — `POST /uploads/user-designs` for up to 3 design images (Supabase `user-uploads` bucket)
+
+### New Frontend Components
+- **AdminPrintProducts** (`client/src/components/admin/AdminPrintProducts.jsx`) — Admin CRUD for print products with size management
+- **AdminSubcategories** (`client/src/components/admin/AdminSubcategories.jsx`) — Subcategory management + upload type config for DROP_IN_FACTORY
+
+### API Endpoints Added
+- `GET /stores/categories` — Enhanced to include `uploadTypes` per subcategory
+- `GET /stores/category-config?storeType=` — Get upload configs for a store type
+- `PUT /stores/category-config` — Upsert upload config `{ storeType, subcategory, uploadType }`
+- `DELETE /stores/category-config/:id` — Remove config
+- `GET /stores/subcategories/custom` — List custom subcategories
+- `POST /stores/subcategories/custom` — Create custom subcategory (store manager)
+- `POST /stores/subcategories/custom/admin` — Create for any store type (admin)
+- `DELETE /stores/subcategories/custom/:id` — Delete custom subcategory
+- `POST /print-products` — Create print product (admin)
+- `GET /print-products` — List all print products (admin)
+- `GET /print-products/active` — List active products (public)
+- `GET /print-products/:id` — Get single print product
+- `PATCH /print-products/:id` — Update print product (admin)
+- `DELETE /print-products/:id` — Deactivate (admin)
+- `PATCH /print-products/:id/activate` — Reactivate (admin)
+- `POST /uploads/user-designs` — Upload user designs (up to 3, JWT required)
+
+### Cart & Order Integration
+- `AddToCartDto` extended with optional `selectedSize`, `userUploadUrls[]`, `printProductId`
+- `CartItem` interface extended with same fields
+- `cart.service.ts` validates `printProductId` references active print product
+- `orders.service.ts` passes custom fields through to `OrderItem` on creation
+- Frontend `CartSidebar`, `OrderList`, `AdminOrders` display upload thumbnails, size badges, and print product info
+
+## Bug Fixes Applied (2026-03-07)
+
+### P0 — Critical
+1. **Parcel controller ParseUUIDPipe** (`parcel.controller.ts`): All 7 `:id` params now use `ParseUUIDPipe` — previously arbitrary strings reached services. Added `@ApiTags('parcels')`, `@ApiBearerAuth()`, `@ApiOperation()` decorators and typed `AuthenticatedRequest` interface.
+2. **PROCESSING state machine gap** (`orders.service.ts`): Added `PROCESSING` to `VALID_TRANSITIONS` — `CONFIRMED → [PROCESSING, ORDER_PICKED, CANCELLED]` and `PROCESSING → [ORDER_PICKED, CANCELLED]`. Previously PROCESSING was in Prisma enum but not in code transitions, making it unreachable.
+3. **Admin orders PROCESSING support** (`AdminOrders.jsx`): Updated `NEXT_STATUS` map to route `CONFIRMED → PROCESSING → ORDER_PICKED` and added `PROCESSING` to filter statuses.
+
+### P1 — High
+4. **Orders controller type safety** (`orders.controller.ts`): Extended `AuthenticatedRequest` interface with `storeId?: string`. Removed all 3 `req.user as any` casts — now fully typed.
+5. **DTO validation gaps**:
+   - `complete-delivery.dto.ts`: Added `@IsNotEmpty()` to `reason` field — empty strings no longer pass validation for NOT_DELIVERED
+   - `create-parcel-order.dto.ts`: Added `@Min(-90)/@Max(90)` for lat and `@Min(-180)/@Max(180)` for lng — prevents invalid coordinates
+6. **Cart service printProductId validation** (`cart.service.ts`): Now validates that `printProductId` references an active `PrintProduct` before adding to cart
+7. **PrintProduct DTO nested validation** (`print-product.dto.ts`): Added `SizeOptionDto` class with `@ValidateNested({ each: true })` on sizes array
+8. **CategoryConfig DTO** (`custom-subcategory.dto.ts`): Added `UpsertCategoryConfigDto` with `@IsIn()` validation on storeType and uploadType
+
+### Frontend
+9. **AuthContext logout cleanup** (`AuthContext.jsx`): Logout now clears `selectedAddress` and `cart` from localStorage in addition to token/user
+10. **alert() → inline errors**: Replaced `alert()` calls with inline error/success state in:
+    - `AddressManager.jsx` — `actionError` state with red banner
+    - `OrderList.jsx` — `cancelError` state with dismissible banner
+    - `AdminOrders.jsx` — `actionError` state with dismissible banner
+    - `AdminDelivery.jsx` — `formError`/`formSuccess` state with banners
+    - `AdminParcelOrders.jsx` — `actionError`/`actionSuccess` state with dismissible banners
+11. **DeliveryDashboard toast cleanup** (`DeliveryDashboard.jsx`): Toast `setTimeout` now uses ref + `clearTimeout` to prevent memory leak on unmount
+12. **ProductDetails memory leak** (`ProductDetails.jsx`): Added `previewUrlsRef` + cleanup `useEffect` to revoke object URLs on unmount
+13. **AdminSubcategories undefined spread** (`AdminSubcategories.jsx`): Fixed `{ ...prev[subcategory] }` → `{ ...(prev[subcategory] || {}) }`
+14. **AdminPrintProducts cleanup** (`AdminPrintProducts.jsx`): Removed unused `imageFile` state
+15. **AdminOrders print display** (`AdminOrders.jsx`): Added "Custom Print" badge and upload thumbnail display for print order items

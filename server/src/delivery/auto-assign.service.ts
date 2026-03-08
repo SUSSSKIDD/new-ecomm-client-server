@@ -28,6 +28,7 @@ export class AutoAssignService {
       where: {
         status: 'ORDER_PICKED',
         assignment: null,
+        isParent: false, // Exclude parent orders — children get their own assignments
         items: { some: { storeId: { not: null } } },
       },
       orderBy: { createdAt: 'asc' },

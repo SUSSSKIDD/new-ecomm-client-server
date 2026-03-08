@@ -4,7 +4,7 @@ import { useProductSearch } from '../../../hooks/useProductSearch';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-const HeaderSearch = ({ selectedCategory }) => {
+const HeaderSearch = () => {
     const { query, setQuery, results, loading, error } = useProductSearch();
     const [showResults, setShowResults] = useState(false);
     const navigate = useNavigate();
@@ -24,10 +24,7 @@ const HeaderSearch = ({ selectedCategory }) => {
         <div className="bg-white pb-3 px-4 shadow-sm z-40 relative">
             <div className="container mx-auto">
                 <div className="flex items-center border border-gray-300 rounded-lg overflow-hidden bg-gray-50 focus-within:ring-1 focus-within:ring-ud-primary transition-all relative">
-                    <div className="hidden md:flex bg-gray-100 px-3 py-2 border-r border-gray-300 text-xs font-medium text-gray-600 items-center gap-1 cursor-pointer whitespace-nowrap">
-                        {selectedCategory === 'All' ? 'All Categories' : selectedCategory}
-                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" /></svg>
-                    </div>
+
                     <input
                         type="text"
                         placeholder="Search for products..."
@@ -87,8 +84,6 @@ const HeaderSearch = ({ selectedCategory }) => {
     );
 };
 
-HeaderSearch.propTypes = {
-    selectedCategory: PropTypes.string.isRequired,
-};
+
 
 export default HeaderSearch;

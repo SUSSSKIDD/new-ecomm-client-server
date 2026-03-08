@@ -4,6 +4,7 @@ import {
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma.service';
 import { RedisCacheService } from '../common/services/redis-cache.service';
 import { CreateStoreDto } from './dto/create-store.dto';
@@ -11,7 +12,7 @@ import { UpdateStoreDto } from './dto/update-store.dto';
 import { UpdateInventoryDto } from './dto/update-inventory.dto';
 import {
   haversineDistance,
-  MAX_DELIVERY_RADIUS_KM,
+  DEFAULT_MAX_DELIVERY_RADIUS_KM,
 } from '../common/utils/geo.util';
 import { Prisma } from '@prisma/client';
 import { TTL } from '../common/redis/ttl.config.js';
@@ -34,10 +35,16 @@ export class StoresService {
   private static readonly STORES_CACHE_KEY = 'stores:all';
   private static readonly STORES_CACHE_TTL = TTL.STORES;
 
+  private readonly maxDeliveryRadiusKm: number;
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly cache: RedisCacheService,
-  ) { }
+    config: ConfigService,
+  ) {
+    this.maxDeliveryRadiusKm =
+      config.get<number>('MAX_DELIVERY_RADIUS_KM') ?? DEFAULT_MAX_DELIVERY_RADIUS_KM;
+  }
 
   // ── Cache helpers ────────────────────────────────────────────────
 
@@ -77,14 +84,14 @@ export class StoresService {
         distance:
           Math.round(haversineDistance(lat, lng, s.lat, s.lng) * 10) / 10,
       }))
-      .filter((s) => s.distance <= MAX_DELIVERY_RADIUS_KM)
+      .filter((s) => s.distance <= this.maxDeliveryRadiusKm)
       .sort((a, b) => a.distance - b.distance);
 
     return {
       serviceable: nearby.length > 0,
       nearestStore: nearby[0] ?? null,
       stores: nearby,
-      maxRadiusKm: MAX_DELIVERY_RADIUS_KM,
+      maxRadiusKm: this.maxDeliveryRadiusKm,
     };
   }
 
@@ -98,35 +105,48 @@ export class StoresService {
         distance:
           Math.round(haversineDistance(lat, lng, s.lat, s.lng) * 10) / 10,
       }))
-      .filter((s) => s.distance <= MAX_DELIVERY_RADIUS_KM)
+      .filter((s) => s.distance <= this.maxDeliveryRadiusKm)
       .sort((a, b) => a.distance - b.distance);
   }
 
   // ── CRUD ────────────────────────────────────────────────────────
 
-  private async generateStoreCode(): Promise<string> {
+  private async generateStoreCode(storeType: string = 'GROCERY'): Promise<string> {
+    let prefix = 'A';
+
+    switch (storeType) {
+      case 'GROCERY': prefix = 'GY-'; break;
+      case 'PIZZA_TOWN': prefix = 'PZ-'; break;
+      case 'AUTO_SERVICE': prefix = 'AUTO-'; break;
+      case 'AUTO_PARTS_SHOP': prefix = 'AUTO-'; break;
+      case 'DROP_IN_FACTORY': prefix = 'PF-'; break;
+      case 'HEALTH_SERVICE': prefix = 'HS-'; break;
+      default: prefix = 'A'; break;
+    }
+
     const lastStore = await this.prisma.store.findFirst({
-      where: { storeCode: { startsWith: 'A' } },
-      orderBy: { storeCode: 'desc' },
+      where: { storeCode: { startsWith: prefix } },
+      orderBy: { createdAt: 'desc' },
     });
 
     if (!lastStore || !lastStore.storeCode) {
-      return 'A1';
+      return `${prefix}1`;
     }
 
-    const numMatch = lastStore.storeCode.match(/A(\d+)/);
+    const safePrefix = prefix.replace(/-/g, '\\-');
+    const numMatch = lastStore.storeCode.match(new RegExp(`^${safePrefix}(\\d+)`));
     if (numMatch) {
       const nextNum = parseInt(numMatch[1], 10) + 1;
-      return `A${nextNum}`;
+      return `${prefix}${nextNum}`;
     }
-    return 'A1';
+    return `${prefix}1`;
   }
 
   async create(dto: CreateStoreDto) {
     let retries = 5;
     while (retries > 0) {
       try {
-        const storeCode = await this.generateStoreCode();
+        const storeCode = await this.generateStoreCode(dto.storeType);
         const store = await this.prisma.store.create({
           data: { ...dto, storeCode }
         });
@@ -151,7 +171,7 @@ export class StoresService {
       take: 500,
       orderBy: { createdAt: 'desc' },
       include: {
-        _count: { select: { inventory: true, deliveryPersons: true } },
+        _count: { select: { inventory: true } },
       },
     });
   }
@@ -160,7 +180,7 @@ export class StoresService {
     const store = await this.prisma.store.findUnique({
       where: { id },
       include: {
-        _count: { select: { inventory: true, deliveryPersons: true } },
+        _count: { select: { inventory: true } },
       },
     });
     if (!store) throw new NotFoundException(`Store ${id} not found`);

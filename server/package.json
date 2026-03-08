@@ -20,7 +20,8 @@
     "test:watch": "jest --watch",
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
-    "test:e2e": "jest --config ./test/jest-e2e.json"
+    "test:e2e": "jest --config ./test/jest-e2e.json",
+    "test:e2e:full": "bash test/run-e2e.sh"
   },
   "dependencies": {
     "@nestjs/bullmq": "^11.0.4",
@@ -36,7 +37,6 @@
     "@prisma/client": "^7.4.2",
     "@prisma/config": "^7.4.0",
     "@supabase/supabase-js": "^2.95.3",
-    "@upstash/redis": "^1.36.2",
     "bcryptjs": "^3.0.3",
     "bullmq": "^5.68.0",
     "class-transformer": "^0.5.1",

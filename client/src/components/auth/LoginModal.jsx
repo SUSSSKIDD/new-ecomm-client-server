@@ -1,13 +1,17 @@
 import { RippleButton } from '../ui/ripple-button';
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../../context/AuthContext';
+import axios from 'axios';
 import PropTypes from 'prop-types';
 
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+
 const LoginModal = ({ isOpen, onClose }) => {
-    const { sendOtp, verifyOtp } = useAuth();
-    const [step, setStep] = useState('phone'); // 'phone' or 'otp'
+    const { sendOtp, verifyOtp, token, updateUser } = useAuth();
+    const [step, setStep] = useState('phone'); // 'phone' | 'otp' | 'name'
     const [phone, setPhone] = useState('');
     const [otp, setOtp] = useState('');
+    const [nameInput, setNameInput] = useState('');
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
     const [resendCooldown, setResendCooldown] = useState(0);
@@ -18,7 +22,6 @@ const LoginModal = ({ isOpen, onClose }) => {
         setLoading(true);
         setError(null);
 
-        // Basic frontend validation for +91
         const formattedPhone = phone.startsWith('+91') ? phone : `+91${phone}`;
 
         const response = await sendOtp(formattedPhone);
@@ -39,11 +42,41 @@ const LoginModal = ({ isOpen, onClose }) => {
 
         const response = await verifyOtp(phone, otp);
         if (response.success) {
-            onClose(); // Close modal on success
+            // If user has no name, show name step; otherwise close
+            if (!response.user?.name) {
+                setStep('name');
+                setError(null);
+            } else {
+                onClose();
+            }
         } else {
             setError(response.message);
         }
         setLoading(false);
+    };
+
+    const handleSaveName = async (e) => {
+        e.preventDefault();
+        const trimmed = nameInput.trim();
+        if (trimmed.length < 2) {
+            setError('Name must be at least 2 characters');
+            return;
+        }
+        setLoading(true);
+        setError(null);
+        try {
+            const res = await axios.patch(
+                `${API_URL}/users/me/name`,
+                { name: trimmed },
+                { headers: { Authorization: `Bearer ${token}` } },
+            );
+            updateUser({ name: res.data.name });
+            onClose();
+        } catch (err) {
+            setError(err.response?.data?.message || 'Failed to save name');
+        } finally {
+            setLoading(false);
+        }
     };
 
     // Start cooldown when entering OTP step
@@ -72,6 +105,16 @@ const LoginModal = ({ isOpen, onClose }) => {
         setLoading(false);
     }, [resendCooldown, loading, phone, sendOtp]);
 
+    // Reset state when modal closes
+    useEffect(() => {
+        if (!isOpen) {
+            setStep('phone');
+            setOtp('');
+            setNameInput('');
+            setError(null);
+        }
+    }, [isOpen]);
+
     if (!isOpen) return null;
 
     return (
@@ -80,11 +123,13 @@ const LoginModal = ({ isOpen, onClose }) => {
                 <div className="p-6">
                     <div className="flex justify-between items-center mb-6">
                         <h2 className="text-xl font-bold text-gray-900">
-                            {step === 'phone' ? 'Login or Sign up' : 'Enter OTP'}
+                            {step === 'phone' ? 'Login or Sign up' : step === 'otp' ? 'Enter OTP' : 'What\'s your name?'}
                         </h2>
-                        <RippleButton onClick={onClose} className="p-2 -mr-2 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-100 transition-colors">
-                            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-                        </RippleButton>
+                        {step !== 'name' && (
+                            <RippleButton onClick={onClose} className="p-2 -mr-2 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-100 transition-colors">
+                                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                            </RippleButton>
+                        )}
                     </div>
 
                     {step === 'phone' ? (
@@ -125,7 +170,7 @@ const LoginModal = ({ isOpen, onClose }) => {
                                 By continuing, you agree to our <span className="text-gray-600 underline cursor-pointer">Terms of Service</span> & <span className="text-gray-600 underline cursor-pointer">Privacy Policy</span>
                             </p>
                         </form>
-                    ) : (
+                    ) : step === 'otp' ? (
                         <form onSubmit={handleVerifyOtp} className="space-y-6">
                             <div className="text-center">
                                 <p className="text-sm text-gray-600 mb-1">
@@ -177,6 +222,39 @@ const LoginModal = ({ isOpen, onClose }) => {
                                     {resendCooldown > 0 ? `Resend Code in ${resendCooldown}s` : 'Resend Code'}
                                 </RippleButton>
                             </div>
+                        </form>
+                    ) : (
+                        /* Step 3: Name input (shown only for new users without a name) */
+                        <form onSubmit={handleSaveName} className="space-y-5">
+                            <p className="text-sm text-gray-500">
+                                This will be your display name. It can't be changed later.
+                            </p>
+
+                            <div>
+                                <input
+                                    type="text"
+                                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-ud-primary focus:border-ud-primary outline-none transition-all font-medium text-lg group-hover:border-gray-300"
+                                    placeholder="Enter your full name"
+                                    value={nameInput}
+                                    onChange={(e) => setNameInput(e.target.value)}
+                                    maxLength={50}
+                                    autoFocus
+                                    required
+                                />
+                            </div>
+
+                            {error && <p className="text-red-500 text-sm bg-red-50 p-2 rounded-lg">{error}</p>}
+
+                            <RippleButton
+                                type="submit"
+                                disabled={loading || nameInput.trim().length < 2}
+                                className="w-full py-3 bg-ud-primary text-white font-bold rounded-xl hover:bg-emerald-600 active:scale-95 transition-all disabled:opacity-70 disabled:cursor-not-allowed flex justify-center items-center gap-2 shadow-lg shadow-ud-primary/20"
+                            >
+                                {loading && (
+                                    <svg className="animate-spin h-5 w-5 text-white" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                                )}
+                                {loading ? 'Saving...' : 'Continue'}
+                            </RippleButton>
                         </form>
                     )}
                 </div>

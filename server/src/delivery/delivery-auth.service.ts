@@ -1,8 +1,9 @@
 import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { PrismaService } from '../prisma.service';
 import * as bcrypt from 'bcryptjs';
+import { PrismaService } from '../prisma.service';
 import { DeliveryLoginDto } from './dto/delivery-login.dto';
+import { RedisCacheService } from '../common/services/redis-cache.service';
 
 @Injectable()
 export class DeliveryAuthService {
@@ -11,7 +12,8 @@ export class DeliveryAuthService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
-  ) {}
+    private readonly cache: RedisCacheService,
+  ) { }
 
   /**
    * Authenticate a delivery person by phone + PIN.
@@ -26,10 +28,18 @@ export class DeliveryAuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
+    const rlKey = `pin:rl:delivery:${dto.phone}`;
+    const attempts = await this.cache.incr(rlKey, 300);
+    if (attempts > 5) {
+      throw new UnauthorizedException('Too many failed attempts. Lockout for 5 minutes.');
+    }
+
     const pinMatch = await bcrypt.compare(dto.pin, person.pinHash);
     if (!pinMatch) {
       throw new UnauthorizedException('Invalid credentials');
     }
+
+    await this.cache.del(rlKey);
 
     const payload = {
       sub: person.id,
@@ -47,7 +57,6 @@ export class DeliveryAuthService {
         id: person.id,
         name: person.name,
         phone: person.phone,
-        homeStoreId: person.homeStoreId,
         status: person.status,
       },
     };

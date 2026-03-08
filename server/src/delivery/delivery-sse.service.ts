@@ -174,32 +174,34 @@ export class DeliverySseService implements OnModuleInit, OnModuleDestroy {
     );
   }
 
-  /** Notify riders that an order has been claimed (remove from their UI). */
-  broadcastOrderClaimed(riderIds: string[], orderId: string): void {
+  /** Notify ALL connected riders that an order has been claimed (remove from their UI). */
+  broadcastOrderClaimed(excludeRiderId: string, orderId: string): void {
     const message: SSEMessage = {
       type: 'ORDER_CLAIMED',
       data: { orderId },
     };
     const payload = JSON.stringify(message);
 
-    for (const riderId of riderIds) {
-      const entry = this.connections.get(riderId);
-      if (entry) {
-        try {
-          entry.subject.next({ data: payload });
-          entry.lastActivity = Date.now();
-        } catch (err) {
-          this.logger.error(`SSE claimed broadcast failed for rider ${riderId}: ${err.message}`);
-          this.unregister(riderId);
-        }
+    const targetIds: string[] = [];
+    for (const [riderId, entry] of this.connections) {
+      if (riderId === excludeRiderId) continue;
+      targetIds.push(riderId);
+      try {
+        entry.subject.next({ data: payload });
+        entry.lastActivity = Date.now();
+      } catch (err) {
+        this.logger.error(`SSE claimed broadcast failed for rider ${riderId}: ${err.message}`);
+        this.unregister(riderId);
       }
     }
 
-    // Publish for other instances
-    this.publish(riderIds, payload);
+    // Publish for other instances (all connected riders minus the claimer)
+    if (targetIds.length > 0) {
+      this.publish(targetIds, payload);
+    }
 
     this.logger.log(
-      `Broadcast ORDER_CLAIMED (${orderId}) to ${riderIds.length} riders`,
+      `Broadcast ORDER_CLAIMED (${orderId}) to ${targetIds.length} connected riders`,
     );
   }
 

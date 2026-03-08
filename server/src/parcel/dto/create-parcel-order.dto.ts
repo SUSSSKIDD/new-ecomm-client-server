@@ -1,4 +1,4 @@
-import { IsEnum, IsNumber, IsOptional, IsString, Min, ValidateNested, IsDateString } from 'class-validator';
+import { IsEnum, IsNumber, IsOptional, IsString, Min, Max, ValidateNested, IsDateString } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ParcelCategory } from '@prisma/client';
 
@@ -29,6 +29,10 @@ export class ParcelAddressDto {
 
     @IsOptional()
     @IsString()
+    mapsLink?: string;
+
+    @IsOptional()
+    @IsString()
     recipientName?: string;
 
     @IsOptional()
@@ -36,9 +40,13 @@ export class ParcelAddressDto {
     recipientPhone?: string;
 
     @IsNumber()
+    @Min(-90)
+    @Max(90)
     lat: number;
 
     @IsNumber()
+    @Min(-180)
+    @Max(180)
     lng: number;
 }
 

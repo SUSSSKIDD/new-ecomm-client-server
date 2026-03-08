@@ -311,7 +311,9 @@ export class PaymentsService {
             `Webhook: order for Razorpay ID ${razorpayOrderId} not found, ignoring`,
           );
         } else {
-          throw err;
+          this.logger.error(
+            `Webhook: failed to process payment for Razorpay ID ${razorpayOrderId}: ${err.message}`,
+          );
         }
       }
     }

@@ -49,13 +49,24 @@ export class RiderRedisService implements OnModuleDestroy {
     }
   }
 
-  /** Get all order IDs currently in the pool (oldest first). */
-  async getPoolOrderIds(): Promise<string[]> {
+  /** Get order IDs currently in the pool (oldest first). Capped to prevent OOM. */
+  async getPoolOrderIds(limit: number = 100): Promise<string[]> {
     if (!this.client) return [];
     try {
-      return await this.client.zrange('avail:orders', 0, -1);
+      return await this.client.zrange('avail:orders', 0, limit - 1);
     } catch {
       return [];
+    }
+  }
+
+  /** Check if a specific order is in the available pool. */
+  async isOrderInPool(orderId: string): Promise<boolean> {
+    if (!this.client) return false;
+    try {
+      const score = await this.client.zscore('avail:orders', orderId);
+      return score !== null;
+    } catch {
+      return false;
     }
   }
 
@@ -90,7 +101,7 @@ export class RiderRedisService implements OnModuleDestroy {
     if (!this.client) return;
     try {
       await this.client.del(`avail:order:${orderId}`);
-    } catch {}
+    } catch { }
   }
 
   /** Batch-get order snapshots using MGET (single round-trip). */
@@ -136,15 +147,21 @@ export class RiderRedisService implements OnModuleDestroy {
     }
   }
 
-  /** Release a lock (only if this rider still holds it). */
+  /** Release a lock (only if this rider still holds it) using atomic Lua script. */
   async releaseLock(orderId: string, riderId: string): Promise<void> {
     if (!this.client) return;
     try {
-      const holder = await this.client.get(`lock:order:${orderId}`);
-      if (holder === riderId) {
-        await this.client.del(`lock:order:${orderId}`);
-      }
-    } catch {}
+      const script = `
+        if redis.call("get", KEYS[1]) == ARGV[1] then
+          return redis.call("del", KEYS[1])
+        else
+          return 0
+        end
+      `;
+      await this.client.eval(script, 1, `lock:order:${orderId}`, riderId);
+    } catch (e) {
+      this.logger.error(`releaseLock failed: ${e}`);
+    }
   }
 
   // ── Idempotency ──
@@ -170,7 +187,7 @@ export class RiderRedisService implements OnModuleDestroy {
         'EX',
         TTL.IDEMPOTENCY,
       );
-    } catch {}
+    } catch { }
   }
 
   // ═══════════════════════════════════════════════════════════════
@@ -182,7 +199,7 @@ export class RiderRedisService implements OnModuleDestroy {
     if (!this.client) return;
     try {
       await this.client.set(`rider:online:${riderId}`, '1', 'EX', ttlSeconds);
-    } catch {}
+    } catch { }
   }
 
   /** Mark a rider as offline manually. */
@@ -190,7 +207,7 @@ export class RiderRedisService implements OnModuleDestroy {
     if (!this.client) return;
     try {
       await this.client.del(`rider:online:${riderId}`);
-    } catch {}
+    } catch { }
   }
 
   /** Check if a rider is currently online. */
@@ -214,7 +231,7 @@ export class RiderRedisService implements OnModuleDestroy {
         'EX',
         TTL.LOCATION,
       );
-    } catch {}
+    } catch { }
   }
 
   /** Get a single rider's cached location. */
@@ -250,13 +267,18 @@ export class RiderRedisService implements OnModuleDestroy {
 
   // ── Eligible riders tracking (per order) ──
 
-  /** Record which riders were notified about an order. */
+  /** Record which riders were notified about an order. Atomically adds and sets expiry. */
   async addEligibleRiders(orderId: string, riderIds: string[]): Promise<void> {
     if (!this.client || riderIds.length === 0) return;
     try {
-      await this.client.sadd(`rider:eligible:${orderId}`, ...riderIds);
-      await this.client.expire(`rider:eligible:${orderId}`, TTL.ELIGIBLE_RIDERS);
-    } catch {}
+      const key = `rider:eligible:${orderId}`;
+      await this.client.pipeline()
+        .sadd(key, ...riderIds)
+        .expire(key, TTL.ELIGIBLE_RIDERS)
+        .exec();
+    } catch (e) {
+      this.logger.error(`addEligibleRiders failed: ${e}`);
+    }
   }
 
   /** Get all riders who were notified about an order. */
@@ -274,6 +296,6 @@ export class RiderRedisService implements OnModuleDestroy {
     if (!this.client) return;
     try {
       await this.client.del(`rider:eligible:${orderId}`);
-    } catch {}
+    } catch { }
   }
 }

@@ -59,6 +59,19 @@ export class CartService {
     if (!product) {
       throw new NotFoundException(`Product ${dto.productId} not found`);
     }
+
+    // Validate printProductId references an active print product
+    if (dto.printProductId) {
+      const printProduct = await (this.prisma as any).printProduct.findUnique({
+        where: { id: dto.printProductId },
+      });
+      if (!printProduct || !printProduct.isActive) {
+        throw new BadRequestException(
+          `Print product ${dto.printProductId} not found or inactive`,
+        );
+      }
+    }
+
     const maxStoreStock = maxStoreResult._max.stock ?? 0;
     // Optimistic stock check: uses max of global and best store stock.
     // Exact store-level validation happens at fulfillment/order creation time.
@@ -88,6 +101,10 @@ export class CartService {
       cart.items[existingIndex].price = product.price;
       cart.items[existingIndex].name = product.name;
       cart.items[existingIndex].image = product.images?.[0] ?? null;
+      // Update custom fields if provided
+      if (dto.selectedSize !== undefined) cart.items[existingIndex].selectedSize = dto.selectedSize;
+      if (dto.userUploadUrls !== undefined) cart.items[existingIndex].userUploadUrls = dto.userUploadUrls;
+      if (dto.printProductId !== undefined) cart.items[existingIndex].printProductId = dto.printProductId;
     } else {
       // Add new item with price/name snapshot
       const newItem: CartItem = {
@@ -96,6 +113,9 @@ export class CartService {
         price: product.price,
         name: product.name,
         image: product.images?.[0] ?? null,
+        ...(dto.selectedSize && { selectedSize: dto.selectedSize }),
+        ...(dto.userUploadUrls?.length && { userUploadUrls: dto.userUploadUrls }),
+        ...(dto.printProductId && { printProductId: dto.printProductId }),
       };
       cart.items.push(newItem);
     }

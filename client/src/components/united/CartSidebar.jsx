@@ -477,13 +477,43 @@ const CartSidebar = () => {
                         {/* ─ Unavailable Warning ─ */}
                         {unavailable.length > 0 && (
                             <div className="bg-orange-50 rounded-xl p-3 border border-orange-200">
-                                <p className="text-xs font-bold text-orange-700 uppercase mb-1">
-                                    {unavailable.length} items unavailable
+                                {unavailable.some(i => i.reason === 'out_of_range') ? (
+                                    <p className="text-sm font-bold text-orange-700 uppercase text-center py-1">
+                                        We are not delivering to this area
+                                    </p>
+                                ) : (
+                                    <>
+                                        <p className="text-xs font-bold text-orange-700 uppercase mb-1">
+                                            {unavailable.length} {unavailable.length === 1 ? 'item' : 'items'} unavailable
+                                        </p>
+                                        {unavailable.map((item) => (
+                                            <div key={item.productId} className="flex justify-between text-xs text-orange-800 py-0.5">
+                                                <span>{item.name}</span>
+                                                <span className="text-orange-500 font-medium">
+                                                    {item.reason.replace(/_/g, ' ')}
+                                                </span>
+                                            </div>
+                                        ))}
+                                    </>
+                                )}
+                            </div>
+                        )}
+
+                        {/* ─ Multi-Store Allocation Info ─ */}
+                        {preview?.allocation?.type === 'MULTI_STORE' && preview.allocation?.stores?.length > 1 && (
+                            <div className="bg-blue-50 rounded-xl p-3 border border-blue-200">
+                                <p className="text-xs font-bold text-blue-700 uppercase mb-1.5">
+                                    Fulfilled from {preview.allocation.storeCount} stores
                                 </p>
-                                {unavailable.map((item) => (
-                                    <div key={item.productId} className="flex justify-between text-xs text-orange-800 py-0.5">
-                                        <span>{item.name}</span>
-                                        <span className="text-orange-500">{item.reason}</span>
+                                <p className="text-[11px] text-blue-600 mb-2">
+                                    Each store shipment will be tracked independently
+                                </p>
+                                {preview.allocation.stores.map((store, i) => (
+                                    <div key={i} className="flex justify-between text-xs text-blue-800 py-0.5">
+                                        <span className="font-medium">{store.storeName}</span>
+                                        <span className="text-blue-500">
+                                            {store.itemCount} {store.itemCount === 1 ? 'item' : 'items'} · ₹{store.subtotal.toFixed(0)}
+                                        </span>
                                     </div>
                                 ))}
                             </div>
@@ -587,6 +617,21 @@ const CartSidebar = () => {
                             <div className="flex-1 min-w-0">
                                 <h4 className="text-sm font-medium text-gray-900 truncate">{item.name}</h4>
                                 <p className="text-xs text-gray-500 mt-1">₹{parsePrice(item.price)}</p>
+                                {/* Custom fields badges */}
+                                {(item.selectedSize || item.userUploadUrls?.length > 0) && (
+                                    <div className="flex flex-wrap gap-1 mt-1">
+                                        {item.selectedSize && (
+                                            <span className="text-[10px] px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded font-medium">
+                                                Size: {item.selectedSize}
+                                            </span>
+                                        )}
+                                        {item.userUploadUrls?.length > 0 && (
+                                            <span className="text-[10px] px-1.5 py-0.5 bg-purple-100 text-purple-700 rounded font-medium">
+                                                {item.userUploadUrls.length} upload{item.userUploadUrls.length > 1 ? 's' : ''}
+                                            </span>
+                                        )}
+                                    </div>
+                                )}
                                 <div className="flex items-center justify-between mt-2">
                                     <div className="flex items-center border border-gray-200 rounded">
                                         <RippleButton

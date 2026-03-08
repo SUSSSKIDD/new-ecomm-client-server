@@ -48,6 +48,16 @@ export class DeliveryController {
     private readonly orderPoolService: OrderPoolService,
   ) { }
 
+  /** Broadcast all pending orders + parcels to a FREE rider (fire-and-forget). */
+  private broadcastPendingToRider(riderId: string): void {
+    this.autoAssignService
+      .checkPendingOrders(riderId)
+      .catch((err) => this.logger.error(`checkPendingOrders error: ${err.message}`));
+    this.autoAssignService
+      .checkPendingParcelOrders(riderId)
+      .catch((err) => this.logger.error(`checkPendingParcelOrders error: ${err.message}`));
+  }
+
   // ── Admin endpoints ─────────────────────────────────────────────
 
   @Post('persons')
@@ -76,7 +86,7 @@ export class DeliveryController {
   updatePerson(
     @Param('id', ParseUUIDPipe) id: string,
     @Body()
-    data: Partial<{ name: string; isActive: boolean; homeStoreId: string }>,
+    data: Partial<{ name: string; isActive: boolean; pin: string }>,
   ) {
     return this.deliveryService.updatePerson(id, data);
   }
@@ -127,18 +137,8 @@ export class DeliveryController {
       dto.status,
     );
 
-    // If person sets FREE, broadcast pending orders and parcels to them
     if (dto.status === DeliveryPersonStatus.FREE) {
-      this.autoAssignService
-        .checkPendingOrders(req.user.sub)
-        .catch((err) =>
-          this.logger.error(`checkPendingOrders error: ${err.message}`),
-        );
-      this.autoAssignService
-        .checkPendingParcelOrders(req.user.sub)
-        .catch((err) =>
-          this.logger.error(`checkPendingParcelOrders error: ${err.message}`),
-        );
+      this.broadcastPendingToRider(req.user.sub);
     }
 
     return result;
@@ -160,6 +160,15 @@ export class DeliveryController {
   @ApiOperation({ summary: 'List assigned parcels' })
   getAssignedParcelOrders(@Req() req: AuthenticatedRequest) {
     return this.deliveryService.getAssignedParcelOrders(req.user.sub);
+  }
+
+  @Get('history')
+  @ApiBearerAuth()
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles('DELIVERY_PERSON')
+  @ApiOperation({ summary: 'Get delivery history (completed orders + parcels)' })
+  getDeliveryHistory(@Req() req: AuthenticatedRequest) {
+    return this.deliveryService.getDeliveryHistory(req.user.sub);
   }
 
   // ── Competitive Claiming ──────────────────────────────────────
@@ -231,15 +240,10 @@ export class DeliveryController {
       req.user.sub,
       id,
       dto.result,
+      dto.reason,
     );
 
-    // Person is now FREE — broadcast pending orders and parcels
-    this.autoAssignService
-      .checkPendingOrders(req.user.sub)
-      .catch((err) => this.logger.error(`checkPendingOrders error: ${err.message}`));
-    this.autoAssignService
-      .checkPendingParcelOrders(req.user.sub)
-      .catch((err) => this.logger.error(`checkPendingParcelOrders error: ${err.message}`));
+    this.broadcastPendingToRider(req.user.sub);
 
     return response;
   }
@@ -301,15 +305,10 @@ export class DeliveryController {
       req.user.sub,
       id,
       dto.result,
+      dto.reason,
     );
 
-    // Person is now FREE — broadcast pending orders and parcels
-    this.autoAssignService
-      .checkPendingOrders(req.user.sub)
-      .catch((err) => this.logger.error(`checkPendingOrders error: ${err.message}`));
-    this.autoAssignService
-      .checkPendingParcelOrders(req.user.sub)
-      .catch((err) => this.logger.error(`checkPendingParcelOrders error: ${err.message}`));
+    this.broadcastPendingToRider(req.user.sub);
 
     return response;
   }

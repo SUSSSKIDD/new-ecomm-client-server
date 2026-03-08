@@ -19,6 +19,8 @@ export const AuthProvider = ({ children }) => {
     const logout = useCallback(() => {
         localStorage.removeItem('token');
         localStorage.removeItem('user');
+        localStorage.removeItem('selectedAddress');
+        localStorage.removeItem('cart');
         setToken(null);
         setUser(null);
         setIsAuthenticated(false);
@@ -72,15 +74,15 @@ export const AuthProvider = ({ children }) => {
     const verifyOtp = async (phone, otp) => {
         try {
             const response = await axios.post(`${API_URL}/auth/verify-otp`, { phone, otp });
-            const { access_token, user } = response.data;
+            const { access_token, user: userData } = response.data;
 
             localStorage.setItem('token', access_token);
-            localStorage.setItem('user', JSON.stringify(user));
+            localStorage.setItem('user', JSON.stringify(userData));
 
             setToken(access_token);
-            setUser(user);
+            setUser(userData);
             setIsAuthenticated(true);
-            return { success: true };
+            return { success: true, user: userData };
         } catch (error) {
             console.error(error);
             return { success: false, message: error.response?.data?.message || 'Invalid OTP' };

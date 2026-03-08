@@ -116,20 +116,22 @@ const AdminStores = () => {
         <div>
             <div className="flex justify-between items-center mb-6">
                 <h1 className="text-2xl font-bold text-gray-800">global stores</h1>
-                <RippleButton
-                    onClick={() => {
-                        if (showForm) {
-                            setShowForm(false);
-                            setEditingId(null);
-                            setFormData({ name: '', pincode: '', lat: '', lng: '', storeType: 'GROCERY' });
-                        } else {
-                            setShowForm(true);
-                        }
-                    }}
-                    className="bg-ud-primary text-white px-4 py-2 rounded hover:brightness-110"
-                >
-                    {showForm ? 'Cancel' : 'Add Store'}
-                </RippleButton>
+                {admin?.role === 'ADMIN' && (
+                    <RippleButton
+                        onClick={() => {
+                            if (showForm) {
+                                setShowForm(false);
+                                setEditingId(null);
+                                setFormData({ name: '', pincode: '', lat: '', lng: '', storeType: 'GROCERY' });
+                            } else {
+                                setShowForm(true);
+                            }
+                        }}
+                        className="bg-ud-primary text-white px-4 py-2 rounded hover:brightness-110"
+                    >
+                        {showForm ? 'Cancel' : 'Add Store'}
+                    </RippleButton>
+                )}
             </div>
 
             {showForm && (
@@ -159,9 +161,8 @@ const AdminStores = () => {
                                 <option value="GROCERY">Grocery</option>
                                 <option value="PIZZA_TOWN">Pizza Town & Food Zone</option>
                                 <option value="AUTO_SERVICE">Auto Service & Parts</option>
-                                <option value="DROP_IN_FACTORY">Drop In Factory (Print Factory)</option>
+                                <option value="DROP_IN_FACTORY">Print Factory</option>
                                 <option value="AUTO_PARTS_SHOP">Auto Parts Shop</option>
-                                <option value="PICKUP_DROP">Pickup & Drop</option>
                                 <option value="HEALTH_SERVICE">Health Service</option>
                             </select>
                         </div>
@@ -180,7 +181,9 @@ const AdminStores = () => {
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Pincode</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                                {admin?.role === 'ADMIN' && (
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                                )}
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-200">
@@ -195,15 +198,17 @@ const AdminStores = () => {
                                             {s.isActive ? 'Active' : 'Inactive'}
                                         </span>
                                     </td>
-                                    <td className="px-6 py-4 text-sm font-medium flex gap-3">
-                                        <RippleButton onClick={() => {
-                                            setEditingId(s.id);
-                                            setFormData({ name: s.name, pincode: s.pincode, lat: s.lat, lng: s.lng, storeType: s.storeType });
-                                            setShowForm(true);
-                                        }} className="text-blue-600 hover:text-blue-900">Edit</RippleButton>
-                                        <RippleButton onClick={() => toggleStatus(s.id, s.isActive)} className="text-blue-600 hover:text-blue-900">Toggle</RippleButton>
-                                        <RippleButton onClick={() => deleteStore(s.id)} className="text-red-600 hover:text-red-900">Delete</RippleButton>
-                                    </td>
+                                    {admin?.role === 'ADMIN' && (
+                                        <td className="px-6 py-4 text-sm font-medium flex gap-3">
+                                            <RippleButton onClick={() => {
+                                                setEditingId(s.id);
+                                                setFormData({ name: s.name, pincode: s.pincode, lat: s.lat, lng: s.lng, storeType: s.storeType });
+                                                setShowForm(true);
+                                            }} className="text-blue-600 hover:text-blue-900">Edit</RippleButton>
+                                            <RippleButton onClick={() => toggleStatus(s.id, s.isActive)} className="text-blue-600 hover:text-blue-900">Toggle</RippleButton>
+                                            <RippleButton onClick={() => deleteStore(s.id)} className="text-red-600 hover:text-red-900">Delete</RippleButton>
+                                        </td>
+                                    )}
                                 </tr>
                             ))}
                         </tbody>

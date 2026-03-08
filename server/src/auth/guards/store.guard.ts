@@ -61,6 +61,15 @@ export class StoreGuard implements CanActivate {
             return true;
         }
 
+        // PARCEL_MANAGER gets read-only access to store resources (view stores)
+        if (user.role === Role.PARCEL_MANAGER) {
+            const method = request.method?.toUpperCase();
+            if (method === 'GET') {
+                return true;
+            }
+            throw new ForbiddenException('Parcel Managers have read-only access to store resources');
+        }
+
         // All other roles (USER, DELIVERY_PERSON) are denied access to store resources
         throw new ForbiddenException('Access denied: insufficient role for store resources');
     }

@@ -12,6 +12,7 @@ import { RedisCacheService } from '../common/services/redis-cache.service';
 import { StockService } from '../common/services/stock.service';
 import { paginate } from '../common/utils/pagination.util';
 import { OrderFulfillmentService, FulfillmentResult } from './order-fulfillment.service';
+import { AllocationResult } from './allocation.service';
 import { AutoAssignService } from '../delivery/auto-assign.service';
 import { LedgerService } from '../ledger/ledger.service';
 import { CreateOrderDto } from './dto/create-order.dto';
@@ -20,6 +21,7 @@ import {
   OrderPreview,
   PreviewItem,
   FulfillmentPreview,
+  AllocationPreview,
 } from './interfaces/order-preview.interface';
 import { OrderStatus, PaymentMethod, PaymentStatus, Prisma } from '@prisma/client';
 import { randomBytes } from 'crypto';
@@ -231,15 +233,11 @@ export class OrdersService {
       };
     });
 
-    const fulfillment = await this.fulfillmentService.resolveStoreAssignment(
-      address.lat,
-      address.lng,
-      cartItemInputs,
+    // Single allocation call — derives both fulfillment and allocation preview
+    const allocation = await this.fulfillmentService.resolveAllocation(
+      address.lat, address.lng, cartItemInputs,
     );
-
-    // Cache fulfillment result for 5 minutes (reused by order creation)
-    const fulfillmentCacheKey = `fulfillment:${userId}:${addressId}`;
-    await this.cache.set(fulfillmentCacheKey, fulfillment, TTL.FULFILLMENT);
+    const fulfillment = this.fulfillmentService.allocationToFulfillment(allocation);
 
     // Re-calculate totals based on available items only
     const availablePreviewItems: PreviewItem[] = fulfillment.availableItems.map(
@@ -260,6 +258,15 @@ export class OrdersService {
       items,
       ...adjustedTotals,
       fulfillment,
+      allocation: {
+        type: allocation.type,
+        storeCount: allocation.storeAllocations.length,
+        stores: allocation.storeAllocations.map((sa) => ({
+          storeName: sa.storeName,
+          itemCount: sa.items.length,
+          subtotal: sa.items.reduce((s, i) => s + i.price * i.quantity, 0),
+        })),
+      },
     } as FulfillmentPreview;
   }
 
@@ -315,16 +322,13 @@ export class OrdersService {
       throw new BadRequestException('No items to order');
     }
 
-    // 4-5. Parallel: fetch products + resolve fulfillment (uses cart data, doesn't need fresh products)
+    // 4-5. Parallel: fetch products + resolve allocation
     const productIds = itemsToOrder.map((i) => i.productId);
     const lat = dto.lat ?? address.lat;
     const lng = dto.lng ?? address.lng;
     const needsFulfillment = lat != null && lng != null;
-    const fulfillmentCacheKey = needsFulfillment
-      ? `fulfillment:${userId}:${dto.addressId}`
-      : null;
 
-    // Build cart item inputs from cart snapshot (for fulfillment - doesn't need DB product data)
+    // Build cart item inputs from cart snapshot
     const cartItemInputsForFulfillment = needsFulfillment
       ? itemsToOrder.map((ci) => ({
         productId: ci.productId,
@@ -335,23 +339,15 @@ export class OrdersService {
       }))
       : null;
 
-    // Run product fetch + fulfillment resolution in parallel
-    const [products, fulfillmentResult] = await Promise.all([
+    // Run product fetch + allocation resolution in parallel
+    const [products, allocationResult] = await Promise.all([
       this.prisma.product.findMany({
         where: { id: { in: productIds } },
       }),
       needsFulfillment
-        ? (async () => {
-          // Try cache first
-          const cached = await this.cache.get<FulfillmentResult>(fulfillmentCacheKey!);
-          if (cached) {
-            this.cache.del(fulfillmentCacheKey!).catch(() => { });
-            return cached;
-          }
-          return this.fulfillmentService.resolveStoreAssignment(
+        ? this.fulfillmentService.resolveAllocation(
             lat!, lng!, cartItemInputsForFulfillment!,
-          );
-        })()
+          )
         : Promise.resolve(null),
     ]);
 
@@ -366,45 +362,19 @@ export class OrdersService {
       }
     }
 
-    // 5. Process fulfillment results
-    let storeAssignments: Map<string, string> | null = null; // productId -> storeId
-
-    if (fulfillmentResult) {
-      if (fulfillmentResult.unavailableItems.length > 0) {
-        const unavailableNames = fulfillmentResult.unavailableItems
+    // 5. Process allocation results
+    if (allocationResult) {
+      if (allocationResult.unfulfillableItems.length > 0) {
+        const unavailableNames = allocationResult.unfulfillableItems
           .map((i) => i.name)
           .join(', ');
         throw new BadRequestException(
           `These items are unavailable for delivery: ${unavailableNames}`,
         );
       }
-
-      storeAssignments = new Map(
-        fulfillmentResult.availableItems.map((fi) => [fi.productId, fi.storeId!]),
-      );
     }
 
-    // 6. Build order items
-    const orderItems = itemsToOrder.map((cartItem) => {
-      const product = productMap.get(cartItem.productId)!;
-      return {
-        productId: product.id,
-        name: product.name,
-        price: product.price,
-        quantity: cartItem.quantity,
-        total: product.price * cartItem.quantity,
-        storeId: storeAssignments?.get(product.id) ?? null,
-      };
-    });
-
-    // 7. Calculate totals
-    const subtotal = orderItems.reduce((sum, item) => sum + item.total, 0);
-    const freeDelivery = subtotal >= this.freeDeliveryThreshold;
-    const deliveryFee = freeDelivery ? 0 : this.deliveryFee;
-    const tax = Math.round(subtotal * this.taxRate * 100) / 100;
-    const total = Math.round((subtotal + deliveryFee + tax) * 100) / 100;
-
-    // 8. Determine payment status
+    // 6. Determine payment status + order status
     const paymentStatus =
       dto.paymentMethod === PaymentMethod.COD
         ? PaymentStatus.COD_PENDING
@@ -418,14 +388,100 @@ export class OrdersService {
     const confirmedAt =
       dto.paymentMethod === PaymentMethod.COD ? new Date() : null;
 
-    // 9. Atomic transaction: stock decrement + order creation
+    // 7. Branch: single-store vs multi-store
+    let order: any;
+
+    if (!allocationResult || allocationResult.type === 'SINGLE_STORE') {
+      // Single-store path (or no fulfillment data)
+      order = await this.createSingleStoreOrder(
+        userId, dto, idempotencyKey, address, itemsToOrder, productMap,
+        allocationResult, orderStatus, paymentStatus, confirmedAt,
+      );
+    } else {
+      // Multi-store path
+      order = await this.createMultiStoreOrder(
+        userId, dto, idempotencyKey, address, itemsToOrder, productMap,
+        allocationResult, orderStatus, paymentStatus, confirmedAt,
+      );
+    }
+
+    // Clear cart + invalidate cache
+    await Promise.all([
+      this.cartService.clearCart(userId),
+      Promise.resolve(this.invalidateOrderCache(userId)),
+    ]);
+
+    this.logger.log(
+      `Order ${order.orderNumber} created for user ${userId} (${dto.paymentMethod})`,
+    );
+
+    // COD orders are CONFIRMED immediately — record in ledger
+    if (dto.paymentMethod === PaymentMethod.COD) {
+      if (order.childOrders?.length > 0) {
+        // Multi-store: create ledger entries per child (parent has no items)
+        for (const child of order.childOrders) {
+          this.createLedgerEntries(child, 'COD');
+        }
+      } else {
+        this.createLedgerEntries(order, 'COD');
+      }
+    }
+
+    return { ...order, ...this.computeGraceFields(order) };
+  }
+
+  /**
+   * Create a single-store order (current behavior).
+   */
+  private async createSingleStoreOrder(
+    userId: string,
+    dto: CreateOrderDto,
+    idempotencyKey: string,
+    address: any,
+    itemsToOrder: any[],
+    productMap: Map<string, any>,
+    allocationResult: AllocationResult | null,
+    orderStatus: OrderStatus,
+    paymentStatus: PaymentStatus,
+    confirmedAt: Date | null,
+  ) {
+    // Build store assignments from single-store allocation
+    let storeAssignments: Map<string, string> | null = null;
+    if (allocationResult && allocationResult.storeAllocations.length > 0) {
+      storeAssignments = new Map<string, string>();
+      for (const sa of allocationResult.storeAllocations) {
+        for (const item of sa.items) {
+          storeAssignments.set(item.productId, sa.storeId);
+        }
+      }
+    }
+
+    const orderItems = itemsToOrder.map((cartItem) => {
+      const product = productMap.get(cartItem.productId)!;
+      return {
+        productId: product.id,
+        name: product.name,
+        price: product.price,
+        quantity: cartItem.quantity,
+        total: product.price * cartItem.quantity,
+        storeId: storeAssignments?.get(product.id) ?? null,
+        selectedSize: cartItem.selectedSize ?? null,
+        userUploadUrls: cartItem.userUploadUrls ?? [],
+        printProductId: cartItem.printProductId ?? null,
+      };
+    });
+
+    const subtotal = orderItems.reduce((sum, item) => sum + item.total, 0);
+    const freeDelivery = subtotal >= this.freeDeliveryThreshold;
+    const deliveryFee = freeDelivery ? 0 : this.deliveryFee;
+    const tax = Math.round(subtotal * this.taxRate * 100) / 100;
+    const total = Math.round((subtotal + deliveryFee + tax) * 100) / 100;
+
     const orderNumber = this.generateOrderNumber();
 
-    const order = await this.prisma.$transaction(async (tx) => {
-      // Batch decrement stock
+    return this.prisma.$transaction(async (tx) => {
       await this.stockService.adjustStock(tx, orderItems, 'decrement');
 
-      // Create order with items (including storeId)
       return tx.order.create({
         data: {
           userId,
@@ -448,33 +504,192 @@ export class OrdersService {
               quantity: oi.quantity,
               total: oi.total,
               storeId: oi.storeId,
+              selectedSize: oi.selectedSize,
+              userUploadUrls: oi.userUploadUrls,
+              printProductId: oi.printProductId,
             })),
           },
         },
         include: { items: true },
       });
     });
+  }
 
-    // 10-11. Parallel: clear cart + invalidate order list cache
-    await Promise.all([
-      this.cartService.clearCart(userId),
-      Promise.resolve(this.invalidateOrderCache(userId)),
-    ]);
+  /**
+   * Create a multi-store order with parent + child sub-orders.
+   * All done in a single atomic transaction.
+   */
+  private async createMultiStoreOrder(
+    userId: string,
+    dto: CreateOrderDto,
+    idempotencyKey: string,
+    address: any,
+    itemsToOrder: any[],
+    productMap: Map<string, any>,
+    allocationResult: AllocationResult,
+    orderStatus: OrderStatus,
+    paymentStatus: PaymentStatus,
+    confirmedAt: Date | null,
+  ) {
+    // Build a lookup for cart item custom fields
+    const cartItemLookup = new Map(itemsToOrder.map((ci) => [ci.productId, ci]));
 
-    this.logger.log(
-      `Order ${order.orderNumber} created for user ${userId} (${dto.paymentMethod})`,
-    );
+    // Build order items per store from allocation
+    const storeOrderItems = allocationResult.storeAllocations.map((sa) => ({
+      storeId: sa.storeId,
+      storeName: sa.storeName,
+      items: sa.items.map((item) => {
+        const product = productMap.get(item.productId)!;
+        const cartItem = cartItemLookup.get(item.productId);
+        return {
+          productId: product.id,
+          name: product.name,
+          price: product.price,
+          quantity: item.quantity,
+          total: product.price * item.quantity,
+          storeId: sa.storeId,
+          selectedSize: cartItem?.selectedSize ?? null,
+          userUploadUrls: cartItem?.userUploadUrls ?? [],
+          printProductId: cartItem?.printProductId ?? null,
+        };
+      }),
+    }));
 
-    // COD orders are CONFIRMED immediately — record in ledger
-    if (dto.paymentMethod === PaymentMethod.COD) {
-      this.createLedgerEntries(order, 'COD');
+    // Calculate aggregate totals
+    const allItems = storeOrderItems.flatMap((s) => s.items);
+    const subtotal = allItems.reduce((sum, item) => sum + item.total, 0);
+    const freeDelivery = subtotal >= this.freeDeliveryThreshold;
+    const deliveryFee = freeDelivery ? 0 : this.deliveryFee;
+    const tax = Math.round(subtotal * this.taxRate * 100) / 100;
+    const total = Math.round((subtotal + deliveryFee + tax) * 100) / 100;
+
+    const parentOrderNumber = this.generateOrderNumber();
+
+    return this.prisma.$transaction(async (tx) => {
+      // Batch decrement stock for ALL items across all stores
+      await this.stockService.adjustStock(tx, allItems, 'decrement');
+
+      // Create parent order (umbrella, no items)
+      const parentOrder = await tx.order.create({
+        data: {
+          userId,
+          orderNumber: parentOrderNumber,
+          status: orderStatus,
+          paymentMethod: dto.paymentMethod,
+          paymentStatus,
+          deliveryAddress: address as any,
+          subtotal,
+          deliveryFee,
+          tax,
+          total,
+          idempotencyKey,
+          confirmedAt,
+          isParent: true,
+        },
+      });
+
+      // Create child orders — one per store
+      const childOrders: any[] = [];
+      let assignedDeliveryFee = 0;
+      for (let i = 0; i < storeOrderItems.length; i++) {
+        const storeGroup = storeOrderItems[i];
+        const childSubtotal = storeGroup.items.reduce((sum, item) => sum + item.total, 0);
+        const isLast = i === storeOrderItems.length - 1;
+        // Split delivery fee proportionally — assign rounding remainder to last child
+        const childDeliveryFee = isLast
+          ? Math.round((deliveryFee - assignedDeliveryFee) * 100) / 100
+          : subtotal > 0
+            ? Math.round((childSubtotal / subtotal) * deliveryFee * 100) / 100
+            : 0;
+        assignedDeliveryFee += childDeliveryFee;
+        const childTax = Math.round(childSubtotal * this.taxRate * 100) / 100;
+        const childTotal = Math.round((childSubtotal + childDeliveryFee + childTax) * 100) / 100;
+
+        const childOrder = await tx.order.create({
+          data: {
+            userId,
+            orderNumber: `${parentOrderNumber}-${i + 1}`,
+            status: orderStatus,
+            paymentMethod: dto.paymentMethod,
+            paymentStatus,
+            deliveryAddress: address as any,
+            subtotal: childSubtotal,
+            deliveryFee: childDeliveryFee,
+            tax: childTax,
+            total: childTotal,
+            idempotencyKey: `${idempotencyKey}-child-${i + 1}`,
+            confirmedAt,
+            parentOrderId: parentOrder.id,
+            items: {
+              create: storeGroup.items.map((oi) => ({
+                productId: oi.productId,
+                name: oi.name,
+                price: oi.price,
+                quantity: oi.quantity,
+                total: oi.total,
+                storeId: oi.storeId,
+                selectedSize: oi.selectedSize,
+                userUploadUrls: oi.userUploadUrls,
+                printProductId: oi.printProductId,
+              })),
+            },
+          },
+          include: { items: true },
+        });
+        childOrders.push(childOrder);
+      }
+
+      return {
+        ...parentOrder,
+        items: [],
+        childOrders,
+      };
+    });
+  }
+
+  /**
+   * Sync parent order status based on children's statuses.
+   * Called after any child order status change.
+   */
+  private async syncParentStatus(parentOrderId: string): Promise<void> {
+    const children = await this.prisma.order.findMany({
+      where: { parentOrderId },
+      select: { status: true },
+    });
+
+    if (children.length === 0) return;
+
+    const statuses = children.map((c) => c.status);
+
+    // Separate cancelled from active children
+    const activeStatuses = statuses.filter((s) => s !== OrderStatus.CANCELLED);
+
+    let parentStatus: OrderStatus;
+    if (activeStatuses.length === 0) {
+      // All children cancelled
+      parentStatus = OrderStatus.CANCELLED;
+    } else if (activeStatuses.every((s) => s === OrderStatus.DELIVERED)) {
+      parentStatus = OrderStatus.DELIVERED;
+    } else if (activeStatuses.some((s) => s === OrderStatus.SHIPPED)) {
+      parentStatus = OrderStatus.SHIPPED;
+    } else if (activeStatuses.some((s) => s === OrderStatus.ORDER_PICKED)) {
+      parentStatus = OrderStatus.ORDER_PICKED;
+    } else {
+      parentStatus = OrderStatus.CONFIRMED;
     }
 
-    return { ...order, ...this.computeGraceFields(order) };
+    await this.prisma.order.update({
+      where: { id: parentOrderId },
+      data: {
+        status: parentStatus,
+        ...(parentStatus === OrderStatus.DELIVERED ? { deliveredAt: new Date() } : {}),
+      },
+    });
   }
 
   /**
    * List user's orders (paginated, cached 5 min).
+   * Excludes child orders — users see parent or single-store orders only.
    */
   async findAll(userId: string, query: OrderQueryDto) {
     const { page = 1, limit = 10 } = query;
@@ -485,9 +700,14 @@ export class OrdersService {
 
     const skip = (page - 1) * limit;
 
+    const where: Prisma.OrderWhereInput = {
+      userId,
+      parentOrderId: null, // Exclude child orders — show parent or standalone
+    };
+
     const [orders, total] = await Promise.all([
       this.prisma.order.findMany({
-        where: { userId },
+        where,
         orderBy: { createdAt: 'desc' },
         skip,
         take: limit,
@@ -500,9 +720,22 @@ export class OrdersService {
               },
             },
           },
+          childOrders: {
+            include: {
+              items: true,
+              assignment: {
+                include: {
+                  deliveryPerson: {
+                    select: { id: true, name: true, phone: true },
+                  },
+                },
+              },
+            },
+            orderBy: { orderNumber: 'asc' },
+          },
         },
       }),
-      this.prisma.order.count({ where: { userId } }),
+      this.prisma.order.count({ where }),
     ]);
 
     const data = orders.map((o) => ({
@@ -559,6 +792,19 @@ export class OrdersService {
             },
           },
         },
+        childOrders: {
+          include: {
+            items: true,
+            assignment: {
+              include: {
+                deliveryPerson: {
+                  select: { id: true, name: true, phone: true, status: true },
+                },
+              },
+            },
+          },
+          orderBy: { orderNumber: 'asc' },
+        },
       },
     });
 
@@ -575,7 +821,8 @@ export class OrdersService {
 
   /**
    * Cancel an order. Only if PENDING or CONFIRMED. Restores stock atomically.
-   * Now restores to StoreInventory when storeId is present on items.
+   * For parent orders: cascade cancel all non-terminal children.
+   * For child orders: cancel child only, then sync parent status.
    */
   async cancel(userId: string, orderId: string) {
     const order = await this.prisma.order.findUnique({
@@ -587,8 +834,20 @@ export class OrdersService {
         status: true,
         paymentStatus: true,
         confirmedAt: true,
+        isParent: true,
+        parentOrderId: true,
         items: {
           select: { productId: true, quantity: true, storeId: true, id: true, name: true, price: true, total: true, orderId: true },
+        },
+        childOrders: {
+          select: {
+            id: true,
+            status: true,
+            paymentStatus: true,
+            items: {
+              select: { productId: true, quantity: true, storeId: true, id: true, name: true, price: true, total: true, orderId: true },
+            },
+          },
         },
       },
     });
@@ -606,9 +865,16 @@ export class OrdersService {
       );
     }
 
-    // CONFIRMED orders can only be cancelled within the 90-second grace period
+    // Grace period check — use parent's confirmedAt for child orders
+    const graceOrder = order.parentOrderId
+      ? await this.prisma.order.findUnique({
+          where: { id: order.parentOrderId },
+          select: { confirmedAt: true },
+        })
+      : order;
+
     if (order.status === OrderStatus.CONFIRMED) {
-      const grace = this.computeGraceFields(order);
+      const grace = this.computeGraceFields({ status: order.status, confirmedAt: graceOrder?.confirmedAt });
       if (!grace.canCancel) {
         throw new BadRequestException(
           'Grace period expired. Order can no longer be cancelled.',
@@ -616,26 +882,65 @@ export class OrdersService {
       }
     }
 
-    const cancelledOrder = await this.prisma.$transaction(async (tx) => {
-      await this.stockService.adjustStock(tx, order.items, 'increment');
+    const newPaymentStatus = (ps: PaymentStatus) =>
+      ps === PaymentStatus.PAID ? PaymentStatus.REFUNDED : PaymentStatus.FAILED;
 
-      return tx.order.update({
-        where: { id: orderId },
-        data: {
-          status: OrderStatus.CANCELLED,
-          paymentStatus:
-            order.paymentStatus === PaymentStatus.PAID
-              ? PaymentStatus.REFUNDED
-              : PaymentStatus.FAILED,
-        },
+    if (order.isParent) {
+      // Cascade cancel all non-terminal child orders
+      await this.prisma.$transaction(async (tx) => {
+        for (const child of order.childOrders) {
+          if (child.status === OrderStatus.CANCELLED || child.status === OrderStatus.DELIVERED) continue;
+          if (child.items.length > 0) {
+            await this.stockService.adjustStock(tx, child.items, 'increment');
+          }
+          await tx.order.update({
+            where: { id: child.id },
+            data: {
+              status: OrderStatus.CANCELLED,
+              paymentStatus: newPaymentStatus(child.paymentStatus as PaymentStatus),
+            },
+          });
+        }
+        // Cancel parent itself
+        await tx.order.update({
+          where: { id: orderId },
+          data: {
+            status: OrderStatus.CANCELLED,
+            paymentStatus: newPaymentStatus(order.paymentStatus as PaymentStatus),
+          },
+        });
       });
-    });
+    } else {
+      // Single-store or child order cancel
+      await this.prisma.$transaction(async (tx) => {
+        if (order.items.length > 0) {
+          await this.stockService.adjustStock(tx, order.items, 'increment');
+        }
+        await tx.order.update({
+          where: { id: orderId },
+          data: {
+            status: OrderStatus.CANCELLED,
+            paymentStatus: newPaymentStatus(order.paymentStatus as PaymentStatus),
+          },
+        });
+      });
+
+      // If child order, sync parent status
+      if (order.parentOrderId) {
+        await this.syncParentStatus(order.parentOrderId);
+      }
+    }
 
     this.invalidateOrderCache(userId, orderId);
 
     this.logger.log(`Order ${order.orderNumber} cancelled`);
-    // Attach items from initial fetch (avoids redundant include in update)
-    return { ...cancelledOrder, items: order.items, ...this.computeGraceFields({ ...cancelledOrder, confirmedAt: order.confirmedAt }) };
+
+    const cancelledOrder = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      include: { items: true, childOrders: { include: { items: true } } },
+    });
+
+    return { ...cancelledOrder, ...this.computeGraceFields({ status: OrderStatus.CANCELLED, confirmedAt: order.confirmedAt }) };
   }
 
   /**
@@ -656,6 +961,8 @@ export class OrdersService {
         status: true,
         confirmedAt: true,
         deliveryFee: true,
+        isParent: true,
+        parentOrderId: true,
         items: {
           select: { id: true, productId: true, name: true, price: true, quantity: true, total: true, storeId: true, orderId: true },
         },
@@ -666,7 +973,21 @@ export class OrdersService {
       throw new NotFoundException('Order not found');
     }
 
-    const grace = this.computeGraceFields(order);
+    // Parent orders cannot be modified directly — modify individual child orders
+    if (order.isParent) {
+      throw new BadRequestException(
+        'Cannot modify a multi-store order directly. Modify individual sub-orders instead.',
+      );
+    }
+
+    // Grace period check — use parent's confirmedAt for child orders
+    const graceSource = order.parentOrderId
+      ? await this.prisma.order.findUnique({
+          where: { id: order.parentOrderId },
+          select: { confirmedAt: true },
+        })
+      : order;
+    const grace = this.computeGraceFields({ status: order.status, confirmedAt: graceSource?.confirmedAt });
     if (!grace.canModify) {
       throw new BadRequestException(
         'Grace period expired. Order can no longer be modified.',
@@ -743,10 +1064,26 @@ export class OrdersService {
       });
     });
 
+    // If child order, sync parent totals
+    if (order.parentOrderId) {
+      const siblings = await this.prisma.order.findMany({
+        where: { parentOrderId: order.parentOrderId },
+        select: { subtotal: true, deliveryFee: true, tax: true, total: true },
+      });
+      const parentSubtotal = siblings.reduce((s, c) => s + c.subtotal, 0);
+      const parentDeliveryFee = siblings.reduce((s, c) => s + c.deliveryFee, 0);
+      const parentTax = siblings.reduce((s, c) => s + c.tax, 0);
+      const parentTotal = siblings.reduce((s, c) => s + c.total, 0);
+      await this.prisma.order.update({
+        where: { id: order.parentOrderId },
+        data: { subtotal: parentSubtotal, deliveryFee: parentDeliveryFee, tax: parentTax, total: parentTotal },
+      });
+    }
+
     this.invalidateOrderCache(userId, orderId);
 
     this.logger.log(`Order ${order.orderNumber} modified within grace period`);
-    return { ...updatedOrder, ...this.computeGraceFields({ ...updatedOrder, confirmedAt: order.confirmedAt }) };
+    return { ...updatedOrder, ...this.computeGraceFields({ ...updatedOrder, confirmedAt: graceSource?.confirmedAt ?? order.confirmedAt }) };
   }
 
   /**
@@ -769,10 +1106,10 @@ export class OrdersService {
       orderId,
     );
 
-    // Fetch the order with items for response + ledger
+    // Fetch the order with items + children for response + ledger
     const order = await this.prisma.order.findUnique({
       where: { id: orderId },
-      include: { items: true },
+      include: { items: true, childOrders: { include: { items: true } } },
     });
     if (!order) throw new NotFoundException('Order not found');
 
@@ -781,10 +1118,26 @@ export class OrdersService {
       return order;
     }
 
+    // If multi-store parent, also confirm all child orders
+    if (order.isParent && order.childOrders.length > 0) {
+      await this.prisma.$executeRawUnsafe(
+        `UPDATE "Order" SET "status" = 'CONFIRMED', "paymentStatus" = 'PAID',
+         "confirmedAt" = NOW(), "updatedAt" = NOW()
+         WHERE "parentOrderId" = $1 AND "status" = 'PENDING'`,
+        orderId,
+      );
+    }
+
     this.invalidateOrderCache(order.userId, orderId);
 
     // Record online payment in ledger
-    this.createLedgerEntries(order, 'RAZORPAY');
+    if (order.childOrders?.length > 0) {
+      for (const child of order.childOrders) {
+        this.createLedgerEntries(child, 'RAZORPAY');
+      }
+    } else {
+      this.createLedgerEntries(order, 'RAZORPAY');
+    }
 
     this.logger.log(`Order ${order.orderNumber} marked as PAID`);
 
@@ -864,7 +1217,9 @@ export class OrdersService {
     } = query;
     const skip = (page - 1) * limit;
 
-    const where: Prisma.OrderWhereInput = {};
+    const where: Prisma.OrderWhereInput = {
+      parentOrderId: null, // Show parent/standalone only, not child orders
+    };
     if (status) {
       where.status = status;
     }
@@ -883,6 +1238,17 @@ export class OrdersService {
               deliveryPerson: { select: { id: true, name: true, phone: true } },
             },
           },
+          childOrders: {
+            include: {
+              items: true,
+              assignment: {
+                include: {
+                  deliveryPerson: { select: { id: true, name: true, phone: true } },
+                },
+              },
+            },
+            orderBy: { orderNumber: 'asc' },
+          },
         },
       }),
       this.prisma.order.count({ where }),
@@ -896,9 +1262,10 @@ export class OrdersService {
   // DELIVERED can only be set by delivery person via completeDelivery()
   private static readonly VALID_TRANSITIONS: Record<string, OrderStatus[]> = {
     PENDING: [OrderStatus.CONFIRMED, OrderStatus.CANCELLED],
-    CONFIRMED: [OrderStatus.ORDER_PICKED, OrderStatus.CANCELLED],
+    CONFIRMED: [OrderStatus.PROCESSING, OrderStatus.ORDER_PICKED, OrderStatus.CANCELLED],
+    PROCESSING: [OrderStatus.ORDER_PICKED, OrderStatus.CANCELLED],
     ORDER_PICKED: [OrderStatus.SHIPPED, OrderStatus.CANCELLED],
-    SHIPPED: [],     // DELIVERED is set only by delivery person
+    SHIPPED: [OrderStatus.CANCELLED],     // DELIVERED is set only by delivery person
     DELIVERED: [],
     CANCELLED: [],
   };
@@ -909,6 +1276,13 @@ export class OrdersService {
       include: { items: true },
     });
     if (!order) throw new NotFoundException('Order not found');
+
+    // Parent orders cannot have status set directly — status is derived from children
+    if (order.isParent) {
+      throw new BadRequestException(
+        'Cannot update status of a multi-store parent order directly. Update individual sub-orders.',
+      );
+    }
 
     // Block admin from manually setting DELIVERED — only delivery person can
     if (status === OrderStatus.DELIVERED) {
@@ -951,6 +1325,11 @@ export class OrdersService {
         });
       });
 
+      // Sync parent status if this is a child order
+      if (order.parentOrderId) {
+        await this.syncParentStatus(order.parentOrderId);
+      }
+
       this.logger.log(`Order ${order.orderNumber} cancelled by admin with stock restoration`);
       return cancelledOrder;
     }
@@ -964,6 +1343,11 @@ export class OrdersService {
       where: { id },
       data: updateData,
     });
+
+    // Sync parent status if this is a child order
+    if (order.parentOrderId) {
+      await this.syncParentStatus(order.parentOrderId);
+    }
 
     // Auto-trigger delivery search when order is packed
     if (status === OrderStatus.ORDER_PICKED) {

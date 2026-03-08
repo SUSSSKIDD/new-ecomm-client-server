@@ -2,11 +2,13 @@ import {
   Controller,
   Get,
   Post,
+  Put,
   Patch,
   Delete,
   Body,
   Param,
   Query,
+  Req,
   UseGuards,
   ParseUUIDPipe,
 } from '@nestjs/common';
@@ -18,6 +20,7 @@ import {
   ApiResponse,
 } from '@nestjs/swagger';
 import { StoresService } from './stores.service';
+import { SubcategoryService } from './subcategory.service';
 import { CreateStoreDto } from './dto/create-store.dto';
 import { UpdateStoreDto } from './dto/update-store.dto';
 import {
@@ -25,6 +28,11 @@ import {
   BulkUpdateInventoryDto,
 } from './dto/update-inventory.dto';
 import { CheckServiceabilityDto } from './dto/check-serviceability.dto';
+import {
+  CreateCustomSubcategoryDto,
+  AdminCreateCustomSubcategoryDto,
+  UpsertCategoryConfigDto,
+} from './dto/custom-subcategory.dto';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { StoreGuard } from '../auth/guards/store.guard';
@@ -34,21 +42,52 @@ import {
   CATEGORY_SUBCATEGORIES,
 } from '../common/constants/store-categories';
 
+interface AuthenticatedRequest {
+  user: { sub: string; phone: string; role: string; storeId?: string };
+}
+
 @ApiTags('stores')
 @Controller('stores')
 export class StoresController {
-  constructor(private readonly storesService: StoresService) { }
+  constructor(
+    private readonly storesService: StoresService,
+    private readonly subcategoryService: SubcategoryService,
+  ) { }
 
   // ── Public ───────────────────────────────────────────────────────
 
   @Get('categories')
-  @ApiOperation({ summary: 'Get available store categories' })
+  @ApiOperation({ summary: 'Get available store categories (static + custom merged)' })
   @ApiResponse({ status: 200, description: 'Store categories list' })
-  getCategories() {
+  async getCategories() {
+    const [allCustom, allConfigs] = await Promise.all([
+      this.subcategoryService.getAllCustomSubcategories(),
+      this.subcategoryService.getAllCategoryConfigs(),
+    ]);
+    const configMap = new Map(allConfigs.map((c: { storeType: string; subcategory: string; uploadType: string }) => [`${c.storeType}:${c.subcategory}`, c.uploadType]));
+
+    const mergedSubcategories: Record<string, string[]> = {};
+    const uploadTypes: Record<string, Record<string, string>> = {};
+    for (const storeType of STORE_CATEGORIES) {
+      const staticSubs = CATEGORY_SUBCATEGORIES[storeType] || [];
+      const customSubs = allCustom
+        .filter((c) => c.storeType === storeType)
+        .map((c) => c.name);
+      mergedSubcategories[storeType] = [...staticSubs, ...customSubs];
+
+      // Build uploadType map per subcategory
+      const typeMap: Record<string, string> = {};
+      for (const sub of mergedSubcategories[storeType]) {
+        const ut = configMap.get(`${storeType}:${sub}`);
+        if (ut && ut !== 'NONE') typeMap[sub] = ut;
+      }
+      if (Object.keys(typeMap).length > 0) uploadTypes[storeType] = typeMap;
+    }
     return {
       categories: STORE_CATEGORIES,
       labels: STORE_CATEGORY_LABELS,
-      subcategories: CATEGORY_SUBCATEGORIES,
+      subcategories: mergedSubcategories,
+      uploadTypes,
     };
   }
 
@@ -132,5 +171,82 @@ export class StoresController {
     @Body() dto: BulkUpdateInventoryDto,
   ) {
     return this.storesService.bulkUpdateInventory(id, dto.items);
+  }
+
+  // ── Custom Subcategories ──────────────────────────────────────────
+
+  @Get('subcategories/custom')
+  @ApiBearerAuth()
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles('ADMIN', 'STORE_MANAGER')
+  @ApiOperation({ summary: 'List custom subcategories for my store type' })
+  async getCustomSubcategories(@Req() req: AuthenticatedRequest) {
+    if (req.user.role === 'ADMIN') {
+      return this.subcategoryService.getAllCustomSubcategories();
+    }
+    const store = await this.storesService.findOne(req.user.storeId!);
+    return this.subcategoryService.getCustomSubcategoriesByType(store.storeType);
+  }
+
+  @Post('subcategories/custom')
+  @ApiBearerAuth()
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles('STORE_MANAGER')
+  @ApiOperation({ summary: 'Create custom subcategory for my store type' })
+  async createCustomSubcategory(
+    @Req() req: AuthenticatedRequest,
+    @Body() dto: CreateCustomSubcategoryDto,
+  ) {
+    const store = await this.storesService.findOne(req.user.storeId!);
+    return this.subcategoryService.create(store.storeType, dto.name);
+  }
+
+  @Post('subcategories/custom/admin')
+  @ApiBearerAuth()
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles('ADMIN')
+  @ApiOperation({ summary: 'Create custom subcategory for any store type (Admin)' })
+  createCustomSubcategoryAdmin(@Body() dto: AdminCreateCustomSubcategoryDto) {
+    return this.subcategoryService.create(dto.storeType, dto.name);
+  }
+
+  @Delete('subcategories/custom/:id')
+  @ApiBearerAuth()
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles('ADMIN', 'STORE_MANAGER')
+  @ApiOperation({ summary: 'Delete a custom subcategory' })
+  deleteCustomSubcategory(@Param('id', ParseUUIDPipe) id: string) {
+    return this.subcategoryService.remove(id);
+  }
+
+  // ── Category Config (upload type per subcategory) ──────────────
+
+  @Get('category-config')
+  @ApiOperation({ summary: 'Get category configs with upload types' })
+  getCategoryConfig(@Query('storeType') storeType: string) {
+    if (!storeType) storeType = 'DROP_IN_FACTORY';
+    return this.subcategoryService.getSubcategoriesWithConfig(storeType);
+  }
+
+  @Put('category-config')
+  @ApiBearerAuth()
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles('ADMIN', 'STORE_MANAGER')
+  @ApiOperation({ summary: 'Set upload type for a subcategory' })
+  upsertCategoryConfig(
+    @Body() dto: UpsertCategoryConfigDto,
+  ) {
+    return this.subcategoryService.upsertCategoryConfig(
+      dto.storeType, dto.subcategory, dto.uploadType,
+    );
+  }
+
+  @Delete('category-config/:id')
+  @ApiBearerAuth()
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles('ADMIN')
+  @ApiOperation({ summary: 'Delete a category config' })
+  deleteCategoryConfig(@Param('id', ParseUUIDPipe) id: string) {
+    return this.subcategoryService.removeCategoryConfig(id);
   }
 }

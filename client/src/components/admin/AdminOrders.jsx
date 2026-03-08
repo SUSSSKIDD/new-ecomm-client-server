@@ -9,11 +9,12 @@ import { usePolling } from '../../hooks/usePolling';
 // What the admin can transition TO from each status (one-way)
 // DELIVERED is not here — only delivery person can set it
 const NEXT_STATUS = {
-    CONFIRMED: 'ORDER_PICKED',
+    CONFIRMED: 'PROCESSING',
+    PROCESSING: 'ORDER_PICKED',
     ORDER_PICKED: 'SHIPPED',
 };
 
-const FILTER_STATUSES = ['PENDING', 'CONFIRMED', 'ORDER_PICKED', 'SHIPPED', 'DELIVERED', 'CANCELLED'];
+const FILTER_STATUSES = ['PENDING', 'CONFIRMED', 'PROCESSING', 'ORDER_PICKED', 'SHIPPED', 'DELIVERED', 'CANCELLED'];
 
 const AdminOrders = () => {
     const [orders, setOrders] = useState([]);
@@ -23,6 +24,7 @@ const AdminOrders = () => {
     const [statusFilter, setStatusFilter] = useState('');
     const [updatingId, setUpdatingId] = useState(null);
     const [expandedId, setExpandedId] = useState(null);
+    const [actionError, setActionError] = useState('');
     const limit = 10;
 
     const fetchOrders = useCallback(async () => {
@@ -51,11 +53,12 @@ const AdminOrders = () => {
 
     const advanceStatus = async (orderId, nextStatus) => {
         setUpdatingId(orderId);
+        setActionError('');
         try {
             await adminApi().patch(`/orders/admin/${orderId}/status`, { status: nextStatus });
             fetchOrders();
         } catch (err) {
-            alert(err.response?.data?.message || 'Cannot update status');
+            setActionError(err.response?.data?.message || 'Cannot update status');
         } finally {
             setUpdatingId(null);
         }
@@ -64,11 +67,12 @@ const AdminOrders = () => {
     const cancelOrder = async (orderId) => {
         if (!confirm('Are you sure you want to cancel this order?')) return;
         setUpdatingId(orderId);
+        setActionError('');
         try {
             await adminApi().patch(`/orders/admin/${orderId}/status`, { status: 'CANCELLED' });
             fetchOrders();
         } catch (err) {
-            alert(err.response?.data?.message || 'Cannot cancel order');
+            setActionError(err.response?.data?.message || 'Cannot cancel order');
         } finally {
             setUpdatingId(null);
         }
@@ -92,6 +96,13 @@ const AdminOrders = () => {
                     {FILTER_STATUSES.map(s => <option key={s} value={s}>{getStatusLabel(s)}</option>)}
                 </select>
             </div>
+
+            {actionError && (
+                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm flex justify-between items-center">
+                    <span>{actionError}</span>
+                    <button onClick={() => setActionError('')} className="text-red-400 hover:text-red-600 ml-2">&times;</button>
+                </div>
+            )}
 
             {loading ? (
                 <div className="text-center p-10 animate-pulse text-gray-500">Loading orders...</div>
@@ -133,6 +144,11 @@ const AdminOrders = () => {
                                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                                                     </svg>
                                                     {(o.orderNumber || o.id?.substring(0, 8))}
+                                                    {o.isParent && (
+                                                        <span className="ml-1 px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded text-[10px] font-bold">
+                                                            {o.childOrders?.length || 0} stores
+                                                        </span>
+                                                    )}
                                                 </div>
                                             </td>
                                             <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
@@ -164,6 +180,10 @@ const AdminOrders = () => {
                                                 {o.assignment ? (
                                                     <span className="text-xs text-green-700 font-medium">
                                                         {o.assignment.deliveryPerson?.name || 'Assigned'}
+                                                    </span>
+                                                ) : o.notDeliveredReason ? (
+                                                    <span className="text-xs text-red-600 font-medium" title={o.notDeliveredReason}>
+                                                        Delivery failed
                                                     </span>
                                                 ) : o.status === 'ORDER_PICKED' || o.status === 'SHIPPED' ? (
                                                     <span className="text-xs text-orange-600 animate-pulse">Searching...</span>
@@ -202,22 +222,131 @@ const AdminOrders = () => {
                                                 </div>
                                             </td>
                                         </tr>
-                                        {isExpanded && items.length > 0 && (
+                                        {isExpanded && (
                                             <tr>
                                                 <td colSpan="9" className="px-0 py-0">
                                                     <div className="bg-gray-50 border-t border-b border-gray-200 px-10 py-3">
-                                                        <p className="text-xs font-bold text-gray-500 uppercase mb-2">Order Items</p>
-                                                        <div className="space-y-1.5">
-                                                            {items.map((item, idx) => (
-                                                                <div key={item.id || idx} className="flex items-center justify-between bg-white rounded-lg px-4 py-2 border border-gray-100">
-                                                                    <div className="flex-1 min-w-0">
-                                                                        <p className="text-sm font-medium text-gray-900 truncate">{item.name}</p>
-                                                                        <p className="text-xs text-gray-400">Qty: {item.quantity} × ₹{item.price}</p>
-                                                                    </div>
-                                                                    <span className="text-sm font-bold text-gray-800 ml-4">₹{item.total || (item.price * item.quantity)}</span>
+                                                        {/* NOT_DELIVERED warning */}
+                                                        {o.notDeliveredReason && (
+                                                            <div className="mb-3 flex items-start gap-2 bg-red-50 border border-red-200 rounded-lg px-4 py-2.5">
+                                                                <svg className="w-4 h-4 text-red-500 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                                                                </svg>
+                                                                <div>
+                                                                    <p className="text-xs font-bold text-red-700">Delivery attempt failed</p>
+                                                                    <p className="text-xs text-red-600 mt-0.5">{o.notDeliveredReason}</p>
+                                                                    {o.notDeliveredAt && (
+                                                                        <p className="text-xs text-red-400 mt-0.5">{new Date(o.notDeliveredAt).toLocaleString('en-IN')}</p>
+                                                                    )}
                                                                 </div>
-                                                            ))}
-                                                        </div>
+                                                            </div>
+                                                        )}
+                                                        {o.isParent && (!o.childOrders || o.childOrders.length === 0) ? (
+                                                            <p className="text-xs text-gray-400 py-2">Sub-orders loading...</p>
+                                                        ) : o.isParent && o.childOrders?.length > 0 ? (
+                                                            <>
+                                                                <p className="text-xs font-bold text-blue-600 uppercase mb-2">Sub-orders ({o.childOrders?.length || 0} stores)</p>
+                                                                <div className="space-y-3">
+                                                                    {o.childOrders?.map((child) => {
+                                                                        const childItems = child.items || [];
+                                                                        const childNext = NEXT_STATUS[child.status];
+                                                                        return (
+                                                                            <div key={child.id} className="bg-white rounded-lg border border-gray-200 p-3">
+                                                                                <div className="flex justify-between items-center mb-2">
+                                                                                    <span className="text-xs font-bold text-gray-700">#{child.orderNumber}</span>
+                                                                                    <div className="flex items-center gap-2">
+                                                                                        <span className={`px-2 py-0.5 text-[10px] font-bold rounded-full ${getStatusColor(child.status)}`}>
+                                                                                            {getStatusLabel(child.status)}
+                                                                                        </span>
+                                                                                        {childNext && (
+                                                                                            <RippleButton
+                                                                                                onClick={(e) => { e.stopPropagation(); advanceStatus(child.id, childNext); }}
+                                                                                                disabled={updatingId === child.id}
+                                                                                                className="px-2 py-1 text-[10px] bg-ud-primary text-white rounded hover:bg-emerald-600 disabled:opacity-50 font-medium"
+                                                                                            >
+                                                                                                {updatingId === child.id ? '...' : getStatusLabel(childNext)}
+                                                                                            </RippleButton>
+                                                                                        )}
+                                                                                        {!['DELIVERED', 'CANCELLED'].includes(child.status) && (
+                                                                                            <button
+                                                                                                onClick={(e) => { e.stopPropagation(); cancelOrder(child.id); }}
+                                                                                                disabled={updatingId === child.id}
+                                                                                                className="px-2 py-1 text-[10px] text-red-600 bg-red-50 border border-red-200 rounded hover:bg-red-100 disabled:opacity-50 font-medium"
+                                                                                            >
+                                                                                                Cancel
+                                                                                            </button>
+                                                                                        )}
+                                                                                    </div>
+                                                                                </div>
+                                                                                {child.assignment?.deliveryPerson && (
+                                                                                    <p className="text-[11px] text-green-700 mb-1.5">Delivery: {child.assignment.deliveryPerson.name}</p>
+                                                                                )}
+                                                                                <div className="space-y-1">
+                                                                                    {childItems.map((item, idx) => (
+                                                                                        <div key={item.id || idx} className="text-xs">
+                                                                                            <div className="flex justify-between">
+                                                                                                <span className="text-gray-700">{item.name} <span className="text-gray-400">×{item.quantity}</span></span>
+                                                                                                <span className="font-medium text-gray-800">₹{item.total || (item.price * item.quantity)}</span>
+                                                                                            </div>
+                                                                                            {(item.selectedSize || item.userUploadUrls?.length > 0) && (
+                                                                                                <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
+                                                                                                    {item.printProductId && (
+                                                                                                        <span className="px-1.5 py-0.5 bg-purple-50 text-purple-600 rounded text-[10px] font-medium">Custom Print</span>
+                                                                                                    )}
+                                                                                                    {item.selectedSize && (
+                                                                                                        <span className="px-1.5 py-0.5 bg-blue-50 text-blue-600 rounded text-[10px] font-medium">Size: {item.selectedSize}</span>
+                                                                                                    )}
+                                                                                                    {item.userUploadUrls?.map((url, ui) => (
+                                                                                                        <a key={ui} href={url} target="_blank" rel="noopener noreferrer" className="inline-block w-8 h-8 rounded border border-gray-200 overflow-hidden hover:ring-2 hover:ring-blue-400">
+                                                                                                            <img src={url} alt={`Upload ${ui + 1}`} className="w-full h-full object-cover" />
+                                                                                                        </a>
+                                                                                                    ))}
+                                                                                                </div>
+                                                                                            )}
+                                                                                        </div>
+                                                                                    ))}
+                                                                                </div>
+                                                                                <div className="mt-1.5 pt-1 border-t border-gray-100 text-right text-xs font-bold text-gray-700">
+                                                                                    ₹{child.subtotal || 0}
+                                                                                </div>
+                                                                            </div>
+                                                                        );
+                                                                    })}
+                                                                </div>
+                                                            </>
+                                                        ) : (
+                                                            <>
+                                                                <p className="text-xs font-bold text-gray-500 uppercase mb-2">Order Items</p>
+                                                                <div className="space-y-1.5">
+                                                                    {items.map((item, idx) => (
+                                                                        <div key={item.id || idx} className="bg-white rounded-lg px-4 py-2 border border-gray-100">
+                                                                            <div className="flex items-center justify-between">
+                                                                                <div className="flex-1 min-w-0">
+                                                                                    <p className="text-sm font-medium text-gray-900 truncate">{item.name}</p>
+                                                                                    <p className="text-xs text-gray-400">Qty: {item.quantity} × ₹{item.price}</p>
+                                                                                </div>
+                                                                                <span className="text-sm font-bold text-gray-800 ml-4">₹{item.total || (item.price * item.quantity)}</span>
+                                                                            </div>
+                                                                            {(item.selectedSize || item.userUploadUrls?.length > 0 || item.printProductId) && (
+                                                                                <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                                                                                    {item.printProductId && (
+                                                                                        <span className="px-2 py-0.5 bg-purple-50 text-purple-700 rounded text-xs font-medium">Custom Print</span>
+                                                                                    )}
+                                                                                    {item.selectedSize && (
+                                                                                        <span className="px-2 py-0.5 bg-blue-50 text-blue-700 rounded text-xs font-medium">Size: {item.selectedSize}</span>
+                                                                                    )}
+                                                                                    {item.userUploadUrls?.map((url, ui) => (
+                                                                                        <a key={ui} href={url} target="_blank" rel="noopener noreferrer" className="inline-block w-10 h-10 rounded border border-gray-200 overflow-hidden hover:ring-2 hover:ring-blue-400 transition-all">
+                                                                                            <img src={url} alt={`Upload ${ui + 1}`} className="w-full h-full object-cover" />
+                                                                                        </a>
+                                                                                    ))}
+                                                                                </div>
+                                                                            )}
+                                                                        </div>
+                                                                    ))}
+                                                                </div>
+                                                            </>
+                                                        )}
                                                         <div className="mt-3 pt-2 border-t border-gray-200 flex justify-end gap-6 text-xs text-gray-500">
                                                             {o.subtotal != null && <span>Subtotal: <b className="text-gray-700">₹{o.subtotal}</b></span>}
                                                             {o.deliveryFee != null && <span>Delivery: <b className="text-gray-700">{o.deliveryFee === 0 ? 'FREE' : `₹${o.deliveryFee}`}</b></span>}

@@ -19,10 +19,21 @@ export interface OrderPreview {
   freeDeliveryEligible: boolean;
 }
 
+export interface AllocationPreview {
+  type: 'SINGLE_STORE' | 'MULTI_STORE';
+  storeCount: number;
+  stores: {
+    storeName: string;
+    itemCount: number;
+    subtotal: number;
+  }[];
+}
+
 export interface FulfillmentPreview extends OrderPreview {
   fulfillment: {
     availableItems: FulfillmentItem[];
     unavailableItems: FulfillmentItem[];
     allAvailable: boolean;
   };
+  allocation?: AllocationPreview;
 }

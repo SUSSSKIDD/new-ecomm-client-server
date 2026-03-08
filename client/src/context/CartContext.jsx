@@ -53,6 +53,10 @@ export const CartProvider = ({ children }) => {
                     image: item.image,
                     quantity: item.quantity,
                     category: item.category || null,
+                    // Preserve print factory custom fields
+                    ...(item.selectedSize && { selectedSize: item.selectedSize }),
+                    ...(item.userUploadUrls?.length && { userUploadUrls: item.userUploadUrls }),
+                    ...(item.printProductId && { printProductId: item.printProductId }),
                 }));
 
                 let currentLocalCart = [];
@@ -65,7 +69,11 @@ export const CartProvider = ({ children }) => {
                 if (serverItems.length === 0 && currentLocalCart.length > 0) {
                     for (const item of currentLocalCart) {
                         try {
-                            await clientApi().post('/cart/items', { productId: item.id, quantity: item.quantity });
+                            const payload = { productId: item.id, quantity: item.quantity };
+                            if (item.selectedSize) payload.selectedSize = item.selectedSize;
+                            if (item.userUploadUrls?.length) payload.userUploadUrls = item.userUploadUrls;
+                            if (item.printProductId) payload.printProductId = item.printProductId;
+                            await clientApi().post('/cart/items', payload);
                         } catch (err) {
                             console.error('Failed to sync item', item.id, err);
                         }
@@ -78,7 +86,7 @@ export const CartProvider = ({ children }) => {
             .catch(() => { /* ignore — cart will sync on next add */ });
     }, [isAuthenticated, token, clientApi]);
 
-    const addToCart = (product, category) => {
+    const addToCart = (product, category, customFields) => {
         const itemCategory = category || product.category;
 
         setCart((prevCart) => {
@@ -98,15 +106,19 @@ export const CartProvider = ({ children }) => {
                     clientApi().patch(`/cart/items/${product.id}`, { quantity: newQty }).catch(() => { });
                 }
                 return prevCart.map(item =>
-                    item.id === product.id ? { ...item, quantity: newQty } : item
+                    item.id === product.id ? { ...item, quantity: newQty, ...(customFields || {}) } : item
                 );
             }
 
             showToast(`${product.name} Added!`);
+            const apiPayload = { productId: product.id, quantity: 1 };
+            if (customFields?.selectedSize) apiPayload.selectedSize = customFields.selectedSize;
+            if (customFields?.userUploadUrls?.length) apiPayload.userUploadUrls = customFields.userUploadUrls;
+            if (customFields?.printProductId) apiPayload.printProductId = customFields.printProductId;
             if (token) {
-                clientApi().post('/cart/items', { productId: product.id, quantity: 1 }).catch(() => { });
+                clientApi().post('/cart/items', apiPayload).catch(() => { });
             }
-            return [...prevCart, { ...product, quantity: 1, category: itemCategory }];
+            return [...prevCart, { ...product, quantity: 1, category: itemCategory, ...customFields }];
         });
     };
 

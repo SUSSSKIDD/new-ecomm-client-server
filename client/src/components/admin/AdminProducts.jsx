@@ -2,8 +2,8 @@
 import { RippleButton } from '../ui/ripple-button';
 import { useEffect, useState } from 'react';
 import { useAdminAuth } from '../../hooks/useAdminAuth';
-import { STORE_CATEGORY_SUBCATEGORIES } from '../../constants';
 import { adminApi, API_URL } from '../../lib/api';
+import { STORE_CATEGORY_SUBCATEGORIES } from '../../constants';
 
 const emptyForm = { name: '', description: '', price: '', mrp: '', category: '', stock: '', storeLocation: '' };
 
@@ -20,10 +20,20 @@ const ProductModal = ({ product, onClose, onSaved, admin }) => {
     } : { ...emptyForm, storeLocation: defaultStoreLocation });
 
     const resolvedStoreType = admin?.storeType || 'GROCERY';
-    const allowedCategories = STORE_CATEGORY_SUBCATEGORIES[resolvedStoreType] || [];
+    const [allowedCategories, setAllowedCategories] = useState(STORE_CATEGORY_SUBCATEGORIES[resolvedStoreType] || []);
     const [images, setImages] = useState(null);
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState('');
+
+    useEffect(() => {
+        let cancelled = false;
+        adminApi().get('/stores/categories').then(res => {
+            if (!cancelled && res.data?.subcategories?.[resolvedStoreType]) {
+                setAllowedCategories(res.data.subcategories[resolvedStoreType]);
+            }
+        }).catch(() => {});
+        return () => { cancelled = true; };
+    }, [resolvedStoreType]);
 
     const handleSubmit = async (e) => {
         e.preventDefault();

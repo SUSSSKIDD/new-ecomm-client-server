@@ -56,24 +56,24 @@ const AddressSection = ({ title, address, setAddress, gpsLoading, onUseLocation 
             </button>
 
             <input name="houseNo" placeholder="House / Flat / Block No." value={address.houseNo} onChange={handleChange}
-                className="w-full p-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-ud-primary" />
+                className="w-full p-3 text-base text-gray-900 border border-gray-200 rounded-lg focus:outline-none focus:border-ud-primary" />
             <input name="street" placeholder="Street / Area *" value={address.street} onChange={handleChange} required
-                className="w-full p-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-ud-primary" />
+                className="w-full p-3 text-base text-gray-900 border border-gray-200 rounded-lg focus:outline-none focus:border-ud-primary" />
             <div className="grid grid-cols-2 gap-3">
                 <input name="city" placeholder="City *" value={address.city} onChange={handleChange} required
-                    className="w-full p-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-ud-primary" />
+                    className="w-full p-3 text-base text-gray-900 border border-gray-200 rounded-lg focus:outline-none focus:border-ud-primary" />
                 <input name="zipCode" placeholder="Pincode *" value={address.zipCode} onChange={handleChange} required
-                    className="w-full p-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-ud-primary" />
+                    className="w-full p-3 text-base text-gray-900 border border-gray-200 rounded-lg focus:outline-none focus:border-ud-primary" />
             </div>
             <select name="state" value={address.state} onChange={handleChange} required
-                className="w-full p-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-ud-primary bg-white">
+                className="w-full p-3 text-base text-gray-900 border border-gray-200 rounded-lg focus:outline-none focus:border-ud-primary bg-white">
                 <option value="">Select State</option>
                 {INDIAN_STATES.map(s => <option key={s} value={s}>{s}</option>)}
             </select>
             <input name="landmark" placeholder="Landmark (Optional)" value={address.landmark} onChange={handleChange}
-                className="w-full p-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-ud-primary" />
+                className="w-full p-3 text-base text-gray-900 border border-gray-200 rounded-lg focus:outline-none focus:border-ud-primary" />
             <input name="mapsLink" placeholder="Google Maps Link (Optional)" value={address.mapsLink} onChange={handleChange}
-                className="w-full p-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-ud-primary" />
+                className="w-full p-3 text-base text-gray-900 border border-gray-200 rounded-lg focus:outline-none focus:border-ud-primary" />
         </div>
     );
 };
@@ -294,24 +294,17 @@ const ParcelBookingForm = () => {
                 <div className="bg-white rounded-xl border border-gray-200 p-4 space-y-3">
                     <h4 className="text-sm font-bold text-gray-800 uppercase tracking-wide">Parcel Details</h4>
 
-                    <div className="relative">
-                        <select
-                            value={category}
-                            onChange={(e) => handleCategoryChange(e.target.value)}
-                            required
-                            className="w-full p-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-ud-primary bg-white appearance-none"
-                        >
-                            <option value="">Select Item Category *</option>
-                            {PARCEL_CATEGORIES.map(c => (
-                                <option key={c.value} value={c.value}>{c.label}</option>
-                            ))}
-                        </select>
-                        <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-gray-500">
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                            </svg>
-                        </div>
-                    </div>
+                    <select
+                        value={category}
+                        onChange={(e) => handleCategoryChange(e.target.value)}
+                        required
+                        className="w-full p-3 text-base text-gray-900 border border-gray-200 rounded-lg focus:outline-none focus:border-ud-primary bg-white"
+                    >
+                        <option value="">Select Item Category *</option>
+                        {PARCEL_CATEGORIES.map(c => (
+                            <option key={c.value} value={c.value}>{c.label}</option>
+                        ))}
+                    </select>
 
                     {/* Others modal */}
                     {showOtherModal && (
@@ -341,30 +334,26 @@ const ParcelBookingForm = () => {
                     )}
 
                     {/* Weight */}
-                    <div>
-                        <label className="block text-xs text-gray-500 mb-1">Weight (kg) *</label>
-                        <input
-                            type="number"
-                            step="0.1"
-                            min="0.01"
-                            value={weight}
-                            onChange={(e) => setWeight(e.target.value)}
-                            placeholder="e.g. 2.5"
-                            required
-                            className="w-full p-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-ud-primary"
-                        />
-                    </div>
-
-                    {/* Dimensions (optional) */}
-                    <div>
-                        <label className="block text-xs text-gray-500 mb-1">Dimensions in cm (Optional)</label>
-                        <div className="grid grid-cols-3 gap-2">
-                            <input type="number" step="0.1" min="0" value={length} onChange={(e) => setLength(e.target.value)}
-                                placeholder="Length" className="w-full p-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-ud-primary" />
-                            <input type="number" step="0.1" min="0" value={width} onChange={(e) => setWidth(e.target.value)}
-                                placeholder="Width" className="w-full p-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-ud-primary" />
-                            <input type="number" step="0.1" min="0" value={height} onChange={(e) => setHeight(e.target.value)}
-                                placeholder="Height" className="w-full p-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-ud-primary" />
+                    <div className="grid grid-cols-2 gap-3">
+                        <div>
+                            <label className="block text-xs text-gray-500 mb-1">Weight (kg) *</label>
+                            <input type="number" step="0.01" min="0.01" value={weight} onChange={(e) => setWeight(e.target.value)} required
+                                className="w-full p-3 text-base text-gray-900 border border-gray-200 rounded-lg focus:outline-none focus:border-ud-primary" placeholder="0.5" />
+                        </div>
+                        <div>
+                            <label className="block text-xs text-gray-500 mb-1">Length (cm)</label>
+                            <input type="number" min="0" value={length} onChange={(e) => setLength(e.target.value)}
+                                className="w-full p-3 text-base text-gray-900 border border-gray-200 rounded-lg focus:outline-none focus:border-ud-primary" placeholder="Optional" />
+                        </div>
+                        <div>
+                            <label className="block text-xs text-gray-500 mb-1">Width (cm)</label>
+                            <input type="number" min="0" value={width} onChange={(e) => setWidth(e.target.value)}
+                                className="w-full p-3 text-base text-gray-900 border border-gray-200 rounded-lg focus:outline-none focus:border-ud-primary" placeholder="Optional" />
+                        </div>
+                        <div>
+                            <label className="block text-xs text-gray-500 mb-1">Height (cm)</label>
+                            <input type="number" min="0" value={height} onChange={(e) => setHeight(e.target.value)}
+                                className="w-full p-3 text-base text-gray-900 border border-gray-200 rounded-lg focus:outline-none focus:border-ud-primary" placeholder="Optional" />
                         </div>
                     </div>
                 </div>
@@ -378,10 +367,10 @@ const ParcelBookingForm = () => {
                         <div className="grid grid-cols-2 gap-2">
                             <input type="date" value={pickupDate} onChange={(e) => setPickupDate(e.target.value)}
                                 min={today} required
-                                className="w-full p-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-ud-primary" />
+                                className="w-full p-3 text-base text-gray-900 border border-gray-200 rounded-lg focus:outline-none focus:border-ud-primary" />
                             <input type="time" value={pickupTimeVal} onChange={(e) => setPickupTimeVal(e.target.value)}
                                 required
-                                className="w-full p-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-ud-primary" />
+                                className="w-full p-3 text-base text-gray-900 border border-gray-200 rounded-lg focus:outline-none focus:border-ud-primary" />
                         </div>
                     </div>
 
@@ -390,10 +379,10 @@ const ParcelBookingForm = () => {
                         <div className="grid grid-cols-2 gap-2">
                             <input type="date" value={dropDate} onChange={(e) => setDropDate(e.target.value)}
                                 min={pickupDate || today} required
-                                className="w-full p-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-ud-primary" />
+                                className="w-full p-3 text-base text-gray-900 border border-gray-200 rounded-lg focus:outline-none focus:border-ud-primary" />
                             <input type="time" value={dropTimeVal} onChange={(e) => setDropTimeVal(e.target.value)}
                                 required
-                                className="w-full p-2.5 text-sm border border-gray-200 rounded-lg focus:outline-none focus:border-ud-primary" />
+                                className="w-full p-3 text-base text-gray-900 border border-gray-200 rounded-lg focus:outline-none focus:border-ud-primary" />
                         </div>
                     </div>
                 </div>

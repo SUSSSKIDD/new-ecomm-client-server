@@ -1,8 +1,10 @@
 import { RippleButton } from '../ui/ripple-button';
 import { useEffect, useState } from 'react';
 import { adminApi } from '../../lib/api';
+import { useAdminAuth } from '../../hooks/useAdminAuth';
 
 const AdminDelivery = () => {
+    const { admin } = useAdminAuth();
     const [deliveryPersons, setDeliveryPersons] = useState([]);
     const [stores, setStores] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -11,16 +13,16 @@ const AdminDelivery = () => {
     // Form state
     const [showForm, setShowForm] = useState(false);
     const [formData, setFormData] = useState({ name: '', phone: '', homeStoreId: '', pin: '' });
+    const [formError, setFormError] = useState('');
+    const [formSuccess, setFormSuccess] = useState('');
 
     const fetchData = async (signal) => {
         try {
             setLoading(true);
-            const [delRes, storeRes] = await Promise.all([
+            const [delRes] = await Promise.all([
                 adminApi().get('/delivery/persons', { signal }),
-                adminApi().get('/stores', { signal }),
             ]);
             setDeliveryPersons(delRes.data);
-            setStores(storeRes.data);
         } catch (err) {
             if (err.name !== 'CanceledError') {
                 console.error(err);
@@ -39,6 +41,8 @@ const AdminDelivery = () => {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+        setFormError('');
+        setFormSuccess('');
         try {
             const dataToSubmit = { ...formData };
             if (dataToSubmit.phone && !dataToSubmit.phone.startsWith('+91')) {
@@ -48,10 +52,10 @@ const AdminDelivery = () => {
             const newPerson = res.data;
             setDeliveryPersons(prev => [newPerson, ...prev]);
             setShowForm(false);
-            setFormData({ name: '', phone: '', homeStoreId: '', pin: '' });
-            alert(`Delivery guy created successfully!\nPIN: ${newPerson.pin}`);
+            setFormData({ name: '', phone: '', pin: '' });
+            setFormSuccess('Delivery person created successfully');
         } catch (err) {
-            alert(err.response?.data?.message || 'Error creating delivery person');
+            setFormError(err.response?.data?.message || 'Error creating delivery person');
         }
     };
 
@@ -68,15 +72,19 @@ const AdminDelivery = () => {
         <div>
             <div className="flex justify-between items-center mb-6">
                 <h1 className="text-2xl font-bold text-gray-800">Delivery Personnel Management</h1>
-                <RippleButton
-                    onClick={() => setShowForm(!showForm)}
-                    className="bg-ud-primary text-white px-4 py-2 rounded hover:brightness-110"
-                >
-                    {showForm ? 'Cancel' : 'Add Delivery Guy'}
-                </RippleButton>
+                {admin?.role === 'ADMIN' && (
+                    <RippleButton
+                        onClick={() => setShowForm(!showForm)}
+                        className="bg-ud-primary text-white px-4 py-2 rounded hover:brightness-110"
+                    >
+                        {showForm ? 'Cancel' : 'Add Delivery Guy'}
+                    </RippleButton>
+                )}
             </div>
 
             {error && <div className="bg-red-50 text-red-700 p-4 rounded mb-6">{error}</div>}
+            {formError && <div className="bg-red-50 text-red-700 p-4 rounded mb-4 text-sm">{formError}</div>}
+            {formSuccess && <div className="bg-green-50 text-green-700 p-4 rounded mb-4 text-sm">{formSuccess}</div>}
 
             {showForm && (
                 <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 mb-6">
@@ -109,20 +117,6 @@ const AdminDelivery = () => {
                             </div>
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-gray-700">Assign to Store</label>
-                            <select
-                                required
-                                value={formData.homeStoreId}
-                                onChange={e => setFormData({ ...formData, homeStoreId: e.target.value })}
-                                className="mt-1 w-full border border-gray-300 rounded p-2 text-gray-900"
-                            >
-                                <option value="">Select a store</option>
-                                {stores.map(s => (
-                                    <option key={s.id} value={s.id}>{s.name} ({s.storeCode})</option>
-                                ))}
-                            </select>
-                        </div>
-                        <div>
                             <label className="block text-sm font-medium text-gray-700">PIN (4 digits)</label>
                             <input
                                 required
@@ -151,10 +145,11 @@ const AdminDelivery = () => {
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Phone</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">PIN</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Home Store</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Duty Status</th>
                                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Account Status</th>
-                                <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                                {admin?.role === 'ADMIN' && (
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                                )}
                             </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
@@ -163,13 +158,12 @@ const AdminDelivery = () => {
                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{p.name}</td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{p.phone}</td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm font-mono font-bold text-gray-700">
-                                        {p.pin || <span className="text-gray-300">****</span>}
+                                        {p.pin}
                                     </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{p.homeStore?.name || p.homeStoreId}</td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm">
                                         <span className={`px-2 inline-flex text-xs leading-5 font-bold rounded-full ${p.status === 'FREE' ? 'bg-green-100 text-green-800' :
-                                                p.status === 'BUSY' ? 'bg-orange-100 text-orange-800' :
-                                                    'bg-gray-100 text-gray-800'
+                                            p.status === 'BUSY' ? 'bg-orange-100 text-orange-800' :
+                                                'bg-gray-100 text-gray-800'
                                             }`}>
                                             {p.status === 'DUTY_OFF' ? 'OFF DUTY' : p.status}
                                         </span>
@@ -179,9 +173,11 @@ const AdminDelivery = () => {
                                             {p.isActive ? 'Active' : 'Inactive'}
                                         </span>
                                     </td>
-                                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                                        <RippleButton onClick={() => toggleStatus(p.id, p.isActive)} className="text-blue-600 hover:text-blue-900">Toggle Status</RippleButton>
-                                    </td>
+                                    {admin?.role === 'ADMIN' && (
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                            <RippleButton onClick={() => toggleStatus(p.id, p.isActive)} className="text-blue-600 hover:text-blue-900">Toggle Status</RippleButton>
+                                        </td>
+                                    )}
                                 </tr>
                             ))}
                         </tbody>

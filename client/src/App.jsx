@@ -22,6 +22,8 @@ const AdminStores = lazy(() => import('./components/admin/AdminStores'));
 const AdminManagers = lazy(() => import('./components/admin/AdminManagers'));
 const AdminDelivery = lazy(() => import('./components/admin/AdminDelivery'));
 const AdminParcelOrders = lazy(() => import('./components/admin/AdminParcelOrders'));
+const AdminSubcategories = lazy(() => import('./components/admin/AdminSubcategories'));
+const AdminPrintProducts = lazy(() => import('./components/admin/AdminPrintProducts'));
 
 function App() {
   return (
@@ -55,6 +57,8 @@ function App() {
                       <Route path="managers" element={<AdminManagers />} />
                       <Route path="delivery" element={<AdminDelivery />} />
                       <Route path="parcels" element={<AdminParcelOrders />} />
+                      <Route path="subcategories" element={<AdminSubcategories />} />
+                      <Route path="print-products" element={<AdminPrintProducts />} />
                       <Route index element={<AdminDashboard />} />
                     </Route>
 

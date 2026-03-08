@@ -40,10 +40,13 @@ export class SupabaseStorageService {
   async upload(
     file: Express.Multer.File,
     folder: string = 'products',
+    bucket?: string,
   ): Promise<string> {
     if (!this.supabase) {
       throw new BadRequestException('Image uploads are not configured');
     }
+
+    const targetBucket = bucket || this.BUCKET;
 
     // Validate MIME type
     if (!this.ALLOWED_TYPES.includes(file.mimetype)) {
@@ -64,7 +67,7 @@ export class SupabaseStorageService {
     const filename = `${folder}/${Date.now()}-${randomUUID().slice(0, 8)}.${ext}`;
 
     const { error } = await this.supabase.storage
-      .from(this.BUCKET)
+      .from(targetBucket)
       .upload(filename, file.buffer, {
         contentType: file.mimetype,
         upsert: false,
@@ -78,9 +81,9 @@ export class SupabaseStorageService {
     // Get public URL
     const {
       data: { publicUrl },
-    } = this.supabase.storage.from(this.BUCKET).getPublicUrl(filename);
+    } = this.supabase.storage.from(targetBucket).getPublicUrl(filename);
 
-    this.logger.log(`Uploaded: ${filename}`);
+    this.logger.log(`Uploaded: ${filename} (bucket: ${targetBucket})`);
     return publicUrl;
   }
 
@@ -90,8 +93,9 @@ export class SupabaseStorageService {
   async uploadMany(
     files: Express.Multer.File[],
     folder: string = 'products',
+    bucket?: string,
   ): Promise<string[]> {
-    return Promise.all(files.map((f) => this.upload(f, folder)));
+    return Promise.all(files.map((f) => this.upload(f, folder, bucket)));
   }
 
   /**

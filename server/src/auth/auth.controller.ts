@@ -2,11 +2,12 @@ import { Controller, Post, Body, HttpCode, HttpStatus, UseGuards } from '@nestjs
 import { AuthService } from './auth.service';
 import { SendOtpDto, VerifyOtpDto, StoreManagerLoginDto } from './dto/auth.dto';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
-import { ThrottlerGuard, Throttle } from '@nestjs/throttler';
+import { Throttle } from '@nestjs/throttler';
+import { ConfigurableThrottlerGuard } from './guards/configurable-throttler.guard';
 
 @ApiTags('auth')
 @Controller('auth')
-@UseGuards(ThrottlerGuard)
+@UseGuards(ConfigurableThrottlerGuard)
 export class AuthController {
   constructor(private readonly authService: AuthService) { }
 
@@ -48,5 +49,15 @@ export class AuthController {
   @ApiResponse({ status: 401, description: 'Invalid credentials.' })
   superAdminLogin(@Body() dto: StoreManagerLoginDto) {
     return this.authService.superAdminLogin(dto);
+  }
+
+  @Post('parcel-manager/login')
+  @HttpCode(HttpStatus.OK)
+  @Throttle({ default: { ttl: 60000, limit: 10 } })
+  @ApiOperation({ summary: 'Parcel Manager Login (Phone + PIN)' })
+  @ApiResponse({ status: 200, description: 'Token issued.' })
+  @ApiResponse({ status: 401, description: 'Invalid credentials.' })
+  parcelManagerLogin(@Body() dto: StoreManagerLoginDto) {
+    return this.authService.parcelManagerLogin(dto);
   }
 }

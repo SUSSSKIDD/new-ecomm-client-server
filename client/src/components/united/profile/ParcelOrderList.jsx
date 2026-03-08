@@ -9,6 +9,7 @@ const ParcelOrderList = () => {
     const [parcels, setParcels] = useState([]);
     const [loading, setLoading] = useState(true);
     const [cancellingId, setCancellingId] = useState(null);
+    const [cancelError, setCancelError] = useState('');
 
     const fetchParcels = async () => {
         try {
@@ -26,11 +27,12 @@ const ParcelOrderList = () => {
     const handleCancel = async (id) => {
         if (!confirm('Cancel this parcel booking?')) return;
         setCancellingId(id);
+        setCancelError('');
         try {
             await api(token).post(`/parcels/${id}/cancel`);
             fetchParcels();
         } catch (err) {
-            alert(err.response?.data?.message || 'Failed to cancel');
+            setCancelError(err.response?.data?.message || 'Failed to cancel');
         } finally {
             setCancellingId(null);
         }
@@ -63,6 +65,12 @@ const ParcelOrderList = () => {
 
     return (
         <div className="max-w-lg mx-auto px-4 pb-8 space-y-3">
+            {cancelError && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm flex justify-between items-center">
+                    <span>{cancelError}</span>
+                    <button onClick={() => setCancelError('')} className="text-red-400 hover:text-red-600 ml-2">&times;</button>
+                </div>
+            )}
             {parcels.map(parcel => {
                 const pickupAddr = parcel.pickupAddress || {};
                 const dropAddr = parcel.dropAddress || {};

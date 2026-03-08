@@ -1,16 +1,42 @@
-import { RippleButton } from '../../components/ui/ripple-button';
 import { useCategory } from '../../context/CategoryContext';
-import { useNavigate } from 'react-router-dom';
+import { useState, useEffect } from 'react';
 import ProductGrid from './ProductGrid';
 import { HOME_CATEGORIES } from '../../constants';
+import { API_URL } from '../../lib/api';
+
+// Map HOME_CATEGORIES titles to store types for merging custom subcategories
+const TITLE_TO_STORE_TYPE = {
+    'Grocery': 'GROCERY',
+    'Pizza Town & Food Zone': 'PIZZA_TOWN',
+    'Auto Service & Parts': 'AUTO_SERVICE',
+    'Print Factory': 'DROP_IN_FACTORY',
+    'Auto Parts Shop': 'AUTO_PARTS_SHOP',
+};
 
 const HomeCategoryList = () => {
     const { selectedCategory, setActiveSubCategory, activeSubCategory } = useCategory();
-    const navigate = useNavigate();
+    const [categories, setCategories] = useState(HOME_CATEGORIES);
+
+    useEffect(() => {
+        let cancelled = false;
+        fetch(`${API_URL}/stores/categories`)
+            .then(r => r.json())
+            .then(data => {
+                if (cancelled || !data?.subcategories) return;
+                const merged = HOME_CATEGORIES.map(section => {
+                    const storeType = TITLE_TO_STORE_TYPE[section.title];
+                    if (!storeType || !data.subcategories[storeType]) return section;
+                    return { ...section, items: data.subcategories[storeType] };
+                });
+                setCategories(merged);
+            })
+            .catch(() => {});
+        return () => { cancelled = true; };
+    }, []);
 
     const filteredData = selectedCategory === 'All'
-        ? HOME_CATEGORIES
-        : HOME_CATEGORIES.filter(cat =>
+        ? categories
+        : categories.filter(cat =>
             cat.title.toLowerCase() === selectedCategory.toLowerCase() ||
             (selectedCategory === "Pizza town and food zone" && cat.title === "Pizza Town & Food Zone") ||
             (selectedCategory === "Auto service and parts" && cat.title === "Auto Service & Parts") ||

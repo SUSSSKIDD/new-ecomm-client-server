@@ -68,7 +68,7 @@ const Header = () => {
             </div>
 
             {/* 2. Search Bar Row (Sticky) */}
-            <HeaderSearch selectedCategory={selectedCategory} />
+            <HeaderSearch />
 
             {/* Navigation Bar - Compact Pills */}
             <HeaderNav

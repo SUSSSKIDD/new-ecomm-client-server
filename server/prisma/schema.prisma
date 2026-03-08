@@ -9,6 +9,7 @@ datasource db {
 enum Role {
   USER
   STORE_MANAGER
+  PARCEL_MANAGER
   DELIVERY_PERSON
   ADMIN
 }
@@ -163,7 +164,6 @@ model Store {
   updatedAt DateTime @updatedAt
 
   inventory       StoreInventory[]
-  deliveryPersons DeliveryPerson[]
   orderItems      OrderItem[]
   managers        StoreManager[]
   ledgerEntries   PaymentLedger[]
@@ -186,6 +186,18 @@ model StoreManager {
   updatedAt DateTime @updatedAt
 
   @@index([storeId])
+  @@index([phone])
+}
+
+model ParcelManager {
+  id        String   @id @default(uuid())
+  name      String
+  phone     String   @unique
+  pinHash   String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
   @@index([phone])
 }
 
@@ -223,8 +235,6 @@ model DeliveryPerson {
   name           String
   phone          String               @unique
   pinHash        String
-  homeStoreId    String
-  homeStore      Store                @relation(fields: [homeStoreId], references: [id])
   status         DeliveryPersonStatus @default(DUTY_OFF)
   lat            Float?
   lng            Float?
@@ -236,9 +246,9 @@ model DeliveryPerson {
   assignments       OrderAssignment[]
   parcelAssignments ParcelAssignment[]
 
-  @@index([homeStoreId])
   @@index([status])
   @@index([phone])
+  @@index([status, isActive])
 }
 
 model OrderAssignment {
@@ -254,6 +264,7 @@ model OrderAssignment {
 
   @@index([deliveryPersonId])
   @@index([orderId])
+  @@index([deliveryPersonId, completedAt])
 }
 
 model Order {
@@ -278,13 +289,21 @@ model Order {
   confirmedAt       DateTime?
   paidAt            DateTime?
   deliveredAt       DateTime?
+  notDeliveredReason String?       // Rider-provided reason when delivery attempt fails
+  notDeliveredAt     DateTime?     // When the NOT_DELIVERED was reported
   items             OrderItem[]
   assignment        OrderAssignment?
+
+  parentOrderId     String?
+  parentOrder       Order?        @relation("OrderChildren", fields: [parentOrderId], references: [id])
+  childOrders       Order[]       @relation("OrderChildren")
+  isParent          Boolean       @default(false)
 
   @@index([userId, createdAt(sort: Desc)])
   @@index([orderNumber])
   @@index([razorpayOrderId])
   @@index([status])
+  @@index([parentOrderId])
 }
 
 model SmsTemplate {
@@ -333,8 +352,11 @@ model OrderItem {
   price     Float    // Snapshot
   quantity  Int
   total     Float
-  storeId   String?
-  store     Store?   @relation(fields: [storeId], references: [id])
+  storeId        String?
+  store          Store?   @relation(fields: [storeId], references: [id])
+  selectedSize   String?          // User-selected size (e.g., "L", "8x10")
+  userUploadUrls String[]         // User-uploaded photo/design URLs
+  printProductId String?          // Reference to PrintProduct for design printing
 
   @@index([orderId])
   @@index([storeId])
@@ -369,8 +391,10 @@ model ParcelOrder {
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
   approvedAt      DateTime?
-  pickedUpAt      DateTime?
-  deliveredAt     DateTime?
+  pickedUpAt          DateTime?
+  deliveredAt         DateTime?
+  notDeliveredReason  String?       // Rider-provided reason when delivery attempt fails
+  notDeliveredAt      DateTime?     // When the NOT_DELIVERED was reported
 
   @@index([userId, createdAt(sort: Desc)])
   @@index([parcelNumber])
@@ -390,4 +414,42 @@ model ParcelAssignment {
 
   @@index([deliveryPersonId])
   @@index([parcelOrderId])
+  @@index([deliveryPersonId, completedAt])
+}
+
+model CustomSubcategory {
+  id        String   @id @default(uuid())
+  storeType String
+  name      String
+  createdAt DateTime @default(now())
+
+  @@unique([storeType, name])
+  @@index([storeType])
+}
+
+model CategoryConfig {
+  id          String   @id @default(uuid())
+  storeType   String
+  subcategory String
+  uploadType  String   @default("NONE") // NONE | PHOTO_UPLOAD | DESIGN_UPLOAD
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([storeType, subcategory])
+  @@index([storeType])
+}
+
+model PrintProduct {
+  id          String   @id @default(uuid())
+  name        String
+  productType String               // TSHIRT | FRAME | MUG | OTHER
+  sizes       Json                  // Array of {label, value} objects
+  basePrice   Float
+  image       String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([productType])
+  @@index([isActive])
 }
