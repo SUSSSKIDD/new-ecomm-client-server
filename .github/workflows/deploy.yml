@@ -41,6 +41,8 @@ jobs:
           cd server
           # Ensure schema is pushed to the test database
           npx prisma db push --accept-data-loss
+          # Generate the Prisma types
+          npx prisma generate
 
       - name: Run E2E Tests
         env:
