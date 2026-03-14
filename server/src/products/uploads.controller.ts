@@ -4,12 +4,15 @@ import {
   UseGuards,
   UseInterceptors,
   UploadedFiles,
+  UploadedFile,
   BadRequestException,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
-import { FilesInterceptor } from '@nestjs/platform-express';
+import { FilesInterceptor, FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiConsumes } from '@nestjs/swagger';
 import { SupabaseStorageService } from '../common/services/supabase-storage.service';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
 
 const MULTER_IMAGE_OPTIONS = {
   limits: { fileSize: 5 * 1024 * 1024 },
@@ -25,7 +28,7 @@ const MULTER_IMAGE_OPTIONS = {
 @ApiTags('uploads')
 @Controller('uploads')
 export class UploadsController {
-  constructor(private readonly storage: SupabaseStorageService) {}
+  constructor(private readonly storage: SupabaseStorageService) { }
 
   @Post('user-designs')
   @ApiBearerAuth()
@@ -43,5 +46,21 @@ export class UploadsController {
 
     const urls = await this.storage.uploadMany(files, 'user-designs', 'user-uploads');
     return { urls };
+  }
+
+  @Post('product-image')
+  @ApiBearerAuth()
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles('ADMIN')
+  @UseInterceptors(FileInterceptor('image', MULTER_IMAGE_OPTIONS))
+  @ApiConsumes('multipart/form-data')
+  @ApiOperation({ summary: 'Upload a single product image for print products' })
+  async uploadProductImage(@UploadedFile() file: Express.Multer.File) {
+    if (!file) {
+      throw new BadRequestException('Image file is required');
+    }
+
+    const url = await this.storage.upload(file, 'print product images');
+    return { url };
   }
 }

@@ -1,0 +1,112 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  test:
+    name: Run E2E Tests
+    runs-on: ubuntu-latest
+    
+    # We only need Redis locally for the BullMQ queues and cache.
+    # We do NOT spin up Postgres here. We use the external TEST Supabase.
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: |
+          cd server && npm ci
+          cd ../client && npm ci
+
+      - name: Setup Prisma with Test DB
+        env:
+          DATABASE_URL: ${{ secrets.TEST_DATABASE_URL }}
+          DIRECT_URL: ${{ secrets.TEST_DIRECT_URL }}
+        run: |
+          cd server
+          # Ensure schema is pushed to the test database
+          npx prisma db push --accept-data-loss
+
+      - name: Run E2E Tests
+        env:
+          DATABASE_URL: ${{ secrets.TEST_DATABASE_URL }}
+          DIRECT_URL: ${{ secrets.TEST_DIRECT_URL }}
+          REDIS_URL: redis://localhost:6379
+          RIDER_REDIS_URL: redis://localhost:6379
+          BULL_REDIS_HOST: localhost
+          BULL_REDIS_PORT: 6379
+          JWT_SECRET: "ci-cd-test-secret-key-12345"
+          SUPER_ADMIN_PHONE: "+919999999999"
+          SUPER_ADMIN_PIN: "0000"
+          PORT: 3000
+        run: |
+          cd server
+          # Start server in background
+          npm run start:dev &
+          
+          # Wait for server to be healthy
+          echo "Waiting for backend to start..."
+          until curl -s http://localhost:3000/ > /dev/null; do
+            sleep 2
+          done
+          
+          # Run the E2E script (Testing + Native Cleanup)
+          node test/universal-e2e.mjs http://localhost:3000
+
+  build-and-push:
+    name: Build & Push Docker Images
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Build and Push Server
+        uses: docker/build-push-action@v5
+        with:
+          context: ./server
+          push: true
+          tags: ${{ secrets.DOCKER_USERNAME }}/neyokart-server:latest,${{ secrets.DOCKER_USERNAME }}/neyokart-server:${{ github.sha }}
+
+      - name: Build and Push Client
+        uses: docker/build-push-action@v5
+        with:
+          context: ./client
+          push: true
+          tags: ${{ secrets.DOCKER_USERNAME }}/neyokart-client:latest,${{ secrets.DOCKER_USERNAME }}/neyokart-client:${{ github.sha }}
+
+  deploy:
+    name: Zero-Downtime VPS Deployment
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    steps:
+      - name: Execute Deployment Script via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_IP }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            cd /opt/neyokart
+            # Triggers blue/green deploy
+            bash ./deploy.sh

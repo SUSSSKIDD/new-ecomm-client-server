@@ -1,0 +1,82 @@
+version: '3.8'
+
+# This file runs strictly on the Hostinger VPS.
+# It defines two application environments (Blue and Green).
+# Redis is shared persistently. The App containers are ephemeral.
+services:
+  # Shared Persistent Cache & Queue
+  redis:
+    image: redis:7-alpine
+    container_name: neyokart-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - neyokart_redis_data:/data
+    restart: always
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+  # ==========================================
+  # ENVIRONMENT: BLUE (Routes to 3001)
+  # ==========================================
+  server-blue:
+    image: ${DOCKER_USERNAME}/neyokart-server:latest
+    container_name: neyokart-server-blue
+    ports:
+      - "3001:3000"
+    env_file:
+      - .env # Loads VPS Production Secrets
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - RIDER_REDIS_URL=redis://redis:6379
+      - BULL_REDIS_HOST=redis
+      - BULL_REDIS_PORT=6379
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  client-blue:
+    image: ${DOCKER_USERNAME}/neyokart-client:latest
+    container_name: neyokart-client-blue
+    ports:
+      - "8001:80"
+    depends_on:
+      - server-blue
+    restart: unless-stopped
+
+  # ==========================================
+  # ENVIRONMENT: GREEN (Routes to 3002)
+  # ==========================================
+  server-green:
+    image: ${DOCKER_USERNAME}/neyokart-server:latest
+    container_name: neyokart-server-green
+    ports:
+      - "3002:3000"
+    env_file:
+      - .env # Loads VPS Production Secrets
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - RIDER_REDIS_URL=redis://redis:6379
+      - BULL_REDIS_HOST=redis
+      - BULL_REDIS_PORT=6379
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  client-green:
+    image: ${DOCKER_USERNAME}/neyokart-client:latest
+    container_name: neyokart-client-green
+    ports:
+      - "8002:80"
+    depends_on:
+      - server-green
+    restart: unless-stopped
+
+# Ensures Redis retains Rider queues/cache over Blue/Green drops
+volumes:
+  neyokart_redis_data:
