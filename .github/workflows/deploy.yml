@@ -96,6 +96,8 @@ jobs:
         with:
           context: ./client
           push: true
+          build-args: |
+            VITE_API_URL=/api
           tags: ${{ secrets.DOCKER_USERNAME }}/neyokart-client:latest,${{ secrets.DOCKER_USERNAME }}/neyokart-client:${{ github.sha }}
 
   deploy:
