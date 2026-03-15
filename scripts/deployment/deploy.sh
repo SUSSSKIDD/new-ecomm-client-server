@@ -31,16 +31,16 @@ echo "Deploying to:   $NEW_COLOR ($NEW_PORT)"
 
 # 1. Pull the absolute latest images from Docker Hub
 echo "[1/6] Pulling latest images..."
-sudo -E docker compose -f $DOCKER_COMPOSE_FILE pull
+docker compose -f $DOCKER_COMPOSE_FILE pull
 
 # 2. Securely apply any Prisma schema changes
 # We run this in an ephemeral container BEFORE starting the main server, so the server doesn't crash from missing tables.
 echo "[2/6] Pushing Prisma schema changes..."
-sudo -E docker compose -f $DOCKER_COMPOSE_FILE run --rm server-$NEW_COLOR npx prisma db push --accept-data-loss
+docker compose -f $DOCKER_COMPOSE_FILE run --rm server-$NEW_COLOR npx prisma db push --accept-data-loss
 
 # 3. Start the new container in the background
 echo "[3/6] Starting $NEW_COLOR containers..."
-sudo -E docker compose -f $DOCKER_COMPOSE_FILE up -d --no-deps server-$NEW_COLOR client-$NEW_COLOR
+docker compose -f $DOCKER_COMPOSE_FILE up -d --no-deps server-$NEW_COLOR client-$NEW_COLOR
 
 # 4. Wait for the new backend to be healthy
 echo "[4/6] Waiting for server-$NEW_COLOR to become healthy..."
@@ -60,7 +60,7 @@ done
 
 if [ "$HEALTHY" = false ]; then
     echo "❌ Deployment Failed: $NEW_COLOR failed to become healthy. Rolling back."
-    sudo -E docker compose -f $DOCKER_COMPOSE_FILE stop server-$NEW_COLOR client-$NEW_COLOR
+    docker compose -f $DOCKER_COMPOSE_FILE stop server-$NEW_COLOR client-$NEW_COLOR
     exit 1
 fi
 echo "✅ $NEW_COLOR is healthy!"
@@ -74,8 +74,8 @@ sudo nginx -s reload
 
 # 6. Stop and remove the old inactive containers
 echo "[6/6] Stopping old $ACTIVE_COLOR containers..."
-sudo -E docker compose -f $DOCKER_COMPOSE_FILE stop server-$ACTIVE_COLOR client-$ACTIVE_COLOR
-sudo -E docker compose -f $DOCKER_COMPOSE_FILE rm -f server-$ACTIVE_COLOR client-$ACTIVE_COLOR
+docker compose -f $DOCKER_COMPOSE_FILE stop server-$ACTIVE_COLOR client-$ACTIVE_COLOR
+docker compose -f $DOCKER_COMPOSE_FILE rm -f server-$ACTIVE_COLOR client-$ACTIVE_COLOR
 
 # Update the state file
 echo "$NEW_COLOR" > "$STATE_FILE"
