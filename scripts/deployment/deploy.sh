@@ -33,14 +33,14 @@ echo "Deploying to:   $NEW_COLOR ($NEW_PORT)"
 echo "[1/6] Pulling latest images..."
 sudo -E docker compose -f $DOCKER_COMPOSE_FILE pull
 
-# 2. Start the new container in the background
-echo "[2/6] Starting $NEW_COLOR containers..."
-sudo -E docker compose -f $DOCKER_COMPOSE_FILE up -d --no-deps server-$NEW_COLOR client-$NEW_COLOR
+# 2. Securely apply any Prisma schema changes
+# We run this in an ephemeral container BEFORE starting the main server, so the server doesn't crash from missing tables.
+echo "[2/6] Pushing Prisma schema changes..."
+sudo -E docker compose -f $DOCKER_COMPOSE_FILE run --rm server-$NEW_COLOR npx prisma db push --accept-data-loss
 
-# 3. Securely apply any Prisma schema changes 
-# (Since both connect to the same live DB, it's safe to push from the new container before traffic shifts)
-echo "[3/6] Pushing Prisma schema changes..."
-sudo docker exec neyokart-server-$NEW_COLOR npx prisma db push --accept-data-loss
+# 3. Start the new container in the background
+echo "[3/6] Starting $NEW_COLOR containers..."
+sudo -E docker compose -f $DOCKER_COMPOSE_FILE up -d --no-deps server-$NEW_COLOR client-$NEW_COLOR
 
 # 4. Wait for the new backend to be healthy
 echo "[4/6] Waiting for server-$NEW_COLOR to become healthy..."
