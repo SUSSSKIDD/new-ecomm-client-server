@@ -103,6 +103,8 @@ jobs:
     needs: build-and-push
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
       - name: Copy Deploy Script to VPS
         uses: appleboy/scp-action@master
         with:
