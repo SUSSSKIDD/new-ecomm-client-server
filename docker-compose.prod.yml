@@ -17,7 +17,7 @@ services:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 3s
-      retries: 3nano 
+      retries: 3 
 
   # ==========================================
   # ENVIRONMENT: BLUE (Routes to 3001)
