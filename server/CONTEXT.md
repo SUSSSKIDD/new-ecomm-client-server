@@ -783,41 +783,7 @@ Stores have a `storeType` field. Each type has immutable subcategories defined i
 
 Store naming follows auto-generated codes: A1, A2, A3... AN (with retry on unique constraint collision).
 
-## Latency Benchmark — Docker Production (2026-02-23)
 
-| Endpoint | Avg | Min | Max |
-|----------|-----|-----|-----|
-| `GET /` (health) | 2.2ms | 1.6ms | 3.1ms |
-| `POST /auth/super-admin/login` | 52.3ms | 1.7ms | 174.2ms |
-| `GET /products?limit=10` | 89.3ms | 26.3ms | 333.1ms |
-| `GET /products?limit=50` | 62.2ms | 27.7ms | 185.7ms |
-| `GET /search/products?q=test` | 78.9ms | 26.2ms | 311.7ms |
-| `GET /cart` | 142.5ms | 82.5ms | 193.4ms |
-| `GET /orders` | 136.1ms | 95.4ms | 179.7ms |
-| `GET /stores` | 181.0ms | 118.5ms | 291.0ms |
-| `GET /dashboard/store` | 112.7ms | 64.4ms | 167.1ms |
-| `GET /orders/admin/store` | 323.3ms | 282.3ms | 387.7ms |
-| `GET /store-managers` | 264.4ms | 191.9ms | 349.7ms |
-| `GET /delivery/persons` | 245.5ms | 230.1ms | 267.0ms |
-| `GET /payments/status` | 3.6ms | 2.6ms | 6.0ms |
-| `GET /search/categories` | 72.5ms | 25.2ms | 311.9ms |
-| `GET /users/addresses` | 172.7ms | 119.4ms | 299.1ms |
-
-### Concurrent Stress Test (Docker)
-| Test | Total Time | Avg/Request |
-|------|-----------|-------------|
-| 50x GET /products | 551ms | 11.0ms |
-| 50x GET /search | 316ms | 6.3ms |
-| 50x GET /cart | 997ms | 19.9ms |
-| 20x POST /auth/login | 89ms | rate-limited |
-
-### Container Resource Usage
-| Container | CPU | Memory | Image Size |
-|-----------|-----|--------|------------|
-| Server (NestJS) | <1% idle | ~98 MB | 149 MB |
-| Client (nginx) | <1% idle | ~7 MB | 22 MB |
-
-*Note: Higher latencies vs local dev due to Docker networking overhead + remote Supabase PostgreSQL. First request for cached endpoints is slower; subsequent requests hit Redis cache.*
 
 ## Docker E2E Checkout Flow Test (2026-02-23)
 
@@ -1013,3 +979,30 @@ Added custom upload and design printing capabilities for the `DROP_IN_FACTORY` s
 13. **AdminSubcategories undefined spread** (`AdminSubcategories.jsx`): Fixed `{ ...prev[subcategory] }` → `{ ...(prev[subcategory] || {}) }`
 14. **AdminPrintProducts cleanup** (`AdminPrintProducts.jsx`): Removed unused `imageFile` state
 15. **AdminOrders print display** (`AdminOrders.jsx`): Added "Custom Print" badge and upload thumbnail display for print order items
+
+## Zero-Downtime Blue/Green Deployment Architecture (2026-03-15)
+
+### CI/CD Pipeline (`.github/workflows/deploy.yml`)
+- Fully automated deployment pipeline triggered on pushes to the `main` branch.
+- **Docker Build & Push**: Compiles `neyokart-server` (NestJS) and `neyokart-client` (Vite SPA wrapped in Nginx) into lightweight alpine images, directly deploying them to Docker Hub.
+- **Vite Variable Injection**: The workflow forcibly injects `VITE_API_URL=/api` explicitly during the Docker client build via `build-args`. This hardcodes the SPA to statically query `/api/` in production rather than defaulting to `localhost:3000`.
+- **VPS SCP & SSH Execution**: The pipeline autonomously securely copies updated `docker-compose.prod.yml` and `deploy.sh` files to the Hostinger VPS over SCP using GitHub Secrets, then invokes the deployment script. 
+
+### Blue/Green Docker Compositing
+- A static `redis` container instance remains isolated and persistent on port `6379`.
+- **Blue Environment**: `client-blue` (port `8001`) + `server-blue` (port `3001`). 
+- **Green Environment**: `client-green` (port `8002`) + `server-green` (port `3002`).
+- The system reads `/opt/neyokart/active_color.txt` to seamlessly alternate deploying the fresh images onto the dormant color stack.
+
+### Zero-Downtime Swap (`deploy.sh` + Nginx)
+1. **Pull & Start**: Fresh containers are pulled and spun up in parallel to the aggressively live traffic.
+2. **Health Check Gateway**: The script enters a polling loop (20 retries) checking `curl -s http://localhost:$NEW_PORT/` to physically verify the newly deployed NestJS server is healthy before continuing.
+3. **Nginx Upstream Swap**: The script utilizes `sed` to intelligently parse the live `/etc/nginx/sites-available/neyokart` configuration and swap both the `127.0.0.1:CURRENT_SERVER` and `127.0.0.1:CURRENT_CLIENT` `proxy_pass` variables seamlessly over to the newly energized ports.
+4. **Graceful Drain**: `sudo nginx -s reload` handles the traffic switch instantaneously without ever dropping an active connection.
+5. **Teardown**: The stale obsolete containers are finally unceremoniously stopped and destroyed via `docker compose rm -f`.
+
+### Security & Let's Encrypt / Certbot Integration
+To properly route custom domains (`neyokart.com`, `neyokart.in`) into the isolated ecosystem, standard Nginx proxy setups exist:
+- Traffic originating on standard ports (`80/443`) are intercepted by Nginx natively. Let's Encrypt handles SSL verification and actively redirects standard HTTP traffic implicitly to secure HTTPS strings.
+- Internal frontend static React routing handles client-side displays. All incoming proxy `http://neyokart.com/api/*` intercepts are physically stripped and forwarded secretly to `http://127.0.0.1:3001` or `3002`. This sidesteps CORS entirely, resulting in robust security routing.  
+- Important VPS execution note: `sudo visudo` was strictly modified to empower the non-root `pratyush` user with `NOPASSWD: ALL` over Nginx restart actions to enable the robot pipeline to operate frictionlessly without terminal password prompts.
