@@ -33,17 +33,12 @@ echo "Deploying to:   $NEW_COLOR ($NEW_PORT)"
 echo "[1/6] Pulling latest images..."
 docker compose -f $DOCKER_COMPOSE_FILE pull
 
-# 2. Securely apply any Prisma schema changes
-# We run this in an ephemeral container BEFORE starting the main server, so the server doesn't crash from missing tables.
-echo "[2/6] Pushing Prisma schema changes..."
-docker compose -f $DOCKER_COMPOSE_FILE run --rm server-$NEW_COLOR npx prisma db push --accept-data-loss
-
-# 3. Start the new container in the background
-echo "[3/6] Starting $NEW_COLOR containers..."
+# 2. Start the new container in the background
+echo "[2/6] Starting $NEW_COLOR containers..."
 docker compose -f $DOCKER_COMPOSE_FILE up -d --no-deps server-$NEW_COLOR client-$NEW_COLOR
 
-# 4. Wait for the new backend to be healthy
-echo "[4/6] Waiting for server-$NEW_COLOR to become healthy..."
+# 3. Wait for the new backend to be healthy
+echo "[3/6] Waiting for server-$NEW_COLOR to become healthy..."
 RETRIES=0
 MAX_RETRIES=20
 HEALTHY=false
@@ -65,15 +60,15 @@ if [ "$HEALTHY" = false ]; then
 fi
 echo "✅ $NEW_COLOR is healthy!"
 
-# 5. Reload Nginx to perform the Zero-Downtime Swap
-echo "[5/6] Swapping Nginx upstream to port $NEW_PORT..."
+# 4. Reload Nginx to perform the Zero-Downtime Swap
+echo "[4/6] Swapping Nginx upstream to port $NEW_PORT..."
 # This strictly matches the `server 127.0.0.1:CURRENT` line in the Nginx config
 sudo sed -i "s/server 127.0.0.1:$OLD_PORT/server 127.0.0.1:$NEW_PORT/g" /etc/nginx/sites-available/neyokart
 # Reloading Nginx doesn't drop active connections. It gracefully drains.
 sudo nginx -s reload
 
-# 6. Stop and remove the old inactive containers
-echo "[6/6] Stopping old $ACTIVE_COLOR containers..."
+# 5. Stop and remove the old inactive containers
+echo "[5/6] Stopping old $ACTIVE_COLOR containers..."
 docker compose -f $DOCKER_COMPOSE_FILE stop server-$ACTIVE_COLOR client-$ACTIVE_COLOR
 docker compose -f $DOCKER_COMPOSE_FILE rm -f server-$ACTIVE_COLOR client-$ACTIVE_COLOR
 
