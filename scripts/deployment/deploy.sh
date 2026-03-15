@@ -20,10 +20,14 @@ if [ "$ACTIVE_COLOR" = "blue" ]; then
     NEW_COLOR="green"
     NEW_PORT=3002
     OLD_PORT=3001
+    NEW_CLIENT=8002
+    OLD_CLIENT=8001
 else
     NEW_COLOR="blue"
     NEW_PORT=3001
     OLD_PORT=3002
+    NEW_CLIENT=8001
+    OLD_CLIENT=8002
 fi
 
 echo "Current Active: $ACTIVE_COLOR ($OLD_PORT)"
@@ -61,9 +65,10 @@ fi
 echo "✅ $NEW_COLOR is healthy!"
 
 # 4. Reload Nginx to perform the Zero-Downtime Swap
-echo "[4/6] Swapping Nginx upstream to port $NEW_PORT..."
-# This strictly matches the `server 127.0.0.1:CURRENT` line in the Nginx config
-sudo sed -i "s/server 127.0.0.1:$OLD_PORT/server 127.0.0.1:$NEW_PORT/g" /etc/nginx/sites-available/neyokart
+echo "[4/6] Swapping Nginx upstream to port $NEW_PORT (Server) and $NEW_CLIENT (Client)..."
+# Correctly matches proxy_pass http://127.0.0.1:CURRENT in the Nginx config
+sudo sed -i "s/127.0.0.1:$OLD_PORT/127.0.0.1:$NEW_PORT/g" /etc/nginx/sites-available/neyokart
+sudo sed -i "s/127.0.0.1:$OLD_CLIENT/127.0.0.1:$NEW_CLIENT/g" /etc/nginx/sites-available/neyokart
 # Reloading Nginx doesn't drop active connections. It gracefully drains.
 sudo nginx -s reload
 
