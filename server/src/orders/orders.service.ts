@@ -31,7 +31,7 @@ import { TTL } from '../common/redis/ttl.config.js';
 export class OrdersService {
   private readonly logger = new Logger(OrdersService.name);
   private readonly deliveryFee: number;
-  private readonly taxRate: number;
+
   private readonly freeDeliveryThreshold: number;
 
   constructor(
@@ -45,7 +45,7 @@ export class OrdersService {
     private readonly stockService: StockService,
   ) {
     this.deliveryFee = Number(this.config.get('DELIVERY_FEE', '40'));
-    this.taxRate = Number(this.config.get('TAX_RATE', '0.05'));
+
     this.freeDeliveryThreshold = Number(
       this.config.get('FREE_DELIVERY_THRESHOLD', '500'),
     );
@@ -137,9 +137,11 @@ export class OrdersService {
   }
 
   /**
-   * Calculate order totals from items.
+   * Calculate order totals using per-item taxRate (Indian GST).
+   * Each item must carry a `taxRate` property (percentage 0-100).
+   * Tax is never applied to the delivery fee.
    */
-  private calculateTotals(items: PreviewItem[]): {
+  private calculateTotals(items: (PreviewItem & { taxRate?: number })[]): {
     subtotal: number;
     deliveryFee: number;
     tax: number;
@@ -149,7 +151,14 @@ export class OrdersService {
     const subtotal = items.reduce((sum, item) => sum + item.total, 0);
     const freeDeliveryEligible = subtotal >= this.freeDeliveryThreshold;
     const deliveryFee = freeDeliveryEligible ? 0 : this.deliveryFee;
-    const tax = Math.round(subtotal * this.taxRate * 100) / 100;
+
+    // Per-item tax: price × qty × (taxRate / 100), rounded to 2dp
+    const tax = items.reduce((taxSum, item) => {
+      const rate = item.taxRate ?? 0;
+      const itemTax = Math.round(item.total * (rate / 100) * 100) / 100;
+      return taxSum + itemTax;
+    }, 0);
+
     const total = Math.round((subtotal + deliveryFee + tax) * 100) / 100;
 
     return { subtotal, deliveryFee, tax, total, freeDeliveryEligible };
@@ -182,7 +191,7 @@ export class OrdersService {
     });
     const productMap = new Map(products.map((p) => [p.id, p]));
 
-    const items: PreviewItem[] = cart.items.map((cartItem) => {
+    const items: (PreviewItem & { taxRate: number })[] = cart.items.map((cartItem) => {
       const product = productMap.get(cartItem.productId);
       if (!product) {
         return {
@@ -193,6 +202,7 @@ export class OrdersService {
           total: cartItem.price * cartItem.quantity,
           image: cartItem.image,
           inStock: false,
+          taxRate: 0,
         };
       }
       return {
@@ -203,6 +213,7 @@ export class OrdersService {
         total: product.price * cartItem.quantity,
         image: product.images?.[0] ?? null,
         inStock: product.stock >= cartItem.quantity,
+        taxRate: (product as any).taxRate ?? 0,
       };
     });
 
@@ -240,7 +251,7 @@ export class OrdersService {
     const fulfillment = this.fulfillmentService.allocationToFulfillment(allocation);
 
     // Re-calculate totals based on available items only
-    const availablePreviewItems: PreviewItem[] = fulfillment.availableItems.map(
+    const availablePreviewItems: (PreviewItem & { taxRate: number })[] = fulfillment.availableItems.map(
       (fi) => ({
         productId: fi.productId,
         name: fi.name,
@@ -249,6 +260,7 @@ export class OrdersService {
         total: fi.total,
         image: fi.image,
         inStock: true,
+        taxRate: (productMap.get(fi.productId) as any)?.taxRate ?? 0,
       }),
     );
 
@@ -464,6 +476,7 @@ export class OrdersService {
         price: product.price,
         quantity: cartItem.quantity,
         total: product.price * cartItem.quantity,
+        taxRate: product.taxRate ?? 0,
         storeId: storeAssignments?.get(product.id) ?? null,
         selectedSize: cartItem.selectedSize ?? null,
         userUploadUrls: cartItem.userUploadUrls ?? [],
@@ -474,7 +487,10 @@ export class OrdersService {
     const subtotal = orderItems.reduce((sum, item) => sum + item.total, 0);
     const freeDelivery = subtotal >= this.freeDeliveryThreshold;
     const deliveryFee = freeDelivery ? 0 : this.deliveryFee;
-    const tax = Math.round(subtotal * this.taxRate * 100) / 100;
+    // Per-item tax: sum of (itemTotal × itemTaxRate / 100), rounded to 2dp each
+    const tax = orderItems.reduce((acc, oi) => {
+      return acc + Math.round(oi.total * ((oi.taxRate ?? 0) / 100) * 100) / 100;
+    }, 0);
     const total = Math.round((subtotal + deliveryFee + tax) * 100) / 100;
 
     const orderNumber = this.generateOrderNumber();
@@ -503,6 +519,7 @@ export class OrdersService {
               price: oi.price,
               quantity: oi.quantity,
               total: oi.total,
+              taxRate: oi.taxRate ?? 0,
               storeId: oi.storeId,
               selectedSize: oi.selectedSize,
               userUploadUrls: oi.userUploadUrls,
@@ -547,6 +564,7 @@ export class OrdersService {
           price: product.price,
           quantity: item.quantity,
           total: product.price * item.quantity,
+          taxRate: (product as any).taxRate ?? 0,
           storeId: sa.storeId,
           selectedSize: cartItem?.selectedSize ?? null,
           userUploadUrls: cartItem?.userUploadUrls ?? [],
@@ -560,7 +578,10 @@ export class OrdersService {
     const subtotal = allItems.reduce((sum, item) => sum + item.total, 0);
     const freeDelivery = subtotal >= this.freeDeliveryThreshold;
     const deliveryFee = freeDelivery ? 0 : this.deliveryFee;
-    const tax = Math.round(subtotal * this.taxRate * 100) / 100;
+    // Per-item tax across all stores
+    const tax = allItems.reduce((acc, oi) => {
+      return acc + Math.round(oi.total * ((oi.taxRate ?? 0) / 100) * 100) / 100;
+    }, 0);
     const total = Math.round((subtotal + deliveryFee + tax) * 100) / 100;
 
     const parentOrderNumber = this.generateOrderNumber();
@@ -602,7 +623,10 @@ export class OrdersService {
             ? Math.round((childSubtotal / subtotal) * deliveryFee * 100) / 100
             : 0;
         assignedDeliveryFee += childDeliveryFee;
-        const childTax = Math.round(childSubtotal * this.taxRate * 100) / 100;
+        // Per-item tax for this store's items only
+        const childTax = storeGroup.items.reduce((acc, oi) => {
+          return acc + Math.round(oi.total * ((oi.taxRate ?? 0) / 100) * 100) / 100;
+        }, 0);
         const childTotal = Math.round((childSubtotal + childDeliveryFee + childTax) * 100) / 100;
 
         const childOrder = await tx.order.create({
@@ -627,6 +651,7 @@ export class OrdersService {
                 price: oi.price,
                 quantity: oi.quantity,
                 total: oi.total,
+                taxRate: oi.taxRate ?? 0,
                 storeId: oi.storeId,
                 selectedSize: oi.selectedSize,
                 userUploadUrls: oi.userUploadUrls,
@@ -1051,9 +1076,12 @@ export class OrdersService {
         }
       }
 
-      // 6. Recalculate totals
+      // 6. Recalculate totals using per-item taxRate snapshot from OrderItem
       const subtotal = newItems.reduce((sum, item) => sum + item.total, 0);
-      const tax = Math.round(subtotal * this.taxRate * 100) / 100;
+      const tax = newItems.reduce((acc, oi) => {
+        const rate = (oi as any).taxRate ?? 0;
+        return acc + Math.round(oi.total * (rate / 100) * 100) / 100;
+      }, 0);
       const deliveryFee = subtotal >= this.freeDeliveryThreshold ? 0 : this.deliveryFee;
       const total = Math.round((subtotal + deliveryFee + tax) * 100) / 100;
 

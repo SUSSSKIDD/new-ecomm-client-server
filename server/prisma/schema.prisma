@@ -135,6 +135,7 @@ model Product {
   images        String[]
   storeId       String?
   store         Store?           @relation(fields: [storeId], references: [id])
+  taxRate       Float            @default(0)
   createdAt     DateTime         @default(now())
   updatedAt     DateTime         @updatedAt
 
@@ -352,6 +353,7 @@ model OrderItem {
   price     Float    // Snapshot
   quantity  Int
   total     Float
+  taxRate   Float    @default(0) // Snapshot
   storeId        String?
   store          Store?   @relation(fields: [storeId], references: [id])
   selectedSize   String?          // User-selected size (e.g., "L", "8x10")

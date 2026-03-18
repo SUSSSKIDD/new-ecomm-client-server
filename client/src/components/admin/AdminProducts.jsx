@@ -5,7 +5,7 @@ import { useAdminAuth } from '../../hooks/useAdminAuth';
 import { adminApi, API_URL } from '../../lib/api';
 import { STORE_CATEGORY_SUBCATEGORIES } from '../../constants';
 
-const emptyForm = { name: '', description: '', price: '', mrp: '', category: '', stock: '', storeLocation: '' };
+const emptyForm = { name: '', description: '', price: '', mrp: '', category: '', stock: '', storeLocation: '', taxRate: '0' };
 
 const ProductModal = ({ product, onClose, onSaved, admin }) => {
     const defaultStoreLocation = admin?.storeCode || '';
@@ -16,7 +16,8 @@ const ProductModal = ({ product, onClose, onSaved, admin }) => {
         mrp: product.mrp || '',
         category: product.subCategory || product.category || '',
         stock: product.stock || '',
-        storeLocation: product.storeLocation || defaultStoreLocation
+        storeLocation: product.storeLocation || defaultStoreLocation,
+        taxRate: product.taxRate != null ? String(product.taxRate) : '0',
     } : { ...emptyForm, storeLocation: defaultStoreLocation });
 
     const resolvedStoreType = admin?.storeType || 'GROCERY';
@@ -46,6 +47,7 @@ const ProductModal = ({ product, onClose, onSaved, admin }) => {
         fd.append('price', Number(form.price));
         fd.append('category', form.category);
         fd.append('stock', Number(form.stock));
+        fd.append('taxRate', Number(form.taxRate ?? 0));
         if (form.storeLocation) fd.append('storeLocation', form.storeLocation);
         if (form.description) fd.append('description', form.description);
         if (form.mrp) fd.append('mrp', Number(form.mrp));
@@ -117,6 +119,18 @@ const ProductModal = ({ product, onClose, onSaved, admin }) => {
                             <input type="number" required min="0" value={form.stock} onChange={e => setForm(f => ({ ...f, stock: e.target.value }))}
                                 className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ud-primary text-gray-900" />
                         </div>
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Tax Rate (%) <span className="text-gray-400 font-normal text-xs">GST — 0, 5, 12, 18 or 28</span></label>
+                        <input
+                            type="number"
+                            min="0"
+                            max="100"
+                            step="0.5"
+                            value={form.taxRate}
+                            onChange={e => setForm(f => ({ ...f, taxRate: e.target.value }))}
+                            placeholder="0"
+                            className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ud-primary text-gray-900" />
                     </div>
                     <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Description</label>

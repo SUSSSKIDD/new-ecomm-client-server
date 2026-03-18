@@ -1,3 +1,4 @@
+
 import {
   IsString,
   IsNotEmpty,
@@ -6,6 +7,7 @@ import {
   IsBoolean,
   IsArray,
   Min,
+  Max,
 } from 'class-validator';
 import { Type, Transform } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -43,6 +45,13 @@ export class CreateProductDto {
   @IsString()
   @IsOptional()
   subCategory?: string;
+
+  @ApiPropertyOptional({ description: 'GST tax rate percentage (0-100)' })
+  @IsNumber()
+  @IsOptional()
+  @Min(0)
+  @Max(100)
+  taxRate?: number = 0;
 
   @ApiProperty({ description: 'Stock quantity' })
   @Type(() => Number)
