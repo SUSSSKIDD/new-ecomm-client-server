@@ -72,16 +72,13 @@ export class OrdersService {
 
   /**
    * Compute canCancel / canModify / graceExpiresAt for an order.
+   * Confirmed orders are now immutable.
    */
   private computeGraceFields(order: { status: string; confirmedAt?: Date | null }) {
-    const isConfirmed = order.status === 'CONFIRMED';
-    const confirmedAt = order.confirmedAt ? new Date(order.confirmedAt).getTime() : 0;
-    const expiresAt = confirmedAt + OrdersService.GRACE_PERIOD_MS;
-    const withinGrace = isConfirmed && confirmedAt > 0 && Date.now() < expiresAt;
     return {
-      canCancel: order.status === 'PENDING' || withinGrace,
-      canModify: withinGrace,
-      graceExpiresAt: withinGrace ? new Date(expiresAt).toISOString() : null,
+      canCancel: order.status === 'PENDING',
+      canModify: false,
+      graceExpiresAt: null,
     };
   }
 
@@ -287,8 +284,8 @@ export class OrdersService {
    * Now uses StoreInventory for stock management when location data available.
    */
   async create(userId: string, dto: CreateOrderDto, idempotencyKey: string) {
-    // 1-3. Parallel: idempotency check + address validation + cart read
-    const [existingOrder, address, cart] = await Promise.all([
+    // 1-3. Parallel: idempotency check + address validation
+    const [existingOrder, address] = await Promise.all([
       this.prisma.order.findUnique({
         where: { idempotencyKey },
         include: { items: true },
@@ -296,7 +293,6 @@ export class OrdersService {
       this.prisma.address.findUnique({
         where: { id: dto.addressId },
       }),
-      this.cartService.getCart(userId),
     ]);
 
     if (existingOrder) {
@@ -313,21 +309,49 @@ export class OrdersService {
       throw new ForbiddenException('Address does not belong to this user');
     }
 
-    if (cart.items.length === 0) {
-      throw new BadRequestException('Cart is empty');
-    }
-
     // Determine which items to order
-    let itemsToOrder = cart.items;
-    if (dto.confirmedItems && dto.confirmedItems.length > 0) {
-      const confirmedMap = new Map(
-        dto.confirmedItems.map((ci) => [ci.productId, ci.quantity]),
-      );
-      itemsToOrder = cart.items.filter((ci) => confirmedMap.has(ci.productId));
-      itemsToOrder = itemsToOrder.map((ci) => ({
-        ...ci,
-        quantity: confirmedMap.get(ci.productId) ?? ci.quantity,
-      }));
+    let itemsToOrder: any[] = [];
+    let isBuyNow = false;
+
+    if (dto.items && dto.items.length > 0) {
+      // Buy Now: items provided directly, fetch from DB
+      isBuyNow = true;
+      const productIds = dto.items.map((i) => i.productId);
+      const products = await this.prisma.product.findMany({
+         where: { id: { in: productIds } },
+       });
+ 
+       if (products.length !== dto.items.length) {
+         throw new BadRequestException('One or more products not found');
+       }
+  
+       const itemMap = new Map(dto.items.map((i) => [i.productId, i.quantity]));
+       itemsToOrder = products.map((p) => ({
+         productId: p.id,
+         name: p.name,
+         price: p.price,
+         quantity: itemMap.get(p.id) ?? 1,
+         image: p.images?.[0] ?? null,
+         taxRate: (p as any).taxRate ?? 0,
+       }));
+    } else {
+      // Normal flow: use cart
+      const cart = await this.cartService.getCart(userId);
+      if (cart.items.length === 0) {
+        throw new BadRequestException('Cart is empty');
+      }
+
+      itemsToOrder = cart.items;
+      if (dto.confirmedItems && dto.confirmedItems.length > 0) {
+        const confirmedMap = new Map(
+          dto.confirmedItems.map((ci) => [ci.productId, ci.quantity]),
+        );
+        itemsToOrder = cart.items.filter((ci) => confirmedMap.has(ci.productId));
+        itemsToOrder = itemsToOrder.map((ci) => ({
+          ...ci,
+          quantity: confirmedMap.get(ci.productId) ?? ci.quantity,
+        }));
+      }
     }
 
     if (itemsToOrder.length === 0) {
@@ -417,9 +441,9 @@ export class OrdersService {
       );
     }
 
-    // Clear cart + invalidate cache
+    // Clear cart (only for cart-based orders) + invalidate cache
     await Promise.all([
-      this.cartService.clearCart(userId),
+      !isBuyNow ? this.cartService.clearCart(userId) : Promise.resolve(),
       Promise.resolve(this.invalidateOrderCache(userId)),
     ]);
 

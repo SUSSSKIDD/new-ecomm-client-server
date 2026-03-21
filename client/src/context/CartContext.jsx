@@ -17,7 +17,6 @@ export const CartProvider = ({ children }) => {
         }
     });
     const [isCartOpen, setIsCartOpen] = useState(false);
-    const [buyNowMode, setBuyNowMode] = useState(false);
     const [toastMessage, setToastMessage] = useState(null);
     const toastTimerRef = useRef(null);
 
@@ -53,6 +52,7 @@ export const CartProvider = ({ children }) => {
                     image: item.image,
                     quantity: item.quantity,
                     category: item.category || null,
+                    taxRate: item.taxRate ?? 0,
                     // Preserve print factory custom fields
                     ...(item.selectedSize && { selectedSize: item.selectedSize }),
                     ...(item.userUploadUrls?.length && { userUploadUrls: item.userUploadUrls }),
@@ -154,7 +154,6 @@ export const CartProvider = ({ children }) => {
         <CartContext.Provider value={{
             cart, addToCart, updateQuantity, removeFromCart, clearCart,
             isCartOpen, setIsCartOpen,
-            buyNowMode, setBuyNowMode,
             toastMessage,
         }}>
             {children}

@@ -42,6 +42,113 @@ const OrderList = ({ onBack }) => {
     const [payingId, setPayingId] = useState(null);
     const [cancelError, setCancelError] = useState('');
 
+    const handlePayNow = useCallback(async (order) => {
+        setPayingId(order.id);
+        setCancelError('');
+        const http = api(token);
+
+        try {
+            const isLoaded = await loadRazorpayScript();
+            if (!isLoaded) {
+                setCancelError('Razorpay SDK failed to load. Please check your internet connection.');
+                setPayingId(null);
+                return;
+            }
+
+            // Create Razorpay order on server
+            const rzpOrderRes = await http.post(`/payments/create/${order.id}`);
+            const rzpOrder = rzpOrderRes.data;
+
+            // Handle Mock Mode
+            if (rzpOrder.mockMode) {
+                try {
+                    const mockRes = await http.post(`/payments/mock/${order.id}`);
+                    setOrders((prev) => prev.map((o) =>
+                        o.id === order.id ? { ...o, ...mockRes.data.order } : o
+                    ));
+                    setCancelError('');
+                } catch (err) {
+                    setCancelError(err.response?.data?.message || 'Mock payment failed');
+                } finally {
+                    setPayingId(null);
+                }
+                return;
+            }
+
+            const options = {
+                key: rzpOrder.key,
+                amount: rzpOrder.amount,
+                currency: rzpOrder.currency,
+                name: 'New Grocery',
+                description: `Order #${order.orderNumber}`,
+                order_id: rzpOrder.razorpayOrderId,
+                config: {
+                    display: {
+                        blocks: {
+                            utupi: {
+                                name: 'UPI',
+                                instruments: [{ method: 'upi' }]
+                            },
+                            utcard: {
+                                name: 'Cards',
+                                instruments: [{ method: 'card' }]
+                            },
+                            utnb: {
+                                name: 'Netbanking',
+                                instruments: [{ method: 'netbanking' }]
+                            },
+                            utwallet: {
+                                name: 'Wallets',
+                                instruments: [{ method: 'wallet' }]
+                            }
+                        },
+                        sequence: ['block.utupi', 'block.utcard', 'block.utnb', 'block.utwallet'],
+                        preferences: {
+                            show_default_blocks: false
+                        }
+                    }
+                },
+                handler: async (response) => {
+                    setPayingId(order.id);
+                    try {
+                        const verifyRes = await http.post('/payments/verify', {
+                            razorpay_order_id: response.razorpay_order_id,
+                            razorpay_payment_id: response.razorpay_payment_id,
+                            razorpay_signature: response.razorpay_signature,
+                        });
+
+                        setOrders((prev) => prev.map((o) =>
+                            o.id === order.id ? { ...o, ...verifyRes.data.order } : o
+                        ));
+                        setCancelError('');
+                    } catch (err) {
+                        setCancelError(err.response?.data?.message || 'Payment verification failed');
+                    } finally {
+                        setPayingId(null);
+                    }
+                },
+                modal: {
+                    ondismiss: () => {
+                        setPayingId(null);
+                    },
+                },
+                prefill: {
+                    name: user?.name || '',
+                    contact: user?.phone || '',
+                },
+                theme: {
+                    color: '#10b981',
+                },
+            };
+
+            const rzp = new window.Razorpay(options);
+            rzp.open();
+        } catch (err) {
+            setCancelError(err.response?.data?.message || 'Payment failed to initiate');
+            setPayingId(null);
+        }
+    }, [token, user]);
+
     const handleCancelOrder = useCallback(async (orderId) => {
         setCancellingId(orderId);
         setCancelError('');
@@ -345,21 +452,33 @@ const OrderList = ({ onBack }) => {
                                             </div>
                                         )}
 
-                                        {/* Cancel button — grace period */}
-                                        {order.canCancel && (
-                                            <div className="mx-4 pb-4">
-                                                <button
-                                                    type="button"
-                                                    onClick={(e) => { e.stopPropagation(); handleCancelOrder(order.id); }}
-                                                    disabled={cancellingId === order.id}
-                                                    className="w-full py-2.5 bg-red-50 text-red-600 text-sm font-bold rounded-xl border border-red-200 hover:bg-red-100 disabled:opacity-50 transition-colors"
-                                                >
-                                                    {cancellingId === order.id ? 'Cancelling...' : 'Cancel Order'}
-                                                </button>
-                                                {order.graceExpiresAt && new Date(order.graceExpiresAt) > new Date() && (
-                                                    <p className="text-[10px] text-amber-600 text-center mt-1">
-                                                        Cancel window expires in {Math.max(0, Math.ceil((new Date(order.graceExpiresAt).getTime() - Date.now()) / 1000))}s
-                                                    </p>
+                                        {/* Actions — Pay Now / Cancel */}
+                                        {(order.canCancel || (order.paymentMethod === 'RAZORPAY' && order.paymentStatus === 'PENDING' && order.status !== 'CANCELLED')) && (
+                                            <div className="mx-4 pb-4 space-y-2">
+                                                {/* Pay Now button */}
+                                                {order.paymentMethod === 'RAZORPAY' && order.paymentStatus === 'PENDING' && order.status !== 'CANCELLED' && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={(e) => { e.stopPropagation(); handlePayNow(order); }}
+                                                        disabled={payingId === order.id}
+                                                        className="w-full py-2.5 bg-emerald-600 text-white text-sm font-bold rounded-xl hover:bg-emerald-700 disabled:opacity-50 transition-colors shadow-lg shadow-emerald-500/20"
+                                                    >
+                                                        {payingId === order.id ? 'Processing...' : 'Pay Now'}
+                                                    </button>
+                                                )}
+
+                                                {/* Cancel button — grace period */}
+                                                {order.canCancel && (
+                                                    <>
+                                                        <button
+                                                            type="button"
+                                                            onClick={(e) => { e.stopPropagation(); handleCancelOrder(order.id); }}
+                                                            disabled={cancellingId === order.id}
+                                                            className="w-full py-2.5 bg-red-50 text-red-600 text-sm font-bold rounded-xl border border-red-200 hover:bg-red-100 disabled:opacity-50 transition-colors"
+                                                        >
+                                                            {cancellingId === order.id ? 'Cancelling...' : 'Cancel Order'}
+                                                        </button>
+                                                    </>
                                                 )}
                                             </div>
                                         )}

@@ -101,6 +101,7 @@ export class CartService {
       cart.items[existingIndex].price = product.price;
       cart.items[existingIndex].name = product.name;
       cart.items[existingIndex].image = product.images?.[0] ?? null;
+      cart.items[existingIndex].taxRate = product.taxRate ?? 0;
       // Update custom fields if provided
       if (dto.selectedSize !== undefined) cart.items[existingIndex].selectedSize = dto.selectedSize;
       if (dto.userUploadUrls !== undefined) cart.items[existingIndex].userUploadUrls = dto.userUploadUrls;
@@ -113,6 +114,7 @@ export class CartService {
         price: product.price,
         name: product.name,
         image: product.images?.[0] ?? null,
+        taxRate: product.taxRate ?? 0,
         ...(dto.selectedSize && { selectedSize: dto.selectedSize }),
         ...(dto.userUploadUrls?.length && { userUploadUrls: dto.userUploadUrls }),
         ...(dto.printProductId && { printProductId: dto.printProductId }),
@@ -173,6 +175,7 @@ export class CartService {
     cart.items[itemIndex].price = product.price;
     cart.items[itemIndex].name = product.name;
     cart.items[itemIndex].image = product.images?.[0] ?? null;
+    cart.items[itemIndex].taxRate = product.taxRate ?? 0;
 
     cart.updatedAt = new Date().toISOString();
     await this.cache.set(this.cartKey(userId), cart, CartService.CART_TTL);

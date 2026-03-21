@@ -3,7 +3,7 @@ import { useCategory } from '../../context/CategoryContext';
 import ImageCarousel from './ImageCarousel';
 
 const ProductDetailView = () => {
-    const { selectedProduct, setSelectedProduct, addToCart, setIsCartOpen, setBuyNowMode } = useCategory();
+    const { selectedProduct, setSelectedProduct, addToCart, setBuyNowProduct, setIsCartOpen } = useCategory();
 
     if (!selectedProduct) return null;
 
@@ -12,9 +12,9 @@ const ProductDetailView = () => {
     const discount = mrp && mrp > price ? Math.round(((mrp - price) / mrp) * 100) : 0;
 
     const handleBuyNow = () => {
-        addToCart(selectedProduct);
-        setBuyNowMode(true);
+        setBuyNowProduct({ ...selectedProduct, quantity: 1 });
         setIsCartOpen(true);
+        setSelectedProduct(null); // Close the detail view
     };
 
     return (

@@ -8,6 +8,7 @@ export const CategoryProvider = ({ children }) => {
     const [selectedCategory, setSelectedCategory] = useState('All');
     const [activeSubCategory, setActiveSubCategory] = useState(null);
     const [selectedProduct, setSelectedProduct] = useState(null);
+    const [buyNowProduct, setBuyNowProduct] = useState(null);
     const [activePage, setActivePage] = useState('home');
 
     return (
@@ -15,6 +16,7 @@ export const CategoryProvider = ({ children }) => {
             selectedCategory, setSelectedCategory,
             activeSubCategory, setActiveSubCategory,
             selectedProduct, setSelectedProduct,
+            buyNowProduct, setBuyNowProduct,
             activePage, setActivePage,
         }}>
             {children}

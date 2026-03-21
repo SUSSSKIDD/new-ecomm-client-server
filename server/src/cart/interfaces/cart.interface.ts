@@ -4,6 +4,7 @@ export interface CartItem {
   price: number;
   name: string;
   image: string | null;
+  taxRate?: number;
   // Print factory custom fields
   selectedSize?: string;
   userUploadUrls?: string[];

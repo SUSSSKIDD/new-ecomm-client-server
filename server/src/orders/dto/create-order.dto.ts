@@ -61,4 +61,14 @@ export class CreateOrderDto {
   @ValidateNested({ each: true })
   @Type(() => ConfirmedItemDto)
   confirmedItems?: ConfirmedItemDto[];
+
+  @ApiPropertyOptional({
+    description: 'Direct items for Buy Now (bypasses cart)',
+    type: [ConfirmedItemDto],
+  })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ConfirmedItemDto)
+  items?: ConfirmedItemDto[];
 }

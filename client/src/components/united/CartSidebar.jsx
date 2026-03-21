@@ -9,7 +9,6 @@ import { useAddresses } from '../../hooks/useAddresses';
 import { loadRazorpayScript } from '../../lib/utils';
 const DELIVERY_FEE = 40;
 const FREE_DELIVERY_THRESHOLD = 500;
-const TAX_RATE = 0.05;
 
 const parsePrice = (price) => {
     if (typeof price === 'number') return price;
@@ -18,8 +17,8 @@ const parsePrice = (price) => {
 };
 
 const CartSidebar = () => {
-    const { isCartOpen, setIsCartOpen, cart, updateQuantity, removeFromCart, clearCart, buyNowMode, setBuyNowMode } = useCategory();
-    const { isAuthenticated, token, openLoginModal } = useAuth();
+    const { isCartOpen, setIsCartOpen, cart, updateQuantity, removeFromCart, clearCart, buyNowProduct, setBuyNowProduct } = useCategory();
+    const { isAuthenticated, token, user, openLoginModal } = useAuth();
     const { addAddress, loading: addressLoading } = useAddresses();
 
     // Flow: 'cart' | 'checkout' | 'success'
@@ -31,7 +30,7 @@ const CartSidebar = () => {
     const [placing, setPlacing] = useState(false);
     const [orderResult, setOrderResult] = useState(null);
     const [error, setError] = useState('');
-    const paymentMethod = 'COD';
+    const [paymentMethod, setPaymentMethod] = useState('COD');
 
     // Auto-resume checkout after login
     const [pendingCheckout, setPendingCheckout] = useState(false);
@@ -46,7 +45,11 @@ const CartSidebar = () => {
                 setSelectedAddress(defaultAddr);
                 setPreviewLoading(true);
                 try {
-                    const pRes = await api(token).post('/orders/preview', { addressId: defaultAddr.id });
+                    const body = { addressId: defaultAddr.id };
+                    if (buyNowProduct) {
+                        body.items = [{ productId: buyNowProduct.id, quantity: buyNowProduct.quantity || 1 }];
+                    }
+                    const pRes = await api(token).post('/orders/preview', body);
                     setPreview(pRes.data);
                 } catch (err) {
                     setError(err.response?.data?.message || 'Failed to load preview');
@@ -57,7 +60,7 @@ const CartSidebar = () => {
         } catch {
             setError('Failed to load addresses.');
         }
-    }, [token]);
+    }, [token, buyNowProduct]);
 
     useEffect(() => {
         if (isCartOpen) {
@@ -67,8 +70,7 @@ const CartSidebar = () => {
             setPreview(null);
             setPendingCheckout(false);
 
-            if (buyNowMode) {
-                setBuyNowMode(false);
+            if (buyNowProduct) {
                 if (!isAuthenticated) {
                     openLoginModal();
                     setStep('cart');
@@ -80,7 +82,7 @@ const CartSidebar = () => {
                 setStep('cart');
             }
         }
-    }, [isCartOpen, buyNowMode, isAuthenticated, openLoginModal, loadAddressesAndCheckout]);
+    }, [isCartOpen, buyNowProduct, isAuthenticated, openLoginModal, loadAddressesAndCheckout]);
 
     // Check if we need to resume checkout after authentication
     useEffect(() => {
@@ -89,12 +91,22 @@ const CartSidebar = () => {
             setStep('checkout');
             loadAddressesAndCheckout();
         }
-    }, [isAuthenticated, pendingCheckout, isCartOpen, loadAddressesAndCheckout]); const subTotal = cart.reduce(
-        (total, item) => total + parsePrice(item.price) * item.quantity, 0,
-    );
+    }, [isAuthenticated, pendingCheckout, isCartOpen, loadAddressesAndCheckout]); const subTotal = buyNowProduct 
+        ? parsePrice(buyNowProduct.price) * (buyNowProduct.quantity || 1)
+        : cart.reduce((total, item) => total + parsePrice(item.price) * item.quantity, 0);
+
     const isFreeDelivery = subTotal >= FREE_DELIVERY_THRESHOLD;
     const deliveryFee = isFreeDelivery ? 0 : DELIVERY_FEE;
-    const tax = Math.round(subTotal * TAX_RATE * 100) / 100;
+    
+    // Per-item tax estimate: price × qty × (taxRate / 100)
+    const tax = buyNowProduct
+        ? Math.round(parsePrice(buyNowProduct.price) * (buyNowProduct.quantity || 1) * ((buyNowProduct.taxRate || 0) / 100) * 100) / 100
+        : cart.reduce((totalTax, item) => {
+            const rate = item.taxRate ?? 0;
+            const itemTax = Math.round(parsePrice(item.price) * item.quantity * (rate / 100) * 100) / 100;
+            return totalTax + itemTax;
+        }, 0);
+
     const grandTotal = Math.round((subTotal + deliveryFee + tax) * 100) / 100;
 
     const http = api(token);
@@ -110,12 +122,18 @@ const CartSidebar = () => {
     };
 
     // Select address and fetch preview
-    const handleSelectAddress = async (address) => {
+    const handleSelectAddress = async (address, overrideItems = null) => {
         setSelectedAddress(address);
         setPreviewLoading(true);
         setError('');
         try {
-            const res = await http.post('/orders/preview', { addressId: address.id });
+            const body = { addressId: address.id };
+            if (overrideItems) {
+                body.items = overrideItems;
+            } else if (buyNowProduct) {
+                body.items = [{ productId: buyNowProduct.id, quantity: buyNowProduct.quantity || 1 }];
+            }
+            const res = await http.post('/orders/preview', body);
             setPreview(res.data);
         } catch (err) {
             setError(err.response?.data?.message || 'Failed to load preview');
@@ -132,6 +150,7 @@ const CartSidebar = () => {
         const idempotencyKey = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
         try {
+            // 1. Create the internal order
             const body = {
                 addressId: selectedAddress.id,
                 paymentMethod,
@@ -139,7 +158,9 @@ const CartSidebar = () => {
                 lng: selectedAddress.lng,
             };
 
-            if (preview?.fulfillment?.unavailableItems?.length > 0) {
+            if (buyNowProduct) {
+                body.items = [{ productId: buyNowProduct.id, quantity: buyNowProduct.quantity || 1 }];
+            } else if (preview?.fulfillment?.unavailableItems?.length > 0) {
                 body.confirmedItems = preview.fulfillment.availableItems.map((item) => ({
                     productId: item.productId,
                     quantity: item.quantity,
@@ -151,12 +172,126 @@ const CartSidebar = () => {
             });
 
             const order = orderRes.data;
-            setOrderResult(order);
-            setStep('success');
-            clearCart();
+
+            // 2. If Razorpay, initiate payment flow
+            if (paymentMethod === 'RAZORPAY') {
+                const isLoaded = await loadRazorpayScript();
+                if (!isLoaded) {
+                    setError('Razorpay SDK failed to load. Please check your internet connection.');
+                    setPlacing(false);
+                    return;
+                }
+
+                // Create Razorpay order on server
+                const rzpOrderRes = await http.post(`/payments/create/${order.id}`);
+                const rzpOrder = rzpOrderRes.data;
+
+                // 3. Handle Mock Mode vs Live Mode
+                if (rzpOrder.mockMode) {
+                    // In mock mode, we auto-trigger the mock payment for development
+                    try {
+                        const mockRes = await http.post(`/payments/mock/${order.id}`);
+                        setOrderResult(mockRes.data.order);
+                        setStep('success');
+                        if (buyNowProduct) {
+                            setBuyNowProduct(null);
+                        } else {
+                            clearCart();
+                        }
+                    } catch (err) {
+                        setError(err.response?.data?.message || 'Mock payment failed');
+                    } finally {
+                        setPlacing(false);
+                    }
+                    return;
+                }
+
+                const options = {
+                    key: rzpOrder.key,
+                    amount: rzpOrder.amount,
+                    currency: rzpOrder.currency,
+                    name: 'New Grocery',
+                    description: `Order #${order.orderNumber}`,
+                    order_id: rzpOrder.razorpayOrderId,
+                    config: {
+                        display: {
+                            blocks: {
+                                utupi: {
+                                    name: 'UPI',
+                                    instruments: [{ method: 'upi' }]
+                                },
+                                utcard: {
+                                    name: 'Cards',
+                                    instruments: [{ method: 'card' }]
+                                },
+                                utnb: {
+                                    name: 'Netbanking',
+                                    instruments: [{ method: 'netbanking' }]
+                                },
+                                utwallet: {
+                                    name: 'Wallets',
+                                    instruments: [{ method: 'wallet' }]
+                                }
+                            },
+                            sequence: ['block.utupi', 'block.utcard', 'block.utnb', 'block.utwallet'],
+                            preferences: {
+                                show_default_blocks: false
+                            }
+                        }
+                    },
+                    handler: async (response) => {
+                        setPlacing(true);
+                        try {
+                            // Verify payment on server
+                            const verifyRes = await http.post('/payments/verify', {
+                                razorpay_order_id: response.razorpay_order_id,
+                                razorpay_payment_id: response.razorpay_payment_id,
+                                razorpay_signature: response.razorpay_signature,
+                            });
+
+                            setOrderResult(verifyRes.data.order);
+                            setStep('success');
+                            if (buyNowProduct) {
+                                setBuyNowProduct(null);
+                            } else {
+                                clearCart();
+                            }
+                        } catch (err) {
+                            setError(err.response?.data?.message || 'Payment verification failed');
+                        } finally {
+                            setPlacing(false);
+                        }
+                    },
+                    modal: {
+                        ondismiss: () => {
+                            setPlacing(false);
+                        },
+                    },
+                    prefill: {
+                        name: user?.name || '',
+                        contact: user?.phone || '',
+                    },
+                    theme: {
+                        color: '#10b981', // emerald-500
+                    },
+                };
+
+                const rzp = new window.Razorpay(options);
+                rzp.open();
+                // We don't setPlacing(false) here because the flow continues in the handler or ondismiss
+            } else {
+                // COD Flow
+                setOrderResult(order);
+                setStep('success');
+                if (buyNowProduct) {
+                    setBuyNowProduct(null);
+                } else {
+                    clearCart();
+                }
+                setPlacing(false);
+            }
         } catch (err) {
             setError(err.response?.data?.message || 'Order failed. Please try again.');
-        } finally {
             setPlacing(false);
         }
     };
@@ -350,7 +485,7 @@ const CartSidebar = () => {
                     {error && <p className="text-xs text-red-500 mb-3">{error}</p>}
 
                     <RippleButton
-                        onClick={() => { setIsCartOpen(false); setStep('cart'); }}
+                        onClick={handleClose}
                         className="px-8 py-3 bg-ud-primary text-white font-bold rounded-xl hover:bg-emerald-600 transition-colors"
                     >
                         Continue Shopping
@@ -454,24 +589,64 @@ const CartSidebar = () => {
 
                         {/* ─ Order Items ─ */}
                         <div>
-                            <p className="text-xs font-bold text-gray-500 uppercase mb-2">Order Summary ({cart.length} items)</p>
+                            <p className="text-xs font-bold text-gray-500 uppercase mb-2">
+                                {buyNowProduct ? 'Buy Now Item' : `Order Summary (${cart.length} items)`}
+                            </p>
                             <div className="space-y-2">
-                                {cart.map((item) => (
-                                    <div key={item.id} className="flex items-center gap-3 bg-gray-50 rounded-lg p-2">
-                                        <div className="w-10 h-10 bg-white rounded flex items-center justify-center flex-shrink-0">
-                                            <img src={item.image || item.images?.[0]} alt={item.name} className="w-8 h-8 object-contain" />
+                                {buyNowProduct ? (
+                                    <div className="flex items-center gap-3 bg-white border border-gray-100 rounded-xl p-3 shadow-sm">
+                                        <div className="w-12 h-12 bg-gray-50 rounded flex items-center justify-center flex-shrink-0">
+                                            <img src={buyNowProduct.image || buyNowProduct.images?.[0]} alt={buyNowProduct.name} className="w-10 h-10 object-contain" />
                                         </div>
                                         <div className="flex-1 min-w-0">
-                                            <p className="text-xs font-medium text-gray-900 truncate">{item.name}</p>
-                                            <p className="text-[10px] text-gray-500">
-                                                {item.quantity} × ₹{parsePrice(item.price)}
+                                            <p className="text-xs font-bold text-gray-900 truncate">{buyNowProduct.name}</p>
+                                            <p className="text-[10px] text-gray-500 mt-0.5">₹{parsePrice(buyNowProduct.price)}</p>
+                                            
+                                            {/* Buy Now Quantity Selector */}
+                                            <div className="flex items-center gap-2 mt-1.5">
+                                                <button
+                                                    onClick={() => {
+                                                        const newQty = Math.max(1, (buyNowProduct.quantity || 1) - 1);
+                                                        setBuyNowProduct({ ...buyNowProduct, quantity: newQty });
+                                                        handleSelectAddress(selectedAddress, [{ productId: buyNowProduct.id, quantity: newQty }]);
+                                                    }}
+                                                    className="w-6 h-6 rounded-full border border-gray-200 flex items-center justify-center text-gray-500 hover:border-emerald-500"
+                                                >-</button>
+                                                <span className="text-xs font-bold w-4 text-center">{buyNowProduct.quantity || 1}</span>
+                                                <button
+                                                    onClick={() => {
+                                                        const newQty = (buyNowProduct.quantity || 1) + 1;
+                                                        setBuyNowProduct({ ...buyNowProduct, quantity: newQty });
+                                                        handleSelectAddress(selectedAddress, [{ productId: buyNowProduct.id, quantity: newQty }]);
+                                                    }}
+                                                    className="w-6 h-6 rounded-full border border-gray-200 flex items-center justify-center text-gray-500 hover:border-emerald-500"
+                                                >+</button>
+                                            </div>
+                                        </div>
+                                        <div className="text-right">
+                                            <p className="text-xs font-bold text-emerald-600">
+                                                ₹{(parsePrice(buyNowProduct.price) * (buyNowProduct.quantity || 1)).toFixed(0)}
                                             </p>
                                         </div>
-                                        <span className="text-xs font-bold text-gray-900">
-                                            ₹{(parsePrice(item.price) * item.quantity).toFixed(0)}
-                                        </span>
                                     </div>
-                                ))}
+                                ) : (
+                                    cart.map((item) => (
+                                        <div key={item.id} className="flex items-center gap-3 bg-gray-50 rounded-lg p-2">
+                                            <div className="w-10 h-10 bg-white rounded flex items-center justify-center flex-shrink-0">
+                                                <img src={item.image || item.images?.[0]} alt={item.name} className="w-8 h-8 object-contain" />
+                                            </div>
+                                            <div className="flex-1 min-w-0">
+                                                <p className="text-xs font-medium text-gray-900 truncate">{item.name}</p>
+                                                <p className="text-[10px] text-gray-500">
+                                                    {item.quantity} × ₹{parsePrice(item.price)}
+                                                </p>
+                                            </div>
+                                            <span className="text-xs font-bold text-gray-900">
+                                                ₹{(parsePrice(item.price) * item.quantity).toFixed(0)}
+                                            </span>
+                                        </div>
+                                    ))
+                                )}
                             </div>
                         </div>
 
@@ -559,15 +734,44 @@ const CartSidebar = () => {
                         {/* ─ Payment Method ─ */}
                         <div>
                             <p className="text-xs font-bold text-gray-500 uppercase mb-2">Payment Method</p>
-                            <div className="w-full flex items-center gap-3 p-3 rounded-xl border-2 border-emerald-500 bg-emerald-50">
-                                <div className="w-5 h-5 rounded-full border-2 border-emerald-500 flex items-center justify-center">
-                                    <div className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
-                                </div>
-                                <div className="flex-1 text-left">
-                                    <p className="text-sm font-medium text-gray-900">Cash on Delivery</p>
-                                    <p className="text-[10px] text-gray-500">Pay when your order arrives</p>
-                                </div>
-                                <span className="text-lg">💵</span>
+                            <div className="space-y-2">
+                                {/* COD Option */}
+                                <button
+                                    type="button"
+                                    onClick={() => setPaymentMethod('COD')}
+                                    className={`w-full flex items-center gap-3 p-3 rounded-xl border-2 transition-all ${paymentMethod === 'COD'
+                                        ? 'border-emerald-500 bg-emerald-50'
+                                        : 'border-gray-100 bg-white hover:border-emerald-200'
+                                        }`}
+                                >
+                                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${paymentMethod === 'COD' ? 'border-emerald-500' : 'border-gray-300'}`}>
+                                        {paymentMethod === 'COD' && <div className="w-2.5 h-2.5 rounded-full bg-emerald-500" />}
+                                    </div>
+                                    <div className="flex-1 text-left">
+                                        <p className="text-sm font-medium text-gray-900">Cash on Delivery</p>
+                                        <p className="text-[10px] text-gray-500">Pay when your order arrives</p>
+                                    </div>
+                                    <span className="text-lg">💵</span>
+                                </button>
+
+                                {/* Razorpay Option */}
+                                <button
+                                    type="button"
+                                    onClick={() => setPaymentMethod('RAZORPAY')}
+                                    className={`w-full flex items-center gap-3 p-3 rounded-xl border-2 transition-all ${paymentMethod === 'RAZORPAY'
+                                        ? 'border-emerald-500 bg-emerald-50'
+                                        : 'border-gray-100 bg-white hover:border-emerald-200'
+                                        }`}
+                                >
+                                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${paymentMethod === 'RAZORPAY' ? 'border-emerald-500' : 'border-gray-300'}`}>
+                                        {paymentMethod === 'RAZORPAY' && <div className="w-2.5 h-2.5 rounded-full bg-emerald-500" />}
+                                    </div>
+                                    <div className="flex-1 text-left">
+                                        <p className="text-sm font-medium text-gray-900">Online Payment</p>
+                                        <p className="text-[10px] text-gray-500">Razorpay, UPI, Cards, Netbanking</p>
+                                    </div>
+                                    <span className="text-lg">💳</span>
+                                </button>
                             </div>
                         </div>
                     </div>
@@ -584,7 +788,7 @@ const CartSidebar = () => {
                                         ? 'Placing Order...'
                                         : previewLoading
                                             ? 'Loading...'
-                                            : preview ? `Pay ₹${preview.total.toFixed(2)} · Cash on Delivery` : 'Loading...'
+                                            : preview ? `Pay ₹${preview.total.toFixed(2)} · ${paymentMethod === 'COD' ? 'Cash on Delivery' : 'Online Payment'}` : 'Loading...'
                                 }
                             />
                         </div>
@@ -658,11 +862,17 @@ const CartSidebar = () => {
         );
     };
 
+    const handleClose = () => {
+        setIsCartOpen(false);
+        setBuyNowProduct(null);
+        setStep('cart');
+    };
+
     if (!isCartOpen) return null;
 
     return (
         <div className="fixed inset-0 z-[100] overflow-hidden">
-            <div className="absolute inset-0 bg-black bg-opacity-50 transition-opacity" onClick={() => setIsCartOpen(false)} />
+            <div className="absolute inset-0 bg-black bg-opacity-50 transition-opacity" onClick={handleClose} />
 
             <div className="absolute inset-y-0 right-0 w-full md:max-w-sm bg-white shadow-xl flex flex-col transform transition-transform duration-300 ease-in-out translate-x-0">
                 {/* Header */}
@@ -670,7 +880,13 @@ const CartSidebar = () => {
                     <div className="flex items-center gap-2">
                         {step === 'checkout' && (
                             <RippleButton
-                                onClick={() => { setStep('cart'); setSelectedAddress(null); setPreview(null); }}
+                                onClick={() => { 
+                                    if (buyNowProduct) {
+                                        handleClose();
+                                    } else {
+                                        setStep('cart'); setSelectedAddress(null); setPreview(null); 
+                                    }
+                                }}
                                 className="p-1 hover:bg-gray-100 rounded-full"
                             >
                                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -685,7 +901,7 @@ const CartSidebar = () => {
                         </h2>
                     </div>
                     <RippleButton
-                        onClick={() => setIsCartOpen(false)}
+                        onClick={handleClose}
                         className="p-2 -mr-2 text-gray-400 hover:text-gray-500"
                     >
                         <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
