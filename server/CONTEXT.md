@@ -50,7 +50,7 @@ new grocery/
 │       │   │       └── ParcelOrderList.jsx     # User's parcel order history + cancel
 │       │   ├── admin/                           # Admin Panel (SuperAdmin + StoreManager)
 │       │   │   ├── AdminDashboard.jsx           # Main admin dashboard with stats
-│       │   │   ├── AdminDelivery.jsx            # Delivery person management (ADMIN only)
+│       │   │   ├── AdminDelivery.jsx            # Delivery person management (ADMIN only) — create, toggle active, delete with confirmation
 │       │   │   ├── AdminInventory.jsx           # Store inventory management
 │       │   │   ├── AdminLayout.jsx              # Admin layout wrapper
 │       │   │   ├── AdminLedger.jsx              # Payment ledger entries
@@ -503,7 +503,7 @@ CANCELLED  CANCELLED     CANCELLED       CANCELLED   CANCELLED   CANCELLED
 ### Models
 - **User** — id, phone (unique), name, role, orders[], addresses[]
 - **Address** — id, userId, type (HOME/WORK/OTHER), houseNo, street, city, state, zipCode, landmark, mapsLink, recipientName, recipientPhone, lat, lng
-- **Product** — id, name, price, mrp, category, subCategory, stock, storeLocation, isGrocery, images[], storeId?, storeInventory[]
+- **Product** — id, name, price, mrp, category, subCategory, stock, storeLocation, isGrocery, images[], storeId?, taxRate (GST %, default 0), storeInventory[]
   - Indexes: name, category, subCategory, storeLocation, isGrocery, createdAt, [category+createdAt], [isGrocery+category]
 - **Store** — id, name, pincode, lat, lng, address?, storeType, storeCode (unique, auto-generated A1/A2...), isActive, managers[], inventory[], deliveryPersons[], products[], ledgerEntries[]
 - **StoreManager** — id, name, phone (unique), pinHash, storeId, isActive, store (relation, onDelete: Cascade)
@@ -513,7 +513,7 @@ CANCELLED  CANCELLED     CANCELLED       CANCELLED   CANCELLED   CANCELLED
 - **OrderAssignment** — id, orderId, deliveryPersonId, assignedAt, completedAt, result
 - **Order** — id, userId, orderNumber (UD-YYYYMMDD-XXXX), status, paymentMethod, paymentStatus, deliveryAddress (JSON snapshot), subtotal, deliveryFee, tax, total, idempotencyKey (unique), razorpayOrderId (unique), razorpayPaymentId, razorpaySignature, paidAt, deliveredAt, items[], assignments[], fulfillingStoreId?
   - Indexes: [userId+createdAt], orderNumber, razorpayOrderId, status
-- **OrderItem** — id, orderId, productId, name (snapshot), price (snapshot), quantity, total, selectedSize?, userUploadUrls[], printProductId?
+- **OrderItem** — id, orderId, productId, name (snapshot), price (snapshot), quantity, total, taxRate (snapshot, default 0), selectedSize?, userUploadUrls[], printProductId?
   - Cascade delete when order is deleted
 - **CategoryConfig** — id, storeType, subcategory, uploadType (NONE/PHOTO_UPLOAD/DESIGN_UPLOAD), @@unique([storeType, subcategory])
 - **PrintProduct** — id, name, productType, sizes (JSON), basePrice, image?, isActive, createdAt, updatedAt
@@ -552,7 +552,7 @@ CANCELLED  CANCELLED     CANCELLED       CANCELLED   CANCELLED   CANCELLED
 | `SUPER_ADMIN_PHONE` | — | Super admin phone number (e.g. `+919999999999`) |
 | `SUPER_ADMIN_PIN` | — | Super admin 4-digit PIN (hashed at startup with bcrypt) |
 | `DELIVERY_FEE` | 40 | Delivery fee in INR |
-| `TAX_RATE` | 0.05 | Tax rate (5%) |
+| `TAX_RATE` | *(removed)* | Replaced by per-item `taxRate` on Product model (GST %) |
 | `FREE_DELIVERY_THRESHOLD` | 500 | Free delivery above this subtotal |
 | `RAZORPAY_KEY_ID` | (empty) | Empty = mock mode, `rzp_test_*` = test mode |
 | `RAZORPAY_KEY_SECRET` | (empty) | Empty = mock mode |
@@ -567,9 +567,9 @@ CANCELLED  CANCELLED     CANCELLED       CANCELLED   CANCELLED   CANCELLED
 Client-side constants used for display estimates (final totals always come from server preview):
 - `DELIVERY_FEE = 40`
 - `FREE_DELIVERY_THRESHOLD = 500`
-- `TAX_RATE = 0.05`
+- `TAX_RATE = 0.05` (legacy estimate only — server uses per-item `taxRate` from Product)
 
-**Note:** Checkout uses server `POST /orders/preview` response exclusively for pricing. Client constants are only for the pre-checkout estimate display.
+**Note:** Checkout uses server `POST /orders/preview` response exclusively for pricing. Client constants are only for the pre-checkout estimate display. Tax is now calculated per-item using each product's `taxRate` field (GST percentage 0-100).
 
 ## JWT Strategy
 

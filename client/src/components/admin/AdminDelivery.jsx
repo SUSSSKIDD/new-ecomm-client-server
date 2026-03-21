@@ -67,6 +67,19 @@ const AdminDelivery = () => {
         }
     };
 
+    const handleDelete = async (id, name) => {
+        if (!window.confirm(`Delete delivery person "${name}"? This will also remove all their order and parcel assignments.`)) return;
+        setFormError('');
+        setFormSuccess('');
+        try {
+            await adminApi().delete(`/delivery/persons/${id}`);
+            setDeliveryPersons(prev => prev.filter(p => p.id !== id));
+            setFormSuccess(`Delivery person "${name}" deleted`);
+        } catch (err) {
+            setFormError(err.response?.data?.message || 'Error deleting delivery person');
+        }
+    };
+
     return (
         <div>
             <div className="flex justify-between items-center mb-6">
@@ -173,8 +186,9 @@ const AdminDelivery = () => {
                                         </span>
                                     </td>
                                     {admin?.role === 'ADMIN' && (
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-3">
                                             <RippleButton onClick={() => toggleStatus(p.id, p.isActive)} className="text-blue-600 hover:text-blue-900">Toggle Status</RippleButton>
+                                            <RippleButton onClick={() => handleDelete(p.id, p.name)} className="text-red-600 hover:text-red-900">Delete</RippleButton>
                                         </td>
                                     )}
                                 </tr>
