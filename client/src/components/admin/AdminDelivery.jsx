@@ -6,13 +6,12 @@ import { useAdminAuth } from '../../hooks/useAdminAuth';
 const AdminDelivery = () => {
     const { admin } = useAdminAuth();
     const [deliveryPersons, setDeliveryPersons] = useState([]);
-    const [stores, setStores] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
 
     // Form state
     const [showForm, setShowForm] = useState(false);
-    const [formData, setFormData] = useState({ name: '', phone: '', homeStoreId: '', pin: '' });
+    const [formData, setFormData] = useState({ name: '', phone: '', pin: '' });
     const [formError, setFormError] = useState('');
     const [formSuccess, setFormSuccess] = useState('');
 

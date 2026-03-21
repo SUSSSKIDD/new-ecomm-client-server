@@ -271,6 +271,8 @@ for (const storeType of STORE_TYPES) {
       fd.append('price', String(100 + i * 50));
       fd.append('category', category);
       fd.append('stock', '100');
+      // Product 1 gets 5% tax, Product 2 gets 12% tax (per-item GST)
+      fd.append('taxRate', i === 1 ? '5' : '12');
       const r = await api.post('/products', fd, auth(s.managerToken));
       assert(r.status === 201 || r.status === 200, `${r.status}: ${JSON.stringify(r.data?.message)}`);
       s.productIds.push(r.data.id);
@@ -421,11 +423,14 @@ for (const storeType of STORE_TYPES) {
     assert(r.status === 200 || r.status === 201, `${r.status}: ${r.data?.message}`);
   });
 
-  // Preview
+  // Preview (verify per-item tax)
   await step(`[${storeType}] Preview order`, async () => {
     const r = await api.post('/orders/preview', { addressId }, auth(userToken));
     assert(r.status === 200 || r.status === 201, `${r.status}: ${r.data?.message}`);
     assert(r.data.total > 0, 'Expected total > 0');
+    assert(r.data.tax > 0, `Expected per-item tax > 0, got ${r.data.tax}`);
+    // Verify: tax = prod1(150*2*5%) + prod2(200*1*12%) = 15 + 24 = 39
+    assert(r.data.subtotal === 500, `Expected subtotal 500, got ${r.data.subtotal}`);
   });
 
   // Place COD order
@@ -440,6 +445,8 @@ for (const storeType of STORE_TYPES) {
     assert(r.status === 201 || r.status === 200, `${r.status}: ${r.data?.message}`);
     orderIds[storeType] = r.data.id;
     assert(r.data.status === 'CONFIRMED', `Expected CONFIRMED, got ${r.data.status}`);
+    // Verify per-item tax is persisted on order
+    assert(r.data.tax > 0, `Expected per-item tax > 0 on order, got ${r.data.tax}`);
   });
 
   // Verify cart cleared

@@ -989,7 +989,7 @@ export class OrdersService {
         isParent: true,
         parentOrderId: true,
         items: {
-          select: { id: true, productId: true, name: true, price: true, quantity: true, total: true, storeId: true, orderId: true },
+          select: { id: true, productId: true, name: true, price: true, quantity: true, total: true, taxRate: true, storeId: true, orderId: true },
         },
       },
     });
@@ -1079,7 +1079,7 @@ export class OrdersService {
       // 6. Recalculate totals using per-item taxRate snapshot from OrderItem
       const subtotal = newItems.reduce((sum, item) => sum + item.total, 0);
       const tax = newItems.reduce((acc, oi) => {
-        const rate = (oi as any).taxRate ?? 0;
+        const rate = oi.taxRate ?? 0;
         return acc + Math.round(oi.total * (rate / 100) * 100) / 100;
       }, 0);
       const deliveryFee = subtotal >= this.freeDeliveryThreshold ? 0 : this.deliveryFee;

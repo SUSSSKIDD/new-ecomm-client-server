@@ -722,7 +722,7 @@ const CartSidebar = () => {
                             </div>
                         </div>
                         <div className="flex justify-between items-center text-sm">
-                            <span className="text-gray-600">Tax (5%)</span>
+                            <span className="text-gray-600">Est. Tax</span>
                             <span className="font-medium text-gray-900">₹{tax.toFixed(2)}</span>
                         </div>
                         <div className="border-t border-gray-200 my-2 pt-2 flex justify-between items-center">

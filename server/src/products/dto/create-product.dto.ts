@@ -47,6 +47,7 @@ export class CreateProductDto {
   subCategory?: string;
 
   @ApiPropertyOptional({ description: 'GST tax rate percentage (0-100)' })
+  @Type(() => Number)
   @IsNumber()
   @IsOptional()
   @Min(0)
