@@ -6,6 +6,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { api } from '../../lib/api';
 import AddressForm from './profile/AddressForm';
 import { useAddresses } from '../../hooks/useAddresses';
+import { loadRazorpayScript } from '../../lib/utils';
 const DELIVERY_FEE = 40;
 const FREE_DELIVERY_THRESHOLD = 500;
 const TAX_RATE = 0.05;

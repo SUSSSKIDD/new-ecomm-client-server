@@ -1150,8 +1150,11 @@ export class OrdersService {
     if (order.isParent && order.childOrders.length > 0) {
       await this.prisma.$executeRawUnsafe(
         `UPDATE "Order" SET "status" = 'CONFIRMED', "paymentStatus" = 'PAID',
-         "confirmedAt" = NOW(), "updatedAt" = NOW()
-         WHERE "parentOrderId" = $1 AND "status" = 'PENDING'`,
+         "razorpayPaymentId" = $1, "razorpaySignature" = $2,
+         "paidAt" = NOW(), "confirmedAt" = NOW(), "updatedAt" = NOW()
+         WHERE "parentOrderId" = $3 AND "status" = 'PENDING'`,
+        razorpayPaymentId,
+        razorpaySignature,
         orderId,
       );
     }

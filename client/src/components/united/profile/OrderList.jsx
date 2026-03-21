@@ -4,6 +4,7 @@ import { useAuth } from '../../../context/AuthContext';
 import { api } from '../../../lib/api';
 import { STATUS_MAP, getStatusLabel } from '../../../lib/status';
 import { usePolling } from '../../../hooks/usePolling';
+import { loadRazorpayScript } from '../../../lib/utils';
 
 const STEPS = ['Confirmed', 'Packed', 'Shipped', 'Delivered'];
 
@@ -33,11 +34,12 @@ const StatusTracker = ({ status }) => {
 };
 
 const OrderList = ({ onBack }) => {
-    const { token } = useAuth();
+    const { token, user } = useAuth();
     const [orders, setOrders] = useState([]);
     const [loading, setLoading] = useState(true);
     const [expandedId, setExpandedId] = useState(null);
     const [cancellingId, setCancellingId] = useState(null);
+    const [payingId, setPayingId] = useState(null);
     const [cancelError, setCancelError] = useState('');
 
     const handleCancelOrder = useCallback(async (orderId) => {
