@@ -56,6 +56,9 @@ jobs:
           SUPER_ADMIN_PHONE: "+919999999999"
           SUPER_ADMIN_PIN: "0000"
           PORT: 3000
+          RAZORPAY_KEY_ID: ${{ secrets.RAZORPAY_TEST_KEY_ID }}
+          RAZORPAY_KEY_SECRET: ${{ secrets.RAZORPAY_TEST_KEY_SECRET }}
+          RAZORPAY_TEST_KEY_ID: ${{ secrets.RAZORPAY_TEST_KEY_ID }}
         run: |
           cd server
           # Start server in background

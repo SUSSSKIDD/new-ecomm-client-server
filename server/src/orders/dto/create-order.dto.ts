@@ -72,3 +72,20 @@ export class CreateOrderDto {
   @Type(() => ConfirmedItemDto)
   items?: ConfirmedItemDto[];
 }
+
+export class OrderPreviewDto {
+  @ApiPropertyOptional({ description: 'Address ID for delivery' })
+  @IsOptional()
+  @IsUUID()
+  addressId?: string;
+
+  @ApiPropertyOptional({
+    description: 'Direct items for Buy Now preview (bypasses cart)',
+    type: [ConfirmedItemDto],
+  })
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ConfirmedItemDto)
+  items?: ConfirmedItemDto[];
+}

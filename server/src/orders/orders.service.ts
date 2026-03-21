@@ -162,42 +162,50 @@ export class OrdersService {
   }
 
   /**
-   * Preview the order from the current cart (no DB writes).
+   * Preview the order. 
+   * Priority: overrideItems (Buy Now) > cart.
    * If addressId is provided, includes fulfillment data (store assignments).
    */
   async preview(
     userId: string,
     addressId?: string,
+    overrideItems?: { productId: string; quantity: number }[],
   ): Promise<OrderPreview | FulfillmentPreview> {
-    // Parallel: fetch cart + address (if provided) simultaneously
+    // Parallel: fetch cart (if no override) + address simultaneously
     const [cart, address] = await Promise.all([
-      this.cartService.getCart(userId),
+      !overrideItems ? this.cartService.getCart(userId) : Promise.resolve(null),
       addressId
         ? this.prisma.address.findUnique({ where: { id: addressId } })
         : Promise.resolve(null),
     ]);
 
-    if (cart.items.length === 0) {
-      throw new BadRequestException('Cart is empty');
+    let rawItems: any[] = [];
+    if (overrideItems && overrideItems.length > 0) {
+      rawItems = overrideItems;
+    } else {
+      if (!cart || cart.items.length === 0) {
+        throw new BadRequestException('Cart is empty');
+      }
+      rawItems = cart.items;
     }
 
     // Fetch live product data
-    const productIds = cart.items.map((i) => i.productId);
+    const productIds = rawItems.map((i) => i.productId);
     const products = await this.prisma.product.findMany({
       where: { id: { in: productIds } },
     });
     const productMap = new Map(products.map((p) => [p.id, p]));
 
-    const items: (PreviewItem & { taxRate: number })[] = cart.items.map((cartItem) => {
-      const product = productMap.get(cartItem.productId);
+    const items: (PreviewItem & { taxRate: number })[] = rawItems.map((rawItem) => {
+      const product = productMap.get(rawItem.productId);
       if (!product) {
         return {
-          productId: cartItem.productId,
-          name: cartItem.name,
-          price: cartItem.price,
-          quantity: cartItem.quantity,
-          total: cartItem.price * cartItem.quantity,
-          image: cartItem.image,
+          productId: rawItem.productId,
+          name: rawItem.name || 'Unknown Product',
+          price: rawItem.price || 0,
+          quantity: rawItem.quantity,
+          total: (rawItem.price || 0) * rawItem.quantity,
+          image: rawItem.image || null,
           inStock: false,
           taxRate: 0,
         };
@@ -206,10 +214,10 @@ export class OrdersService {
         productId: product.id,
         name: product.name,
         price: product.price,
-        quantity: cartItem.quantity,
-        total: product.price * cartItem.quantity,
+        quantity: rawItem.quantity,
+        total: product.price * rawItem.quantity,
         image: product.images?.[0] ?? null,
-        inStock: product.stock >= cartItem.quantity,
+        inStock: product.stock >= rawItem.quantity,
         taxRate: (product as any).taxRate ?? 0,
       };
     });
@@ -230,20 +238,17 @@ export class OrdersService {
     }
 
     // Resolve store assignments (cache for reuse during order creation)
-    const cartItemInputs = cart.items.map((ci) => {
-      const product = productMap.get(ci.productId);
-      return {
-        productId: ci.productId,
-        name: product?.name ?? ci.name,
-        price: product?.price ?? ci.price,
-        quantity: ci.quantity,
-        image: product?.images?.[0] ?? ci.image,
-      };
-    });
+    const itemInputs = items.map((i) => ({
+      productId: i.productId,
+      name: i.name,
+      price: i.price,
+      quantity: i.quantity,
+      image: i.image,
+    }));
 
     // Single allocation call — derives both fulfillment and allocation preview
     const allocation = await this.fulfillmentService.resolveAllocation(
-      address.lat, address.lng, cartItemInputs,
+      address.lat, address.lng, itemInputs,
     );
     const fulfillment = this.fulfillmentService.allocationToFulfillment(allocation);
 

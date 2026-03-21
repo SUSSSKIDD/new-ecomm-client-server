@@ -25,7 +25,10 @@ import {
 } from '@nestjs/swagger';
 import { Request } from 'express';
 import { OrdersService } from './orders.service';
-import { CreateOrderDto } from './dto/create-order.dto';
+import {
+  CreateOrderDto,
+  OrderPreviewDto,
+} from './dto/create-order.dto';
 import { OrderQueryDto } from './dto/order-query.dto';
 import { ModifyOrderDto } from './dto/modify-order.dto';
 
@@ -42,15 +45,12 @@ export class OrdersController {
 
   @Post('preview')
   @HttpCode(200)
-  @ApiOperation({
-    summary:
-      'Preview order from current cart. Pass { addressId } in body for fulfillment-aware preview.',
-  })
+  @ApiOperation({ summary: 'Preview order with taxes and delivery fee' })
   async preview(
     @Req() req: AuthenticatedRequest,
-    @Body('addressId') addressId?: string,
+    @Body() dto: OrderPreviewDto,
   ) {
-    return this.ordersService.preview(req.user.sub, addressId);
+    return this.ordersService.preview(req.user.sub, dto.addressId, dto.items);
   }
 
   @Post()

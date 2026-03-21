@@ -36,6 +36,27 @@ const BASE = process.argv.find(a => !a.startsWith('--') && !a.includes('/node') 
 const REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6379';
 const api = axios.create({ baseURL: BASE, validateStatus: () => true, timeout: 30000 });
 
+// ── Razorpay Secret Configuration (GitHub Actions Support) ─────────
+const CI_MODE = process.env.GITHUB_ACTIONS === 'true';
+const RZP_TEST_KEY_ID = process.env.RAZORPAY_TEST_KEY_ID;
+
+if (CI_MODE && !RZP_TEST_KEY_ID) {
+  console.error('❌ CRITICAL ERROR: RAZORPAY_TEST_KEY_ID secret is missing in CI environment.');
+  process.exit(1);
+}
+
+// ── Razorpay Safety Pre-Check ──────────────────────────────────────
+const gatewayStatus = await api.get('/payments/status');
+if (gatewayStatus.status === 200) {
+  if (gatewayStatus.data.mockMode) {
+    console.log('🛡️  Razorpay: MOCK MODE active (No keys configured).');
+  } else {
+    console.log('🛡️  Razorpay: LIVE MODE active (Keys configured).');
+  }
+} else {
+  console.log('⚠️  Razorpay: Could not verify gateway status.');
+}
+
 // ── Flash sale configuration ────────────────────────────────────────
 const FLASH_MODE = process.argv.includes('--flash') || process.argv.some(a => a.startsWith('--flash-'));
 const FLASH_USERS = parseInt(getCliArg('--flash-users') || process.env.FLASH_USERS || '5000');
@@ -428,8 +449,8 @@ for (const storeType of STORE_TYPES) {
     const r = await api.post('/orders/preview', { addressId }, auth(userToken));
     assert(r.status === 200 || r.status === 201, `${r.status}: ${r.data?.message}`);
     assert(r.data.total > 0, 'Expected total > 0');
-    assert(r.data.tax > 0, `Expected per-item tax > 0, got ${r.data.tax}`);
     // Verify: tax = prod1(150*2*5%) + prod2(200*1*12%) = 15 + 24 = 39
+    assert(Math.abs(r.data.tax - 39) < 0.01, `Expected tax 39, got ${r.data.tax}`);
     assert(r.data.subtotal === 500, `Expected subtotal 500, got ${r.data.subtotal}`);
   });
 
@@ -551,23 +572,26 @@ await step('Add items to cart for modify test', async () => {
 });
 
 let modifyOrderId;
-await step('Place order for modify test', async () => {
+await step('Place order for modify test (Razorpay PENDING)', async () => {
   const r = await api.post('/orders', {
-    addressId, paymentMethod: 'COD', lat: 12.9720, lng: 77.5950,
+    addressId, paymentMethod: 'RAZORPAY', lat: 12.9720, lng: 77.5950,
   }, authWithIdempotency(userToken, `e2e-modify-${RUN_ID}`));
   assert(r.status === 201 || r.status === 200, `${r.status}: ${r.data?.message}`);
   modifyOrderId = r.data.id;
-  assert(r.data.canModify === true, 'Expected canModify=true');
+  // canModify is now always false as per new requirements
+  assert(r.data.canModify === false, 'Expected canModify=false (immutable orders)');
+  assert(r.data.canCancel === true, 'Expected canCancel=true for PENDING order');
 });
 
-await step('Modify order (reduce qty)', async () => {
+await step('Modify order rejected (Immutable Orders)', async () => {
   const r = await api.patch(`/orders/${modifyOrderId}/modify`, {
     items: [
       { productId: groceryStore.productIds[0], quantity: 1 },
-      { productId: groceryStore.productIds[1], quantity: 0 },
     ],
   }, auth(userToken));
-  assert(r.status === 200, `${r.status}: ${r.data?.message}`);
+  // Should fail or be ignored if we removed the endpoint logic, 
+  // but based on computeGraceFields, canModify is false so the service should reject it.
+  assert(r.status === 400 || r.status === 403, `Expected failure for immutable order modify, got ${r.status}`);
 });
 
 // Place another order, then cancel it
@@ -577,13 +601,13 @@ await step('Add items to cart for cancel test', async () => {
 });
 
 let cancelOrderId;
-await step('Place order for cancel test', async () => {
+await step('Place order for cancel test (Razorpay PENDING)', async () => {
   const r = await api.post('/orders', {
-    addressId, paymentMethod: 'COD', lat: 12.9720, lng: 77.5950,
+    addressId, paymentMethod: 'RAZORPAY', lat: 12.9720, lng: 77.5950,
   }, authWithIdempotency(userToken, `e2e-cancel-${RUN_ID}`));
   assert(r.status === 201 || r.status === 200, `${r.status}: ${r.data?.message}`);
   cancelOrderId = r.data.id;
-  assert(r.data.canCancel === true, 'Expected canCancel=true');
+  assert(r.data.canCancel === true, 'Expected canCancel=true for PENDING order');
 });
 
 await step('Cancel order within grace period', async () => {
@@ -621,6 +645,20 @@ await step('Place Razorpay order', async () => {
 await step('Create Razorpay payment order', async () => {
   const r = await api.post(`/payments/create/${razorpayOrderId}`, {}, auth(userToken));
   assert(r.status === 200 || r.status === 201, `${r.status}: ${r.data?.message}`);
+  
+  // Safety check: Ensure we are using TEST credentials, not PRODUCTION
+  if (!r.data.mockMode) {
+    // If in CI, verify it matches the secret exactly
+    if (CI_MODE && RZP_TEST_KEY_ID) {
+      assert(r.data.key === RZP_TEST_KEY_ID, `CRITICAL SAFETY ERROR: Server key (${r.data.key}) does not match RAZORPAY_TEST_KEY_ID secret. Aborting to prevent production usage.`);
+      console.log(`    ℹ️  Verified Razorpay CI Test Mode (${r.data.key})`);
+    } else {
+      assert(r.data.key.startsWith('rzp_test_'), `CRITICAL SAFETY ERROR: Server returned a non-test Razorpay key: ${r.data.key}. Aborting tests to prevent production charges.`);
+      console.log(`    ℹ️  Verified Razorpay Local Test Mode (${r.data.key})`);
+    }
+  } else {
+    console.log('    ℹ️  Verified Razorpay Mock Mode');
+  }
 });
 
 await step('Mock payment completion', async () => {
@@ -1253,6 +1291,79 @@ for (const ep of benchmarkEndpoints) {
 }
 
 // ══════════════════════════════════════════════════════════════════════
+//  Phase 16: Buy Now Isolation & Independent Checkout
+// ══════════════════════════════════════════════════════════════════════
+
+console.log('\n🔷 Phase 16: Buy Now Isolation');
+
+await step('Clear cart before Buy Now test', async () => {
+  await api.delete('/cart', auth(userToken));
+});
+
+let buyNowOrderId;
+await step('Add items to cart (initial state)', async () => {
+  await api.post('/cart/items', { productId: groceryStore.productIds[0], quantity: 5 }, auth(userToken));
+  const r = await api.get('/cart', auth(userToken));
+  assert(r.data.items?.length > 0, 'Cart should not be empty');
+});
+
+await step('Buy Now: Place isolated order (bypasses cart)', async () => {
+  const r = await api.post('/orders', {
+    addressId,
+    paymentMethod: 'RAZORPAY', // Changed to RAZORPAY to test isolation with payment
+    lat: 12.9720,
+    lng: 77.5950,
+    items: [{ productId: groceryStore.productIds[1], quantity: 2 }]
+  }, authWithIdempotency(userToken, `e2e-buynow-${RUN_ID}`));
+  
+  assert(r.status === 201 || r.status === 200, `${r.status}: ${r.data?.message}`);
+  buyNowOrderId = r.data.id;
+  assert(r.data.items.length === 1, `Expected 1 item, got ${r.data.items.length}`);
+  assert(r.data.items[0].productId === groceryStore.productIds[1], 'Incorrect product in Buy Now order');
+  assert(r.data.items[0].quantity === 2, 'Incorrect quantity in Buy Now order');
+});
+
+await step('Buy Now: Create Razorpay order & Verify Keys', async () => {
+  const r = await api.post(`/payments/create/${buyNowOrderId}`, {}, auth(userToken));
+  assert(r.status === 200 || r.status === 201, `${r.status}: ${r.data?.message}`);
+  if (!r.data.mockMode) {
+    if (CI_MODE && RZP_TEST_KEY_ID) {
+      assert(r.data.key === RZP_TEST_KEY_ID, `CRITICAL SAFETY ERROR: Buy Now server key (${r.data.key}) does not match RAZORPAY_TEST_KEY_ID secret.`);
+    } else {
+      assert(r.data.key.startsWith('rzp_test_'), `CRITICAL SAFETY ERROR: Buy Now returned a non-test key: ${r.data.key}`);
+    }
+  }
+  // Complete payment so we can check cart isolation after success
+  await api.post(`/payments/mock/${buyNowOrderId}`, {}, auth(userToken));
+});
+
+await step('Verify cart remains untouched after Buy Now', async () => {
+  const r = await api.get('/cart', auth(userToken));
+  assert(r.status === 200, `${r.status}`);
+  const items = r.data.items || r.data;
+  assert(items?.length > 0, 'Cart should still have original items');
+  assert(items.some(i => i.productId === groceryStore.productIds[0] && i.quantity === 5), 'Cart item 1 changed');
+  assert(!items.some(i => i.productId === groceryStore.productIds[1]), 'Buy Now item accidentally added to cart');
+});
+
+await step('Buy Now: Preview with quantity update updates total', async () => {
+  const r1 = await api.post('/orders/preview', {
+    addressId,
+    items: [{ productId: groceryStore.productIds[1], quantity: 1 }]
+  }, auth(userToken));
+  
+  const r2 = await api.post('/orders/preview', {
+    addressId,
+    items: [{ productId: groceryStore.productIds[1], quantity: 3 }]
+  }, auth(userToken));
+  
+  assert(r2.data.subtotal > r1.data.subtotal, 'Total did not increase with quantity');
+  // Verify tax matches per-item calculation (12% for prod 2)
+  const expectedTax2 = Math.round(r2.data.subtotal * 0.12 * 100) / 100;
+  assert(Math.abs(r2.data.tax - expectedTax2) < 0.01, `Tax mismatch: expected ${expectedTax2}, got ${r2.data.tax}`);
+});
+
+// ══════════════════════════════════════════════════════════════════════
 //  Phase 15: Flash Sale Stress Test (--flash)
 // ══════════════════════════════════════════════════════════════════════
 
@@ -1707,6 +1818,7 @@ const allOrderIds = [
   razorpayOrderId,
   raceOrderId,
   raceOrder2Id,
+  buyNowOrderId,
 ].filter(Boolean);
 
 console.log(`  Cleaning up ${allOrderIds.length} orders...`);
