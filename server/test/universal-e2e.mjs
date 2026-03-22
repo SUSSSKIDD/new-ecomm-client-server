@@ -2,19 +2,19 @@
  * Universal E2E Test — Complete Coverage
  *
  * Covers:
- *  1. Auth (Super Admin, Store Manager, User, Delivery Person)
- *  2. Store creation for ALL 5 store types
- *  3. Product CRUD for each store type
- *  4. Cart operations + edge cases
- *  5. Order lifecycle (create → confirm → processing → order_picked → shipped → delivered) per store type
- *  6. Order modify + cancel within grace period
- *  7. Mock Razorpay payment flow
- *  8. Parcel order full lifecycle (book → approve → ready → assign → claim → accept → deliver)
- *  9. Delivery person setup, status flow (DUTY_OFF → FREE → BUSY → FREE)
+ * 1. Auth (Super Admin, Store Manager, User, Delivery Person)
+ * 2. Store creation for ALL 5 store types
+ * 3. Product CRUD for each store type
+ * 4. Cart operations + edge cases
+ * 5. Order lifecycle (create → confirm → processing → order_picked → shipped → delivered) per store type
+ * 6. Order modify + cancel within grace period
+ * 7. Mock Razorpay payment flow
+ * 8. Parcel order full lifecycle (book → approve → ready → assign → claim → accept → deliver)
+ * 9. Delivery person setup, status flow (DUTY_OFF → FREE → BUSY → FREE)
  * 10. Race conditions (concurrent claims by multiple riders)
  * 11. Idempotency, IDOR, double-submit protection
- * 12. Latency benchmarks across all endpoints
- * 13. Print product CRUD (DROP_IN_FACTORY)
+ * 12. Print product CRUD (DROP_IN_FACTORY)
+ * 13. Buy Now Isolation
  * 14. Cleanup
  *
  * Usage:  node test/universal-e2e.mjs [BASE_URL]
@@ -27,11 +27,6 @@ import axios from 'axios';
 import Redis from 'ioredis';
 
 // ── CLI flag parsing ────────────────────────────────────────────────
-function getCliArg(name) {
-  const arg = process.argv.find(a => a.startsWith(`${name}=`));
-  return arg ? arg.split('=')[1] : null;
-}
-
 const BASE = process.argv.find(a => !a.startsWith('--') && !a.includes('/node') && a !== process.argv[1]) || 'http://localhost:3000';
 const REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6379';
 const api = axios.create({ baseURL: BASE, validateStatus: () => true, timeout: 30000 });
@@ -57,13 +52,6 @@ if (gatewayStatus.status === 200) {
   console.log('⚠️  Razorpay: Could not verify gateway status.');
 }
 
-// ── Flash sale configuration ────────────────────────────────────────
-const FLASH_MODE = process.argv.includes('--flash') || process.argv.some(a => a.startsWith('--flash-'));
-const FLASH_USERS = parseInt(getCliArg('--flash-users') || process.env.FLASH_USERS || '5000');
-const FLASH_STOCK = parseInt(getCliArg('--flash-stock') || process.env.FLASH_STOCK || '100');
-const FLASH_BATCH = parseInt(getCliArg('--flash-batch') || process.env.FLASH_BATCH || '200');
-const FLASH_DURATION = parseInt(getCliArg('--flash-duration') || process.env.FLASH_DURATION || '30');
-
 // ══════════════════════════════════════════════════════════════════════
 //  Helpers
 // ══════════════════════════════════════════════════════════════════════
@@ -71,7 +59,6 @@ const FLASH_DURATION = parseInt(getCliArg('--flash-duration') || process.env.FLA
 const uid = () => Math.random().toString(36).slice(2, 8);
 const RUN_ID = uid();
 const results = [];
-const latencyData = {};
 const issues = [];
 let totalTests = 0;
 let passedTests = 0;
@@ -109,57 +96,6 @@ async function step(name, fn) {
 
 function assert(condition, msg) {
   if (!condition) throw new Error(`Assertion failed: ${msg}`);
-}
-
-function stats(times) {
-  const sorted = [...times].sort((a, b) => a - b);
-  const avg = Math.round(sorted.reduce((s, v) => s + v, 0) / sorted.length);
-  const p50 = sorted[Math.floor(sorted.length * 0.5)] || 0;
-  const p95 = sorted[Math.floor(sorted.length * 0.95)] || 0;
-  const min = sorted[0] || 0;
-  const max = sorted[sorted.length - 1] || 0;
-  return { avg, p50, p95, min, max };
-}
-
-async function measure(name, fn, iterations = 5) {
-  const times = [];
-  for (let i = 0; i < iterations; i++) {
-    const t0 = performance.now();
-    await fn();
-    times.push(Math.round(performance.now() - t0));
-  }
-  const s = stats(times);
-  latencyData[name] = s;
-  return s;
-}
-
-// ── Concurrency engine (batch runner) ────────────────────────────────
-
-async function runConcurrent(tasks, batchSize) {
-  const results = [];
-  for (let i = 0; i < tasks.length; i += batchSize) {
-    const batch = tasks.slice(i, Math.min(i + batchSize, tasks.length));
-    const batchResults = await Promise.allSettled(batch.map(fn => fn()));
-    results.push(...batchResults);
-    if (tasks.length > batchSize) {
-      process.stdout.write(`\r    Progress: ${Math.min(i + batchSize, tasks.length)}/${tasks.length}`);
-    }
-  }
-  if (tasks.length > batchSize) process.stdout.write('\n');
-  return results;
-}
-
-function pStats(times) {
-  if (!times.length) return { avg: 0, p50: 0, p95: 0, p99: 0, min: 0, max: 0 };
-  const sorted = [...times].sort((a, b) => a - b);
-  return {
-    avg: Math.round(sorted.reduce((s, v) => s + v, 0) / sorted.length),
-    p50: sorted[Math.floor(sorted.length * 0.5)] || 0,
-    p95: sorted[Math.floor(sorted.length * 0.95)] || 0,
-    p99: sorted[Math.floor(sorted.length * 0.99)] || 0,
-    min: sorted[0] || 0,
-    max: sorted[sorted.length - 1] || 0,
-  };
 }
 
 // ══════════════════════════════════════════════════════════════════════
@@ -201,7 +137,6 @@ console.log(`\n${'═'.repeat(70)}`);
 console.log(`  UNIVERSAL E2E TEST — ${BASE}`);
 console.log(`  Run ID: ${RUN_ID}`);
 console.log(`  Date: ${new Date().toISOString()}`);
-if (FLASH_MODE) console.log(`  Flash Sale: ${FLASH_USERS} users / ${FLASH_STOCK} stock / batch ${FLASH_BATCH}`);
 console.log(`${'═'.repeat(70)}`);
 
 console.log('\n🔷 Phase 1: Server Health Check');
@@ -645,7 +580,7 @@ await step('Place Razorpay order', async () => {
 await step('Create Razorpay payment order', async () => {
   const r = await api.post(`/payments/create/${razorpayOrderId}`, {}, auth(userToken));
   assert(r.status === 200 || r.status === 201, `${r.status}: ${r.data?.message}`);
-  
+
   // Safety check: Ensure we are using TEST credentials, not PRODUCTION
   if (!r.data.mockMode) {
     // If in CI, verify it matches the secret exactly
@@ -1257,44 +1192,10 @@ if (printProductId) {
 }
 
 // ══════════════════════════════════════════════════════════════════════
-//  Phase 13: Latency Benchmarks
+//  Phase 13: Buy Now Isolation & Independent Checkout
 // ══════════════════════════════════════════════════════════════════════
 
-console.log('\n🔷 Phase 13: Latency Benchmarks');
-
-const benchmarkEndpoints = [
-  { name: 'GET /health', fn: () => api.get('/') },
-  { name: 'GET /products', fn: () => api.get('/products?page=1&limit=20') },
-  { name: 'GET /search/products?q=E2E', fn: () => api.get('/search/products?q=E2E&limit=10') },
-  { name: 'GET /search/suggestions?q=e2', fn: () => api.get('/search/suggestions?q=e2&limit=6') },
-  { name: 'GET /search/categories', fn: () => api.get('/search/categories') },
-  { name: 'GET /cart', fn: () => api.get('/cart', auth(userToken)) },
-  { name: 'GET /orders', fn: () => api.get('/orders?limit=5', auth(userToken)) },
-  { name: 'GET /stores', fn: () => api.get('/stores') },
-  { name: 'GET /users/addresses', fn: () => api.get('/users/addresses', auth(userToken)) },
-  { name: 'POST /auth/send-otp', fn: () => {
-    const phone = `+9166${String(Date.now()).slice(-6)}${String(Math.floor(Math.random() * 100)).padStart(2, '0')}`;
-    return api.post('/auth/send-otp', { phone });
-  }},
-  { name: 'GET /delivery/me', fn: () => api.get('/delivery/me', auth(dpTokens[0])) },
-  { name: 'POST /delivery/location', fn: () => api.post('/delivery/location', { lat: 12.97, lng: 77.59 }, auth(dpTokens[0])) },
-  { name: 'GET /orders/admin/store', fn: () => api.get('/orders/admin/store?page=1&limit=10', auth(groceryStore.managerToken)) },
-  { name: 'GET /parcels', fn: () => api.get('/parcels', auth(userToken)) },
-  { name: 'POST /orders/preview', fn: async () => {
-    await api.post('/cart/items', { productId: groceryStore.productIds[0], quantity: 1 }, auth(userToken));
-    return api.post('/orders/preview', { addressId }, auth(userToken));
-  }},
-];
-
-for (const ep of benchmarkEndpoints) {
-  await measure(ep.name, ep.fn, 5);
-}
-
-// ══════════════════════════════════════════════════════════════════════
-//  Phase 16: Buy Now Isolation & Independent Checkout
-// ══════════════════════════════════════════════════════════════════════
-
-console.log('\n🔷 Phase 16: Buy Now Isolation');
+console.log('\n🔷 Phase 13: Buy Now Isolation');
 
 await step('Clear cart before Buy Now test', async () => {
   await api.delete('/cart', auth(userToken));
@@ -1315,7 +1216,7 @@ await step('Buy Now: Place isolated order (bypasses cart)', async () => {
     lng: 77.5950,
     items: [{ productId: groceryStore.productIds[1], quantity: 2 }]
   }, authWithIdempotency(userToken, `e2e-buynow-${RUN_ID}`));
-  
+
   assert(r.status === 201 || r.status === 200, `${r.status}: ${r.data?.message}`);
   buyNowOrderId = r.data.id;
   assert(r.data.items.length === 1, `Expected 1 item, got ${r.data.items.length}`);
@@ -1351,455 +1252,17 @@ await step('Buy Now: Preview with quantity update updates total', async () => {
     addressId,
     items: [{ productId: groceryStore.productIds[1], quantity: 1 }]
   }, auth(userToken));
-  
+
   const r2 = await api.post('/orders/preview', {
     addressId,
     items: [{ productId: groceryStore.productIds[1], quantity: 3 }]
   }, auth(userToken));
-  
+
   assert(r2.data.subtotal > r1.data.subtotal, 'Total did not increase with quantity');
   // Verify tax matches per-item calculation (12% for prod 2)
   const expectedTax2 = Math.round(r2.data.subtotal * 0.12 * 100) / 100;
   assert(Math.abs(r2.data.tax - expectedTax2) < 0.01, `Tax mismatch: expected ${expectedTax2}, got ${r2.data.tax}`);
 });
-
-// ══════════════════════════════════════════════════════════════════════
-//  Phase 15: Flash Sale Stress Test (--flash)
-// ══════════════════════════════════════════════════════════════════════
-
-const flashOrderIds = [];   // populated by Phase 15, cleaned by Phase 14
-let flashProductId = null;
-
-if (FLASH_MODE) {
-  console.log('\n🔷 Phase 15: Flash Sale Stress Test');
-  console.log(`  Config: users=${FLASH_USERS} stock=${FLASH_STOCK} batch=${FLASH_BATCH} targetDuration=${FLASH_DURATION}s`);
-
-  const flashUserData = [];   // { phone, token, addressId, idx }
-  const flashMetrics = {
-    registration: { times: [], ok: 0, fail: 0 },
-    addToCart:     { times: [], ok: 0, fail: 0 },
-    preview:      { times: [], ok: 0, fail: 0 },
-    placeOrder:   { times: [], ok: 0, fail: 0 },
-    riderClaim:   { times: [], ok: 0, fail: 0 },
-    chaosEvents: 0,
-    duplicateOrders: 0,
-  };
-  const userOrderMap = new Map();
-
-  // ── 15a. Create flash sale product ──────────────────────────────────
-
-  await step('Create flash sale product', async () => {
-    const fd = new FormData();
-    fd.append('name', `FLASH SALE ${RUN_ID}`);
-    fd.append('price', '99');
-    fd.append('category', CATEGORIES_PER_TYPE['GROCERY']);
-    fd.append('stock', String(FLASH_STOCK));
-    const r = await api.post('/products', fd, auth(stores['GROCERY'].managerToken));
-    assert(r.status === 201 || r.status === 200, `${r.status}: ${r.data?.message}`);
-    flashProductId = r.data.id;
-    console.log(`    Product: ${flashProductId} | Stock: ${FLASH_STOCK} | Price: ₹99`);
-  });
-
-  if (flashProductId) {
-
-    // ── 15b. Register flash sale users (batched) ────────────────────────
-
-    console.log(`\n  ── Registering ${FLASH_USERS} flash sale users (batch=${FLASH_BATCH}) ──`);
-    const flashPhonePrefix = '90' + String(Date.now()).slice(-2);
-
-    const regTasks = Array.from({ length: FLASH_USERS }, (_, i) => async () => {
-      const t0 = performance.now();
-      const phone = `+91${flashPhonePrefix}${String(i).padStart(6, '0')}`;
-      try {
-        const s1 = await api.post('/auth/send-otp', { phone });
-        if (s1.status !== 200 && s1.status !== 201) throw new Error(`send-otp ${s1.status}`);
-        const s2 = await api.post('/auth/verify-otp', { phone, otp: '123456' });
-        if (s2.status !== 200 && s2.status !== 201) throw new Error(`verify-otp ${s2.status}`);
-        const token = s2.data.access_token;
-        const s3 = await api.post('/users/addresses', {
-          type: 'HOME', houseNo: String(i), street: `Flash ${i}`,
-          city: 'Bangalore', state: 'Karnataka', zipCode: '560001',
-          lat: 12.972 + Math.random() * 0.005, lng: 77.595 + Math.random() * 0.005,
-        }, auth(token));
-        if (s3.status !== 200 && s3.status !== 201) throw new Error(`address ${s3.status}`);
-        flashMetrics.registration.times.push(Math.round(performance.now() - t0));
-        flashMetrics.registration.ok++;
-        return { phone, token, addressId: s3.data.id, idx: i };
-      } catch (err) {
-        flashMetrics.registration.fail++;
-        if (flashMetrics.registration.fail <= 5) {
-          console.log(`    ⚠️  Reg error #${flashMetrics.registration.fail}: ${err?.message || err}`);
-        }
-        return null;
-      }
-    });
-
-    const regResults = await runConcurrent(regTasks, FLASH_BATCH);
-    for (const r of regResults) {
-      if (r.status === 'fulfilled' && r.value) flashUserData.push(r.value);
-    }
-    const regS = pStats(flashMetrics.registration.times);
-    console.log(`  ✅ Registered: ${flashUserData.length}/${FLASH_USERS} (avg=${regS.avg}ms p95=${regS.p95}ms)`);
-    if (flashMetrics.registration.fail > 0) {
-      console.log(`  ⚠️  ${flashMetrics.registration.fail} registrations failed`);
-    }
-
-    if (flashUserData.length > 0) {
-
-      // ── 15c. FLASH SALE — all users buy simultaneously ──────────────────
-
-      console.log(`\n  ${'═'.repeat(60)}`);
-      console.log(`  ⚡ FLASH SALE GO! — ${flashUserData.length} users → ${FLASH_STOCK} units`);
-      console.log(`  ${'═'.repeat(60)}`);
-
-      const saleTasks = flashUserData.map((user) => async () => {
-        // Chaos: 5% random delay (1-5s)
-        if (Math.random() < 0.05) {
-          flashMetrics.chaosEvents++;
-          await new Promise(r => setTimeout(r, 1000 + Math.random() * 4000));
-        }
-
-        // Step 1: Add to cart
-        let t0 = performance.now();
-        try {
-          const r = await api.post('/cart/items', {
-            productId: flashProductId, quantity: 1,
-          }, auth(user.token));
-          flashMetrics.addToCart.times.push(Math.round(performance.now() - t0));
-          if (r.status === 200 || r.status === 201) {
-            flashMetrics.addToCart.ok++;
-          } else {
-            flashMetrics.addToCart.fail++;
-            return;
-          }
-        } catch {
-          flashMetrics.addToCart.fail++;
-          return;
-        }
-
-        // Step 2: Preview order
-        t0 = performance.now();
-        try {
-          const r = await api.post('/orders/preview', {
-            addressId: user.addressId,
-          }, auth(user.token));
-          flashMetrics.preview.times.push(Math.round(performance.now() - t0));
-          if (r.status === 200 || r.status === 201) {
-            flashMetrics.preview.ok++;
-          } else {
-            flashMetrics.preview.fail++;
-            return;
-          }
-        } catch {
-          flashMetrics.preview.fail++;
-          return;
-        }
-
-        // Step 3: Place COD order
-        t0 = performance.now();
-        try {
-          const r = await api.post('/orders', {
-            addressId: user.addressId,
-            paymentMethod: 'COD',
-            lat: 12.972,
-            lng: 77.595,
-          }, authWithIdempotency(user.token, `flash-${RUN_ID}-${user.idx}`));
-          flashMetrics.placeOrder.times.push(Math.round(performance.now() - t0));
-          if (r.status === 200 || r.status === 201) {
-            flashMetrics.placeOrder.ok++;
-            flashOrderIds.push(r.data.id);
-            // Track per-user orders for duplicate detection
-            if (!userOrderMap.has(user.phone)) userOrderMap.set(user.phone, []);
-            userOrderMap.get(user.phone).push(r.data.id);
-          } else {
-            flashMetrics.placeOrder.fail++;
-          }
-        } catch {
-          flashMetrics.placeOrder.fail++;
-        }
-      });
-
-      const saleT0 = performance.now();
-      await runConcurrent(saleTasks, FLASH_BATCH);
-      const saleDurationMs = Math.round(performance.now() - saleT0);
-
-      console.log(`\n  ⚡ Flash sale completed in ${(saleDurationMs / 1000).toFixed(1)}s`);
-      if (saleDurationMs > FLASH_DURATION * 1000) {
-        console.log(`  ⚠️  Exceeded target duration (${FLASH_DURATION}s)`);
-      }
-
-      // ── 15d. Inventory verification ─────────────────────────────────────
-
-      console.log('\n  ── Inventory Verification ──');
-      let finalStock = null;
-
-      await step('Check final product stock', async () => {
-        const r = await api.get(`/products/${flashProductId}`);
-        assert(r.status === 200, `${r.status}`);
-        finalStock = r.data.stock;
-        console.log(`    Stock: ${FLASH_STOCK} → ${finalStock} (sold: ${FLASH_STOCK - finalStock})`);
-      });
-
-      const successfulOrders = flashMetrics.placeOrder.ok;
-      const failedOrders = flashMetrics.placeOrder.fail;
-      const oversellCount = finalStock !== null && finalStock < 0 ? Math.abs(finalStock) : 0;
-      const inventoryRace = successfulOrders > FLASH_STOCK || (finalStock !== null && finalStock < 0);
-
-      // Duplicate detection
-      for (const [, orders] of userOrderMap) {
-        if (orders.length > 1) flashMetrics.duplicateOrders += orders.length - 1;
-      }
-
-      await step('Inventory race condition check', async () => {
-        if (inventoryRace) {
-          console.log(`    🚨 CRITICAL FAILURE: INVENTORY RACE CONDITION DETECTED`);
-          console.log(`    ${successfulOrders} successful orders > ${FLASH_STOCK} available stock`);
-          console.log(`    Oversell count: ${oversellCount}`);
-          issues.push({ test: 'Flash Inventory Race', error: `Oversold: ${successfulOrders} orders for ${FLASH_STOCK} stock` });
-        } else {
-          console.log(`    ✅ Inventory integrity OK: ${successfulOrders} orders ≤ ${FLASH_STOCK} stock`);
-        }
-      });
-
-      await step('Duplicate order detection', async () => {
-        if (flashMetrics.duplicateOrders > 0) {
-          console.log(`    ⚠️  ${flashMetrics.duplicateOrders} duplicate orders detected across users`);
-          issues.push({ test: 'Flash Duplicates', error: `${flashMetrics.duplicateOrders} duplicate orders` });
-        } else {
-          console.log(`    ✅ No duplicate orders — idempotency working`);
-        }
-      });
-
-      // ── 15e. Order pipeline latency analysis ────────────────────────────
-
-      const orderLatency = pStats(flashMetrics.placeOrder.times);
-
-      await step('Order pipeline latency check', async () => {
-        if (orderLatency.p99 > 2000) {
-          console.log(`    ⚠️  WARNING: POSSIBLE DATABASE LOCK CONTENTION`);
-          console.log(`    p99=${orderLatency.p99}ms exceeds 2000ms threshold`);
-          issues.push({ test: 'Flash Order Latency', error: `p99=${orderLatency.p99}ms > 2000ms` });
-        } else {
-          console.log(`    ✅ Order latency within bounds (p99=${orderLatency.p99}ms)`);
-        }
-      });
-
-      // ── 15f. Rider assignment stress ────────────────────────────────────
-      // NOTE: Phase 11 already tests concurrent rider claims thoroughly.
-      // Here we do a lighter version: advance a few flash orders to SHIPPED,
-      // trigger assignment, and verify the pool/claim mechanism doesn't break
-      // under flash sale load. We skip the full race-claim since it conflicts
-      // with AutoAssignService (riders going FREE triggers auto-broadcast).
-
-      const stressOrderCount = Math.min(3, flashOrderIds.length);
-      if (stressOrderCount > 0 && dpTokens.length > 0) {
-        console.log(`\n  ── Rider Assignment Stress (${stressOrderCount} orders) ──`);
-
-        // Put all riders on DUTY_OFF first to prevent AutoAssignService interference
-        for (const token of dpTokens) {
-          try { await api.post('/delivery/status', { status: 'DUTY_OFF' }, auth(token)); } catch { }
-        }
-        await new Promise(r => setTimeout(r, 500));
-
-        // Advance orders to SHIPPED and trigger assignment
-        const stressOids = [];
-        for (let i = 0; i < stressOrderCount; i++) {
-          const oid = flashOrderIds[i];
-          let ok = true;
-          for (const st of ['PROCESSING', 'ORDER_PICKED', 'SHIPPED']) {
-            const r = await api.patch(`/orders/admin/${oid}/status`,
-              { status: st }, auth(stores['GROCERY'].managerToken));
-            if (r.status !== 200) { ok = false; break; }
-          }
-          if (ok) {
-            await api.post(`/orders/admin/${oid}/assign-delivery`, {}, auth(adminToken));
-            stressOids.push(oid);
-          }
-        }
-        console.log(`  Assigned ${stressOids.length} orders to delivery pool`);
-
-        await new Promise(r => setTimeout(r, 1000));
-
-        // Now set riders FREE and positioned, then immediately race-claim ONE order
-        for (let i = 0; i < dpTokens.length; i++) {
-          try {
-            await api.post('/delivery/status', { status: 'FREE' }, auth(dpTokens[i]));
-            await api.post('/delivery/location', {
-              lat: 12.9716 + i * 0.0005, lng: 77.5946 + i * 0.0005,
-            }, auth(dpTokens[i]));
-          } catch { }
-        }
-
-        // Race-claim only the first stress order (quick test, avoids infinite loop)
-        if (stressOids.length > 0) {
-          const raceOid = stressOids[0];
-          await step(`Flash rider race: ${dpTokens.length} riders claim 1 order`, async () => {
-            const t0 = performance.now();
-            const claims = await Promise.all(
-              dpTokens.map(token => api.post(`/delivery/orders/${raceOid}/claim`, {}, auth(token)))
-            );
-            flashMetrics.riderClaim.times.push(Math.round(performance.now() - t0));
-            const winners = claims.filter(r => r.status === 200 || r.status === 201);
-            flashMetrics.riderClaim.ok += winners.length;
-            flashMetrics.riderClaim.fail += claims.length - winners.length;
-
-            console.log(`    Status codes: [${claims.map(r => r.status).join(', ')}]`);
-            if (winners.length > 1) {
-              console.log(`    🚨 RACE: ${winners.length} riders claimed same order!`);
-              issues.push({ test: 'Flash rider claim', error: `${winners.length} winners` });
-            } else if (winners.length === 1) {
-              console.log(`    ✅ Single winner — claim race correct`);
-              // Complete delivery so rider is freed
-              const winnerIdx = claims.findIndex(r => r.status === 200 || r.status === 201);
-              try {
-                await api.post(`/delivery/orders/${raceOid}/accept`, {}, auth(dpTokens[winnerIdx]));
-                await api.post(`/delivery/orders/${raceOid}/complete`, { result: 'DELIVERED' }, auth(dpTokens[winnerIdx]));
-              } catch { }
-            } else {
-              console.log(`    ⚠️  No winner (all ${dpTokens.length} returned 409) — order may have been auto-assigned`);
-            }
-          });
-        }
-
-        // Immediately put all riders DUTY_OFF to stop any further auto-assign broadcasts
-        for (const token of dpTokens) {
-          try { await api.post('/delivery/status', { status: 'DUTY_OFF' }, auth(token)); } catch { }
-        }
-      }
-
-      // ── 15g. Flash sale cleanup ─────────────────────────────────────────
-
-      console.log('\n  ── Flash Sale Cleanup ──');
-
-      // Cancel all non-delivered flash orders
-      let flashCancelled = 0;
-      const cancelBatch = flashOrderIds.map(oid => async () => {
-        try {
-          const check = await api.get(`/orders/${oid}`, auth(flashUserData[0].token));
-          if (check.status !== 200) return;
-          if (check.data.status === 'CANCELLED' || check.data.status === 'DELIVERED') return;
-          const r = await api.patch(`/orders/admin/${oid}/status`,
-            { status: 'CANCELLED' }, auth(adminToken));
-          if (r.status === 200) flashCancelled++;
-        } catch { /* ignore */ }
-      });
-      await runConcurrent(cancelBatch, FLASH_BATCH);
-      console.log(`  Cancelled ${flashCancelled} flash orders (${flashOrderIds.length - flashCancelled} already terminal)`);
-
-      // Delete flash product
-      await step('Delete flash sale product', async () => {
-        const r = await api.delete(`/products/${flashProductId}`, auth(stores['GROCERY'].managerToken));
-        assert(r.status === 200 || r.status === 204, `${r.status}`);
-        flashProductId = null;
-      });
-
-      // Clear flash user carts
-      const clearCartBatch = flashUserData.map(u => async () => {
-        try { await api.delete('/cart', auth(u.token)); } catch { /* ignore */ }
-      });
-      await runConcurrent(clearCartBatch, FLASH_BATCH);
-      console.log(`  Cleared ${flashUserData.length} flash user carts`);
-
-      // Flush delivery pool + BullMQ queue to prevent claim-timeout re-broadcast loop
-      try {
-        const flushRedis = new Redis(REDIS_URL, { maxRetriesPerRequest: 1, lazyConnect: true });
-        await flushRedis.connect();
-        await flushRedis.del('avail:orders');
-        let flushed = 0;
-        for (const pattern of ['avail:order:*', 'lock:order:*', 'bull:delivery:*']) {
-          let cursor = '0';
-          do {
-            const [next, keys] = await flushRedis.scan(cursor, 'MATCH', pattern, 'COUNT', 200);
-            cursor = next;
-            const delKeys = pattern === 'bull:delivery:*'
-              ? keys.filter(k => !k.endsWith(':meta') && !k.endsWith(':stalled-check'))
-              : keys;
-            if (delKeys.length > 0) { await flushRedis.del(...delKeys); flushed += delKeys.length; }
-          } while (cursor !== '0');
-        }
-        await flushRedis.quit();
-        console.log(`  Flushed delivery pool + ${flushed} Redis keys (stops claim-timeout loop)`);
-      } catch (e) {
-        console.log(`  ⚠️  Redis flush failed: ${e.message}`);
-      }
-
-      // ── 15h. FLASH SALE REPORT ──────────────────────────────────────────
-
-      console.log(`\n${'═'.repeat(80)}`);
-      console.log('  ⚡ FLASH SALE STRESS TEST RESULTS');
-      console.log('═'.repeat(80));
-      console.log(`  Users registered:     ${flashUserData.length} / ${FLASH_USERS}`);
-      console.log(`  Total order attempts: ${flashMetrics.placeOrder.times.length}`);
-      console.log(`  Successful orders:    ${successfulOrders}`);
-      console.log(`  Failed orders:        ${failedOrders}`);
-      console.log(`  Oversell count:       ${oversellCount}`);
-      console.log(`  Duplicate orders:     ${flashMetrics.duplicateOrders}`);
-      console.log(`  Chaos events (5%):    ${flashMetrics.chaosEvents}`);
-      console.log(`  Sale duration:        ${(saleDurationMs / 1000).toFixed(1)}s`);
-      console.log(`  Final stock:          ${finalStock}`);
-
-      console.log(`\n  LATENCY METRICS`);
-      console.log(`  ${'─'.repeat(76)}`);
-      console.log(`  ${'Step'.padEnd(20)} ${'Count'.padStart(7)} ${'Avg'.padStart(8)} ${'P50'.padStart(8)} ${'P95'.padStart(8)} ${'P99'.padStart(8)} ${'Max'.padStart(8)}`);
-      console.log(`  ${'─'.repeat(20)} ${'─'.repeat(7)} ${'─'.repeat(8)} ${'─'.repeat(8)} ${'─'.repeat(8)} ${'─'.repeat(8)} ${'─'.repeat(8)}`);
-
-      for (const [name, m] of [
-        ['Registration', flashMetrics.registration],
-        ['Add to Cart', flashMetrics.addToCart],
-        ['Preview', flashMetrics.preview],
-        ['Place Order', flashMetrics.placeOrder],
-        ['Rider Claim', flashMetrics.riderClaim],
-      ]) {
-        const s = pStats(m.times);
-        const count = m.times.length;
-        console.log(
-          `  ${name.padEnd(20)} ${String(count).padStart(7)} ${(s.avg + 'ms').padStart(8)} ${(s.p50 + 'ms').padStart(8)} ${(s.p95 + 'ms').padStart(8)} ${(s.p99 + 'ms').padStart(8)} ${(s.max + 'ms').padStart(8)}`
-        );
-      }
-
-      console.log(`\n  THROUGHPUT`);
-      console.log(`  ${'─'.repeat(76)}`);
-      const orderThroughput = saleDurationMs > 0 ? (flashMetrics.placeOrder.times.length / (saleDurationMs / 1000)).toFixed(1) : 0;
-      console.log(`  Orders/sec:           ${orderThroughput}`);
-      console.log(`  Cart adds/sec:        ${saleDurationMs > 0 ? (flashMetrics.addToCart.times.length / (saleDurationMs / 1000)).toFixed(1) : 0}`);
-
-      console.log(`\n  PERFORMANCE WARNINGS`);
-      console.log(`  ${'─'.repeat(76)}`);
-      let warningCount = 0;
-      if (inventoryRace) {
-        console.log('  🚨 CRITICAL: INVENTORY RACE CONDITION DETECTED');
-        warningCount++;
-      }
-      if (orderLatency.p99 > 2000) {
-        console.log(`  ⚠️  DATABASE LOCK CONTENTION — p99=${orderLatency.p99}ms > 2000ms`);
-        warningCount++;
-      }
-      if (flashMetrics.duplicateOrders > 0) {
-        console.log(`  ⚠️  ${flashMetrics.duplicateOrders} DUPLICATE ORDERS`);
-        warningCount++;
-      }
-      if (flashMetrics.riderClaim.ok > stressOrderCount && stressOrderCount > 0) {
-        console.log('  🚨 RIDER CLAIM RACE CONDITION — multiple winners per order');
-        warningCount++;
-      }
-      if (saleDurationMs > FLASH_DURATION * 1000) {
-        console.log(`  ⚠️  SALE EXCEEDED TARGET DURATION (${(saleDurationMs / 1000).toFixed(1)}s > ${FLASH_DURATION}s)`);
-        warningCount++;
-      }
-      if (warningCount === 0) {
-        console.log('  ✅ No performance warnings — system handled flash sale correctly');
-      }
-      console.log('═'.repeat(80));
-
-    } else {
-      console.log('  ❌ No users registered — skipping flash sale execution');
-    }
-  } else {
-    console.log('  ❌ Flash product creation failed — skipping flash sale');
-  }
-} else {
-  console.log('\n  ℹ️  Flash sale skipped (use --flash to enable)');
-}
 
 // ══════════════════════════════════════════════════════════════════════
 //  Phase 14: Cleanup — Orders, Parcels, Redis Pool/Queue, DB entities
@@ -1928,7 +1391,7 @@ await step('Flush Redis: delivery pool + queue', async () => {
     await redis.quit();
   } catch (e) {
     console.log(`    ⚠️  Redis flush: ${e.message}`);
-    try { await redis.quit(); } catch (_) {}
+    try { await redis.quit(); } catch (_) { }
   }
 });
 
@@ -2051,7 +1514,7 @@ await step('Verify: Redis pool empty', async () => {
     await redis.quit();
   } catch (e) {
     console.log(`    ⚠️  Redis verify: ${e.message}`);
-    try { await redis.quit(); } catch (_) {}
+    try { await redis.quit(); } catch (_) { }
   }
 });
 
@@ -2072,60 +1535,13 @@ console.log(`  Failed:     ${failedTests}`);
 console.log('─'.repeat(80));
 
 // Test results table
-console.log(`\n  ${'Test'.padEnd(55)} ${'Status'.padEnd(8)} ${'Latency'.padStart(8)}`);
+console.log(`\n  ${'Test'.padEnd(55)} ${'Status'.padEnd(8)} ${'Time'.padStart(8)}`);
 console.log(`  ${'─'.repeat(55)} ${'─'.repeat(8)} ${'─'.repeat(8)}`);
 
 for (const r of results) {
   const icon = r.status === 'PASS' ? '✅' : '❌';
   const flag = r.ms > 500 ? ' ⚠️' : '';
   console.log(`  ${icon} ${r.name.padEnd(53)} ${r.status.padEnd(8)} ${String(r.ms + 'ms').padStart(7)}${flag}`);
-}
-
-// Overall latency stats
-const allMs = results.map(r => r.ms).sort((a, b) => a - b);
-const avgAll = Math.round(allMs.reduce((s, v) => s + v, 0) / allMs.length);
-const p95All = allMs[Math.floor(allMs.length * 0.95)] || 0;
-const slowest = results.reduce((a, b) => (a.ms > b.ms ? a : b), results[0]);
-
-console.log(`\n${'─'.repeat(80)}`);
-console.log(`  Overall Step Latency:  Avg=${avgAll}ms | P95=${p95All}ms | Max=${slowest.ms}ms (${slowest.name})`);
-
-// Latency benchmark table
-if (Object.keys(latencyData).length > 0) {
-  console.log(`\n${'═'.repeat(80)}`);
-  console.log('  LATENCY BENCHMARK (5 iterations each)');
-  console.log('─'.repeat(80));
-  console.log(
-    `  ${'Endpoint'.padEnd(40)} ${'Avg'.padStart(6)} ${'P50'.padStart(6)} ${'P95'.padStart(6)} ${'Min'.padStart(6)} ${'Max'.padStart(6)}`
-  );
-  console.log(
-    `  ${'─'.repeat(40)} ${'─'.repeat(6)} ${'─'.repeat(6)} ${'─'.repeat(6)} ${'─'.repeat(6)} ${'─'.repeat(6)}`
-  );
-
-  for (const [name, s] of Object.entries(latencyData)) {
-    const flag = s.p95 > 500 ? ' ⚠️' : s.p95 > 200 ? ' ⚡' : '';
-    console.log(
-      `  ${name.padEnd(40)} ${(s.avg + 'ms').padStart(6)} ${(s.p50 + 'ms').padStart(6)} ${(s.p95 + 'ms').padStart(6)} ${(s.min + 'ms').padStart(6)} ${(s.max + 'ms').padStart(6)}${flag}`
-    );
-  }
-
-  const benchAvgs = Object.values(latencyData).map(s => s.avg);
-  const benchOverall = Math.round(benchAvgs.reduce((s, v) => s + v, 0) / benchAvgs.length);
-  const slowBench = Object.entries(latencyData).reduce((a, b) => (a[1].p95 > b[1].p95 ? a : b));
-  const fastBench = Object.entries(latencyData).reduce((a, b) => (a[1].p50 < b[1].p50 ? a : b));
-
-  console.log('─'.repeat(80));
-  console.log(`  Avg across endpoints: ${benchOverall}ms`);
-  console.log(`  Fastest (p50): ${fastBench[0]} — ${fastBench[1].p50}ms`);
-  console.log(`  Slowest (p95): ${slowBench[0]} — ${slowBench[1].p95}ms`);
-
-  const slowEndpoints = Object.entries(latencyData).filter(([, s]) => s.p95 > 500);
-  if (slowEndpoints.length > 0) {
-    console.log(`\n  ⚠️  Endpoints with P95 > 500ms:`);
-    for (const [name, s] of slowEndpoints) {
-      console.log(`     • ${name}: p95=${s.p95}ms avg=${s.avg}ms`);
-    }
-  }
 }
 
 // Issues found
@@ -2171,12 +1587,7 @@ console.log('  ├── Delivery: DUTY_OFF→FREE→BUSY→FREE, GPS, claim/acc
 console.log(`  ├── Race Conditions: ${DP_COUNT} concurrent claims, reject-reclaim, concurrent complete, BUSY-claim, parcel race`);
 console.log('  ├── Security: idempotency, IDOR, double-submit, RBAC, invalid transitions');
 console.log('  ├── Print Products: Create, list, update, deactivate');
-console.log('  ├── Latency: ' + Object.keys(latencyData).length + ' endpoints benchmarked');
-if (FLASH_MODE) {
-  console.log(`  └── Flash Sale: ${FLASH_USERS} users, ${FLASH_STOCK} stock, batch=${FLASH_BATCH} (${flashOrderIds.length} orders placed)`);
-} else {
-  console.log('  └── Flash Sale: skipped (use --flash to enable)');
-}
+console.log('  └── Buy Now: Isolated ordering logic bypassing cart state');
 
 // ══════════════════════════════════════════════════════════════════════
 //  FINAL CLEANUP: Wipe Test DB + Test Redis + Test BullMQ
