@@ -24,6 +24,7 @@ const AdminDelivery = lazy(() => import('./components/admin/AdminDelivery'));
 const AdminParcelOrders = lazy(() => import('./components/admin/AdminParcelOrders'));
 const AdminSubcategories = lazy(() => import('./components/admin/AdminSubcategories'));
 const AdminPrintProducts = lazy(() => import('./components/admin/AdminPrintProducts'));
+const LegalPage = lazy(() => import('./views/LegalPage'));
 
 function App() {
   return (
@@ -41,6 +42,7 @@ function App() {
                   <Routes>
                     <Route path="/" element={<UnitedDealsHome />} />
                     <Route path="/product/:id" element={<ProductDetails />} />
+                    <Route path="/legal" element={<LegalPage />} />
                     <Route path="/delivery/login" element={<DeliveryLogin />} />
                     <Route path="/delivery/dashboard" element={<DeliveryDashboard />} />
 

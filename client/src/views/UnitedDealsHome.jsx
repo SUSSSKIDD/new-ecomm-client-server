@@ -1,6 +1,7 @@
 import { useCategory } from '../context/CategoryContext';
 import { useLocation } from '../context/LocationContext';
 import { useEffect } from 'react';
+import { Link } from 'react-router-dom';
 
 import Header from '../components/united/Header';
 import HeroSection from '../components/united/HeroSection';
@@ -46,10 +47,26 @@ const UnitedDealsHome = () => {
                             <HomeCategoryList />
                         </div>
 
-                        {/* Content Peek / Footer */}
-                        <div className="bg-ud-dark text-white py-12 px-6 mt-auto text-center md:text-left shrink-0">
-                            {/* Simplified footer for mobile */}
-                            <p className="text-sm text-gray-400">© 2026 NEYOKART. All Freshness Guaranteed.</p>
+                        {/* Footer */}
+                        <div className="bg-ud-dark text-white py-8 px-6 mt-auto shrink-0">
+                            <div className="max-w-xl mx-auto flex flex-col items-center gap-3">
+                                <p className="text-xs font-semibold text-green-400 tracking-widest uppercase">NEYOKART</p>
+                                <p className="text-xs text-gray-400 text-center">
+                                    Your neighborhood delivery partner — Groceries, Prints &amp; Parcels.
+                                </p>
+                                <div className="flex flex-wrap justify-center gap-x-4 gap-y-1 mt-1">
+                                    <Link to="/legal#terms" className="text-xs text-gray-400 hover:text-white transition-colors">Terms &amp; Conditions</Link>
+                                    <span className="text-gray-600 text-xs">·</span>
+                                    <Link to="/legal#privacy" className="text-xs text-gray-400 hover:text-white transition-colors">Privacy Policy</Link>
+                                    <span className="text-gray-600 text-xs">·</span>
+                                    <Link to="/legal#shipping" className="text-xs text-gray-400 hover:text-white transition-colors">Shipping Policy</Link>
+                                    <span className="text-gray-600 text-xs">·</span>
+                                    <Link to="/legal#refunds" className="text-xs text-gray-400 hover:text-white transition-colors">Cancellations &amp; Refunds</Link>
+                                    <span className="text-gray-600 text-xs">·</span>
+                                    <Link to="/legal#contact" className="text-xs text-gray-400 hover:text-white transition-colors">Contact Us</Link>
+                                </div>
+                                <p className="text-xs text-gray-600 mt-2">© 2026 NEYOKART. All rights reserved.</p>
+                            </div>
                         </div>
                     </div>
                 )}
