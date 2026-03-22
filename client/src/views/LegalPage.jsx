@@ -111,10 +111,10 @@ const sections = [
       },
     ],
     contact: {
-      email: 'support@neyokart.com',
-      phone: '+91-XXXXXXXXXX',
-      address: ['NEYOKART', '[Your full street address]', 'Bangalore, Karnataka, [Your Pincode]', 'India'],
-      hours: 'Monday to Sunday, 9:00 AM – 9:00 PM',
+      email: 'neyokart@gmail.com',
+      phone: '+91-8378842740  +91-8808660084. +91-9651339273',
+      address: ['NEYOKART', '[O, RAMCHANDIPUR, OLD SHIV MANDIR, RAMCHANDIPUR, JALHUPUR]', 'Varanasi, Uttar Pradesh, 221104', 'India'],
+      hours: 'Monday to Sunday, 8:00 AM – 6:00 PM',
     },
   },
 ];
