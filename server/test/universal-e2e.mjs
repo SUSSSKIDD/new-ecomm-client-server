@@ -74,23 +74,17 @@ function authWithIdempotency(token, key) {
 
 async function step(name, fn) {
   totalTests++;
-  const t0 = performance.now();
   try {
     await fn();
-    const ms = Math.round(performance.now() - t0);
-    results.push({ name, status: 'PASS', ms });
+    results.push({ name, status: 'PASS' });
     passedTests++;
-    const slow = ms > 500 ? ' ⚠️  SLOW' : '';
-    console.log(`  ✅ ${name} (${ms}ms)${slow}`);
-    return ms;
+    console.log(`  ✅ ${name}`);
   } catch (e) {
-    const ms = Math.round(performance.now() - t0);
     const msg = e.response?.data?.message || e.message;
-    results.push({ name, status: 'FAIL', ms, error: msg });
+    results.push({ name, status: 'FAIL', error: msg });
     failedTests++;
-    console.log(`  ❌ ${name} (${ms}ms) — ${msg}`);
-    issues.push({ test: name, error: msg, ms });
-    return ms;
+    console.log(`  ❌ ${name} — ${msg}`);
+    issues.push({ test: name, error: msg });
   }
 }
 
@@ -420,7 +414,7 @@ for (const storeType of STORE_TYPES) {
       { status: 'PROCESSING' }, auth(s.managerToken));
     if (processingRes.status === 200) {
       console.log(`  ✅ [${storeType}] Admin → PROCESSING (optional)`);
-      results.push({ name: `[${storeType}] Admin → PROCESSING`, status: 'PASS', ms: 0 });
+      results.push({ name: `[${storeType}] Admin → PROCESSING`, status: 'PASS' });
       totalTests++; passedTests++;
     } else {
       console.log(`  ⚠️  [${storeType}] PROCESSING transition not available — skipping`);
@@ -1535,13 +1529,12 @@ console.log(`  Failed:     ${failedTests}`);
 console.log('─'.repeat(80));
 
 // Test results table
-console.log(`\n  ${'Test'.padEnd(55)} ${'Status'.padEnd(8)} ${'Time'.padStart(8)}`);
-console.log(`  ${'─'.repeat(55)} ${'─'.repeat(8)} ${'─'.repeat(8)}`);
+console.log(`\n  ${'Test'.padEnd(65)} ${'Status'.padEnd(8)}`);
+console.log(`  ${'─'.repeat(65)} ${'─'.repeat(8)}`);
 
 for (const r of results) {
   const icon = r.status === 'PASS' ? '✅' : '❌';
-  const flag = r.ms > 500 ? ' ⚠️' : '';
-  console.log(`  ${icon} ${r.name.padEnd(53)} ${r.status.padEnd(8)} ${String(r.ms + 'ms').padStart(7)}${flag}`);
+  console.log(`  ${icon} ${r.name.padEnd(63)} ${r.status.padEnd(8)}`);
 }
 
 // Issues found
@@ -1551,17 +1544,6 @@ if (issues.length > 0) {
   console.log('─'.repeat(80));
   for (let i = 0; i < issues.length; i++) {
     console.log(`  ${i + 1}. [${issues[i].test}] ${issues[i].error}`);
-  }
-}
-
-// Slow steps
-const slowSteps = results.filter(r => r.ms > 500);
-if (slowSteps.length > 0) {
-  console.log(`\n${'═'.repeat(80)}`);
-  console.log('  SLOW STEPS (>500ms)');
-  console.log('─'.repeat(80));
-  for (const s of slowSteps.sort((a, b) => b.ms - a.ms)) {
-    console.log(`  • ${s.name}: ${s.ms}ms`);
   }
 }
 
