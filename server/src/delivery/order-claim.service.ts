@@ -21,7 +21,7 @@ export interface ClaimResult {
 interface ClaimConfig {
   entityId: string;
   entityLabel: string;
-  validStatus: string;
+  validStatuses: string[];
   findEntity: (tx: any) => Promise<{ id: string; number: string; status: string } | null>;
   findExistingAssignment: (tx: any) => Promise<unknown | null>;
   createAssignment: (tx: any, riderId: string) => Promise<void>;
@@ -67,7 +67,7 @@ export class OrderClaimService {
       const result = await this.prisma.$transaction(async (tx) => {
         const entity = await config.findEntity(tx);
         if (!entity) throw new NotFoundException(`${entityLabel} not found`);
-        if (entity.status !== config.validStatus) {
+        if (!config.validStatuses.includes(entity.status)) {
           throw new ConflictException(`${entityLabel} is no longer available for claiming`);
         }
 
@@ -129,7 +129,7 @@ export class OrderClaimService {
     return this.genericClaim(riderId, {
       entityId: orderId,
       entityLabel: 'Order',
-      validStatus: 'ORDER_PICKED',
+      validStatuses: ['CONFIRMED', 'PROCESSING', 'ORDER_PICKED'],
       findEntity: async (tx) => {
         const order = await tx.order.findUnique({
           where: { id: orderId },
@@ -156,7 +156,7 @@ export class OrderClaimService {
     return this.genericClaim(riderId, {
       entityId: parcelOrderId,
       entityLabel: 'Parcel',
-      validStatus: 'READY_FOR_PICKUP',
+      validStatuses: ['READY_FOR_PICKUP'],
       findEntity: async (tx) => {
         const parcel = await tx.parcelOrder.findUnique({
           where: { id: parcelOrderId },

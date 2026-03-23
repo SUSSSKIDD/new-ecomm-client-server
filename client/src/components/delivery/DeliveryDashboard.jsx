@@ -260,7 +260,7 @@ const DeliveryDashboard = () => {
             // CLAIM_CONFIRMED SSE event will refresh assigned orders
         } catch (err) {
             if (err.response?.status === 409) {
-                showToast('Already claimed by another rider');
+                showToast(err.response?.data?.message || 'Already claimed by another rider');
             } else {
                 console.error('Accept failed:', err);
                 showToast('Failed to accept');
