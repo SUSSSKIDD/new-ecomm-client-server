@@ -31,4 +31,4 @@ function toRad(deg: number): number {
 }
 
 /** Default maximum delivery radius in kilometres (overridable via MAX_DELIVERY_RADIUS_KM env var) */
-export const DEFAULT_MAX_DELIVERY_RADIUS_KM = 9;
+export const DEFAULT_MAX_DELIVERY_RADIUS_KM = 10;

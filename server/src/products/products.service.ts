@@ -147,7 +147,7 @@ export class ProductsService {
     let storeIds: string[] = [];
     if (lat !== undefined && lng !== undefined) {
       const nearbyStores = await this.storesService.findNearbyStores(lat, lng);
-      storeIds = nearbyStores.filter(s => s.distance <= 9).map(s => s.id).sort();
+      storeIds = nearbyStores.filter(s => s.distance <= 10).map(s => s.id).sort();
       
       if (storeIds.length === 0) {
         return paginate([], 0, page, limit);
@@ -213,7 +213,7 @@ export class ProductsService {
     let storeIds: string[] = [];
     if (lat !== undefined && lng !== undefined) {
       const nearbyStores = await this.storesService.findNearbyStores(lat, lng);
-      storeIds = nearbyStores.filter(s => s.distance <= 9).map(s => s.id);
+      storeIds = nearbyStores.filter(s => s.distance <= 10).map(s => s.id);
     }
 
     const product = await this.prisma.product.findUnique({

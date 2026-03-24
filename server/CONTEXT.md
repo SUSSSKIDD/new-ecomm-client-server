@@ -191,7 +191,7 @@ new grocery/
         │   │   ├── redis-cache.service.ts       # get/set/del/delPattern
         │   │   └── supabase-storage.service.ts  # upload/delete images to Supabase Storage
         │   └── utils/
-        │       └── geo.util.ts                  # Haversine distance, MAX_DELIVERY_RADIUS_KM = 9
+        │       └── geo.util.ts                  # Haversine distance, MAX_DELIVERY_RADIUS_KM = 10
         ├── prisma.service.ts, prisma.module.ts
         ├── app.module.ts, main.ts
         └── prisma/schema.prisma
@@ -253,8 +253,8 @@ new grocery/
 - `DELETE /users/addresses/:id` — Delete address
 
 ### Products (Public)
-- `GET /products` — List/search products (query params: category, subCategory, search, page, limit, lat, lng). **Note:** Only returns products available in stores strictly within a 9km radius of provided lat/lng.
-- `GET /products/:id` — Product detail (query params: lat, lng). Appends exact local store inventory sum based on the 9km radius.
+- `GET /products` — List/search products (query params: category, subCategory, search, page, limit, lat, lng). **Note:** Only returns products available in stores strictly within a 10km radius of provided lat/lng.
+- `GET /products/:id` — Product detail (query params: lat, lng). Appends exact local store inventory sum based on the 10km radius.
 
 ### Products — Admin (JWT + ADMIN/STORE_MANAGER)
 - `POST /products` — Create product with image uploads (`multipart/form-data`, max 3 images)
@@ -560,7 +560,7 @@ CANCELLED  CANCELLED     CANCELLED       CANCELLED   CANCELLED   CANCELLED
 | `SUPABASE_URL` | — | Supabase project URL (empty = image uploads disabled) |
 | `SUPABASE_SERVICE_ROLE_KEY` | — | Supabase service role key for storage access |
 | `ORDER_CLAIM_TIMEOUT_SECONDS` | 120 | Unclaimed order pool timeout before retry/re-broadcast |
-| `MAX_DELIVERY_RADIUS_KM` | 9 | Maximum delivery radius in km (configurable) |
+| `MAX_DELIVERY_RADIUS_KM` | 10 | Maximum delivery radius in km (configurable) |
 
 ## Client-Side Constants (CartSidebar.jsx)
 
