@@ -7,7 +7,7 @@ import { api } from '../../lib/api';
 import AddressForm from './profile/AddressForm';
 import { useAddresses } from '../../hooks/useAddresses';
 import { loadRazorpayScript } from '../../lib/utils';
-const DELIVERY_FEE = 40;
+const DELIVERY_FEE = 30; // Updated from 40
 const FREE_DELIVERY_THRESHOLD = 500;
 
 const parsePrice = (price) => {

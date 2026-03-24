@@ -551,7 +551,7 @@ CANCELLED  CANCELLED     CANCELLED       CANCELLED   CANCELLED   CANCELLED
 | `PORT` | 3000 | Server port |
 | `SUPER_ADMIN_PHONE` | — | Super admin phone number (e.g. `+919999999999`) |
 | `SUPER_ADMIN_PIN` | — | Super admin 4-digit PIN (hashed at startup with bcrypt) |
-| `DELIVERY_FEE` | 40 | Delivery fee in INR |
+| `DELIVERY_FEE` | 30 | Delivery fee in INR (waived for first-time orders) |
 | `TAX_RATE` | *(removed)* | Replaced by per-item `taxRate` on Product model (GST %) |
 | `FREE_DELIVERY_THRESHOLD` | 500 | Free delivery above this subtotal |
 | `RAZORPAY_KEY_ID` | (empty) | Empty = mock mode, `rzp_test_*` = test mode |
@@ -565,7 +565,7 @@ CANCELLED  CANCELLED     CANCELLED       CANCELLED   CANCELLED   CANCELLED
 ## Client-Side Constants (CartSidebar.jsx)
 
 Client-side constants used for display estimates (final totals always come from server preview):
-- `DELIVERY_FEE = 40`
+- `DELIVERY_FEE = 30` (Waived for first-time orders)
 - `FREE_DELIVERY_THRESHOLD = 500`
 - `TAX_RATE = 0.05` (legacy estimate only — server uses per-item `taxRate` from Product)
 
