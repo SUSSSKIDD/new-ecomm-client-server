@@ -253,8 +253,8 @@ new grocery/
 - `DELETE /users/addresses/:id` — Delete address
 
 ### Products (Public)
-- `GET /products` — List/search products (query params: category, subCategory, search, page, limit)
-- `GET /products/:id` — Product detail
+- `GET /products` — List/search products (query params: category, subCategory, search, page, limit, lat, lng). **Note:** Only returns products available in stores strictly within a 9km radius of provided lat/lng.
+- `GET /products/:id` — Product detail (query params: lat, lng). Appends exact local store inventory sum based on the 9km radius.
 
 ### Products — Admin (JWT + ADMIN/STORE_MANAGER)
 - `POST /products` — Create product with image uploads (`multipart/form-data`, max 3 images)

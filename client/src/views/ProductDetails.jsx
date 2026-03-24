@@ -2,6 +2,7 @@ import { RippleButton } from '../components/ui/ripple-button';
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import { useLocation } from '../context/LocationContext';
 import Header from '../components/united/Header';
 import ImageCarousel from '../components/united/ImageCarousel';
 import { useCategory } from '../context/CategoryContext';
@@ -12,6 +13,7 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 const ProductDetails = () => {
     const { id } = useParams();
     const navigate = useNavigate();
+    const { location } = useLocation();
     const { addToCart, setIsCartOpen } = useCategory();
     const { token } = useAuth();
     const [product, setProduct] = useState(null);
@@ -42,7 +44,12 @@ const ProductDetails = () => {
     useEffect(() => {
         const fetchProduct = async () => {
             try {
-                const response = await axios.get(`${API_URL}/products/${id}`);
+                const response = await axios.get(`${API_URL}/products/${id}`, {
+                    params: {
+                        lat: location?.lat,
+                        lng: location?.lng
+                    }
+                });
                 setProduct(response.data);
 
                 // Check category config for upload type
@@ -80,7 +87,7 @@ const ProductDetails = () => {
         if (id) {
             fetchProduct();
         }
-    }, [id]);
+    }, [id, location?.lat, location?.lng]);
 
     const handleBack = () => {
         navigate(-1);

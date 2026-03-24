@@ -240,6 +240,26 @@ for (const storeType of STORE_TYPES) {
 }
 
 // ══════════════════════════════════════════════════════════════════════
+//  Phase 4.1: Public Product Geolocation Verification
+// ══════════════════════════════════════════════════════════════════════
+
+console.log('\n🔷 Phase 4.1: Public Product Geolocation Verification');
+
+await step('Products visible within 9km radius', async () => {
+  const r = await api.get(`/products?lat=12.9720&lng=77.5950`);
+  assert(r.status === 200, `${r.status}`);
+  const list = r.data.data;
+  assert(list.length > 0, 'Expected products to be populated near stores');
+});
+
+await step('Products hidden outside 9km radius', async () => {
+  const r = await api.get(`/products?lat=13.5000&lng=78.5000`);
+  assert(r.status === 200, `${r.status}`);
+  const list = r.data.data;
+  assert(list.length === 0, `Expected 0 products far away, got ${list.length}`);
+});
+
+// ══════════════════════════════════════════════════════════════════════
 //  Phase 5: User Registration & Address
 // ══════════════════════════════════════════════════════════════════════
 

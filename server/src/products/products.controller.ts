@@ -69,8 +69,16 @@ export class ProductsController {
   @Get(':id')
   @ApiOperation({ summary: 'Get product by ID' })
   @ApiResponse({ status: 404, description: 'Product not found' })
-  findOne(@Param('id', ParseUUIDPipe) id: string) {
-    return this.productsService.findOne(id);
+  findOne(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Query('lat') lat?: string,
+    @Query('lng') lng?: string
+  ) {
+    return this.productsService.findOne(
+      id,
+      lat ? parseFloat(lat) : undefined,
+      lng ? parseFloat(lng) : undefined
+    );
   }
 
   @Get('admin/my-store')

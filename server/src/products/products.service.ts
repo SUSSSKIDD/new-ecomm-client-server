@@ -13,7 +13,7 @@ import { ProductQueryDto } from './dto/product-query.dto';
 import { Prisma } from '@prisma/client';
 import { StoreCategoryType, STORE_CATEGORY_LABELS } from '../common/constants/store-categories';
 import { SubcategoryService } from '../stores/subcategory.service';
-
+import { StoresService } from '../stores/stores.service';
 import { RedisCacheService } from '../common/services/redis-cache.service';
 import { paginate } from '../common/utils/pagination.util';
 import { TTL } from '../common/redis/ttl.config.js';
@@ -28,6 +28,7 @@ export class ProductsService {
     private readonly storage: SupabaseStorageService,
     private readonly cache: RedisCacheService,
     private readonly subcategoryService: SubcategoryService,
+    private readonly storesService: StoresService,
   ) { }
 
   /**
@@ -117,17 +118,21 @@ export class ProductsService {
       subCategory,
       sortBy = 'createdAt',
       sortOrder = 'desc',
+      lat,
+      lng,
     } = query;
     const skip = (page - 1) * limit;
 
     const where: Prisma.ProductWhereInput = {};
 
     if (search) {
-      where.OR = [
-        { name: { contains: search, mode: 'insensitive' } },
-        { description: { contains: search, mode: 'insensitive' } },
-        { category: { contains: search, mode: 'insensitive' } },
-      ];
+      where.AND = [{
+        OR: [
+          { name: { contains: search, mode: 'insensitive' } },
+          { description: { contains: search, mode: 'insensitive' } },
+          { category: { contains: search, mode: 'insensitive' } },
+        ]
+      }];
     }
 
     if (category) {
@@ -138,8 +143,33 @@ export class ProductsService {
       where.subCategory = { equals: subCategory, mode: 'insensitive' };
     }
 
+    let storeIdsHash = '';
+    let storeIds: string[] = [];
+    if (lat !== undefined && lng !== undefined) {
+      const nearbyStores = await this.storesService.findNearbyStores(lat, lng);
+      storeIds = nearbyStores.filter(s => s.distance <= 9).map(s => s.id).sort();
+      
+      if (storeIds.length === 0) {
+        return paginate([], 0, page, limit);
+      }
+      storeIdsHash = storeIds.join(',');
+
+      const geoCondition = {
+        OR: [
+          { storeId: { in: storeIds } },
+          { storeInventory: { some: { storeId: { in: storeIds } } } }
+        ]
+      };
+
+      if (where.AND) {
+        (where.AND as object[]).push(geoCondition);
+      } else {
+        where.AND = [geoCondition];
+      }
+    }
+
     const ver = await this.cache.getVersion('products');
-    const cacheKey = `products:v${ver}:q:${search ?? ''}|${category ?? ''}|${subCategory ?? ''}|${sortBy}|${sortOrder}|${page}|${limit}`;
+    const cacheKey = `products:v${ver}:q:${search ?? ''}|${category ?? ''}|${subCategory ?? ''}|${storeIdsHash}|${sortBy}|${sortOrder}|${page}|${limit}`;
     const cached = await this.cache.get(cacheKey);
     if (cached) return cached;
 
@@ -149,11 +179,29 @@ export class ProductsService {
         take: Number(limit),
         where,
         orderBy: { [sortBy]: sortOrder },
+        include: storeIds.length > 0 ? {
+          storeInventory: {
+            where: { storeId: { in: storeIds } },
+            select: { stock: true }
+          }
+        } : undefined,
       }),
       this.prisma.product.count({ where }),
     ]);
 
-    const result = paginate(products, total, page, limit);
+    const processedProducts = products.map((p: any) => {
+      if (p.storeInventory !== undefined) {
+        const localStock = p.storeInventory && p.storeInventory.length > 0 
+           ? p.storeInventory.reduce((acc: number, inv: any) => acc + inv.stock, 0)
+           : p.stock;
+        
+        const { storeInventory, ...rest } = p;
+        return { ...rest, stock: localStock };
+      }
+      return p;
+    });
+
+    const result = paginate(processedProducts, total, page, limit);
     await this.cache.set(cacheKey, result, TTL.PRODUCT_LIST);
     return result;
   }
@@ -161,11 +209,35 @@ export class ProductsService {
   /**
    * Get a single product by ID.
    */
-  async findOne(id: string) {
-    const product = await this.prisma.product.findUnique({ where: { id } });
+  async findOne(id: string, lat?: number, lng?: number) {
+    let storeIds: string[] = [];
+    if (lat !== undefined && lng !== undefined) {
+      const nearbyStores = await this.storesService.findNearbyStores(lat, lng);
+      storeIds = nearbyStores.filter(s => s.distance <= 9).map(s => s.id);
+    }
+
+    const product = await this.prisma.product.findUnique({
+      where: { id },
+      include: storeIds.length > 0 ? {
+        storeInventory: {
+          where: { storeId: { in: storeIds } },
+          select: { stock: true }
+        }
+      } : undefined,
+    });
+
     if (!product) {
       throw new NotFoundException(`Product ${id} not found`);
     }
+
+    if (storeIds.length > 0 && (product as any).storeInventory !== undefined) {
+      const localStock = (product as any).storeInventory && (product as any).storeInventory.length > 0
+        ? (product as any).storeInventory.reduce((acc: number, inv: any) => acc + inv.stock, 0)
+        : product.stock;
+      const { storeInventory, ...rest } = product as any;
+      return { ...rest, stock: localStock };
+    }
+
     return product;
   }
 

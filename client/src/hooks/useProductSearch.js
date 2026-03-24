@@ -1,10 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import { useDebounce } from './useDebounce';
+import { useLocation } from '../context/LocationContext';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
 export const useProductSearch = (initialQuery = '') => {
+    const { location } = useLocation();
     const [query, setQuery] = useState(initialQuery);
     const [results, setResults] = useState([]);
     const [loading, setLoading] = useState(false);
@@ -43,7 +45,9 @@ export const useProductSearch = (initialQuery = '') => {
                     params: {
                         search: debouncedQuery,
                         page: 1, // Reset to page 1 for new search
-                        limit: 5 // Limit suggestions
+                        limit: 5, // Limit suggestions
+                        lat: location?.lat,
+                        lng: location?.lng
                     },
                     signal: controller.signal
                 });
@@ -69,7 +73,7 @@ export const useProductSearch = (initialQuery = '') => {
                 abortControllerRef.current.abort();
             }
         };
-    }, [debouncedQuery]);
+    }, [debouncedQuery, location]);
 
     const loadMore = async () => {
         if (!hasMore || loading) return;
@@ -81,7 +85,9 @@ export const useProductSearch = (initialQuery = '') => {
                 params: {
                     search: debouncedQuery,
                     page: nextPage,
-                    limit: 5
+                    limit: 5,
+                    lat: location?.lat,
+                    lng: location?.lng
                 }
             });
 
