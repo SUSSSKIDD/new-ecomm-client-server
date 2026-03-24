@@ -259,6 +259,7 @@ export class OrderPoolService {
       })),
       deliveryAddress: order.deliveryAddress,
       storeName: store.name,
+      storeAddress: store.address ?? store.name,
       storeLat: store.lat,
       storeLng: store.lng,
       createdAt: order.createdAt,

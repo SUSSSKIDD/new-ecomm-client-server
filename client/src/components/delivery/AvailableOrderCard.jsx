@@ -36,6 +36,27 @@ const AvailableOrderCard = memo(({ order, onAccept, onReject }) => {
         }
     };
 
+    const MapsPin = () => (
+        <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
+        </svg>
+    );
+
+    const MapsLink = ({ lat, lng, color }) => {
+        if (!lat || !lng) return null;
+        return (
+            <a
+                href={`https://www.google.com/maps/search/?api=1&query=${lat},${lng}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={`inline-flex items-center gap-1 mt-1.5 text-xs font-semibold transition-colors ${color}`}
+            >
+                <MapsPin />
+                Open in Maps
+            </a>
+        );
+    };
+
     return (
         <div
             className={`bg-white rounded-2xl shadow-lg overflow-hidden border transition-all duration-300 ${
@@ -82,12 +103,13 @@ const AvailableOrderCard = memo(({ order, onAccept, onReject }) => {
                         </div>
                     </div>
 
-                    {/* Pickup Address */}
+                    {/* Pickup Address + Maps link */}
                     <div className="px-4 py-3 border-b border-gray-100">
                         <p className="text-xs font-bold text-emerald-600 uppercase mb-1">Pickup</p>
                         <p className="text-sm text-gray-700">
                             {order.storeName || 'Pickup location'}
                         </p>
+                        <MapsLink lat={order.storeLat} lng={order.storeLng} color="text-emerald-600 hover:text-emerald-800" />
                     </div>
 
                     {/* Drop Address */}
@@ -145,12 +167,15 @@ const AvailableOrderCard = memo(({ order, onAccept, onReject }) => {
                         </div>
                     )}
 
-                    {/* Store info */}
+                    {/* Pickup Store + Maps link */}
                     {order.storeName && (
-                        <div className="px-4 py-2 border-b border-gray-100">
-                            <p className="text-xs text-gray-500">
-                                Pickup: <span className="font-medium text-gray-700">{order.storeName}</span>
-                            </p>
+                        <div className="px-4 py-3 border-b border-gray-100">
+                            <p className="text-xs font-bold text-gray-500 uppercase mb-1">Pickup Store</p>
+                            <p className="text-sm font-medium text-gray-800">{order.storeName}</p>
+                            {order.storeAddress && order.storeAddress !== order.storeName && (
+                                <p className="text-xs text-gray-500 mt-0.5">{order.storeAddress}</p>
+                            )}
+                            <MapsLink lat={order.storeLat} lng={order.storeLng} color="text-blue-600 hover:text-blue-800" />
                         </div>
                     )}
                 </>
