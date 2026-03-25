@@ -80,7 +80,7 @@ async function main() {
             key: 'otp_verification',
             content: '##OTP## is the OTP for signing into NEYOKART. Please do not share it with anyone.',
             variables: ['OTP'],
-            msg91FlowId: '69bfac455b90308046079ba4',
+            msg91FlowId: '69bfc3b8a168f7315a08f092',
             type: 'OTP',
         },
     });
