@@ -1,13 +1,12 @@
 import { PrismaClient } from '@prisma/client';
+import { Pool } from 'pg';
+import { PrismaPg } from '@prisma/adapter-pg';
 import bcrypt from 'bcryptjs';
 
-const prisma = new PrismaClient({
-    datasources: {
-        db: {
-            url: process.env.DATABASE_URL,
-        },
-    },
-});
+const connectionString = process.env.DATABASE_URL;
+const pool = new Pool({ connectionString });
+const adapter = new PrismaPg(pool);
+const prisma = new PrismaClient({ adapter });
 
 async function main() {
     console.log('Clearing existing mock data (optional)...');
@@ -16,11 +15,15 @@ async function main() {
         await prisma.smsLog.deleteMany({});
         await prisma.storeManager.deleteMany({});
         await prisma.store.deleteMany({});
-    } catch (e) { }
+        await prisma.deliveryPerson.deleteMany({});
+    } catch (e) {
+        console.warn('Could not clear some tables, likely due to foreign keys. Proceeding...');
+    }
 
     // Hardcoded PIN for managers
     const managerPinHash = await bcrypt.hash('1234', 10);
     const deliveryPin = '1234';
+    const deliveryPinHash = await bcrypt.hash('1234', 10);
 
     const storesToCreate = [
         { type: 'GROCERY', name: 'Main Grocery Store', code: 'GY-1', phone: '+919000000001', mgr: 'Grocery Manager' },
@@ -28,7 +31,6 @@ async function main() {
         { type: 'AUTO_SERVICE', name: 'Quick Auto Service', code: 'AUTO-1', phone: '+919000000003', mgr: 'Auto Manager' },
         { type: 'DROP_IN_FACTORY', name: 'City Print Factory', code: 'PF-1', phone: '+919000000004', mgr: 'Print Manager' },
         { type: 'AUTO_PARTS_SHOP', name: 'Spare Parts Hub', code: 'AUTO-2', phone: '+919000000005', mgr: 'Parts Manager' },
-        { type: 'HEALTH_SERVICE', name: 'Plus Health Clinic', code: 'HS-1', phone: '+919000000006', mgr: 'Health Manager' },
     ];
 
     console.log('Creating stores and managers...');
@@ -63,7 +65,7 @@ async function main() {
             data: {
                 name: `Delivery Guy ${i}`,
                 phone: phone,
-                pin: deliveryPin,
+                pinHash: deliveryPinHash,
                 status: 'DUTY_OFF',
                 isActive: true,
             }
@@ -88,9 +90,10 @@ async function main() {
 
 main()
     .catch((e) => {
-        console.error(e);
+        console.error('❌ Seeding failed:', e);
         process.exit(1);
     })
     .finally(async () => {
         await prisma.$disconnect();
+        await pool.end();
     });
