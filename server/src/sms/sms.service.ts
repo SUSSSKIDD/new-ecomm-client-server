@@ -25,10 +25,9 @@ export class SmsService {
 
   async sendOtp(phone: string): Promise<void> {
     if (!this.msg91.isReady()) {
-      this.logger.warn(
-        `[DEV MODE] Skipping actual SMS. Use OTP '123456' for ${phone}`,
+      throw new BadRequestException(
+        'SMS service is not properly configured. Please contact support.',
       );
-      return;
     }
 
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
@@ -63,15 +62,8 @@ export class SmsService {
   }
 
   async verifyOtp(phone: string, code: string): Promise<boolean> {
-    // ALWAYS ALLOW DEV BYPASS FOR NOW
-    if (code === '123456') {
-      this.logger.log(`[DEV MODE BYPASS] OTP verified for ${phone}`);
-      return true;
-    }
-
-    // DEV MODE (without MSG91 key and code is not 123456)
     if (!this.msg91.isReady()) {
-      return false;
+      throw new BadRequestException('SMS service is not properly configured.');
     }
 
     // LIVE — check the most recent OTP sent within the last 10 minutes
