@@ -20,7 +20,8 @@
  * Usage:  node test/universal-e2e.mjs [BASE_URL]
  * Default BASE_URL: http://localhost:3000
  *
- * Requires the server running with MSG91_AUTH_KEY="" (dev mode, OTP 123456).
+ * Requires the server running with MSG91_AUTH_KEY configured.
+ * Fetches the real OTP from the admin logs during the user registration phase.
  */
 
 import axios from 'axios';
@@ -270,8 +271,21 @@ await step('Send OTP', async () => {
   assert(r.status === 200 || r.status === 201, `${r.status}: ${r.data?.message}`);
 });
 
-await step('Verify OTP (dev mode 123456)', async () => {
-  const r = await api.post('/auth/verify-otp', { phone: USER_PHONE, otp: '123456' });
+let fetchedOtp;
+await step('Fetch OTP from logs (Admin)', async () => {
+  // Give it a tiny moment to ensure log is written
+  await new Promise(r => setTimeout(r, 1000));
+  const r = await api.get(`/sms/logs?recipientPhone=${encodeURIComponent(USER_PHONE)}`, auth(adminToken));
+  assert(r.status === 200, `${r.status}`);
+  const log = r.data.data?.[0];
+  assert(log, 'No SMS log found for user');
+  fetchedOtp = log.variables?.OTP;
+  assert(fetchedOtp, 'OTP not found in log variables');
+  console.log(`    Fetched OTP: ${fetchedOtp}`);
+});
+
+await step('Verify real OTP', async () => {
+  const r = await api.post('/auth/verify-otp', { phone: USER_PHONE, otp: fetchedOtp });
   assert(r.status === 200 || r.status === 201, `${r.status}: ${r.data?.message}`);
   userToken = r.data.access_token;
   userId = r.data.user?.id;
