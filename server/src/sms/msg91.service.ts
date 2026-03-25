@@ -46,6 +46,11 @@ export class Msg91Service {
       return { success: true, requestId: `dev_${Date.now()}` };
     }
 
+    if (this.authKey === 'mock_key') {
+      this.logger.log('🎭 [MOCK MODE] Skipping MSG91 API call. Success returned.');
+      return { success: true, requestId: `mock_${Date.now()}` };
+    }
+
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 5000);
 

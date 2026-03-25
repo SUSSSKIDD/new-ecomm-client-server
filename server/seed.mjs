@@ -1,10 +1,22 @@
 import { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcryptjs';
 
-const prisma = new PrismaClient();
+const prisma = new PrismaClient({
+    datasources: {
+        db: {
+            url: process.env.DATABASE_URL,
+        },
+    },
+});
 
 async function main() {
     console.log('Clearing existing mock data (optional)...');
+    try {
+        await prisma.smsTemplate.deleteMany({});
+        await prisma.smsLog.deleteMany({});
+        await prisma.storeManager.deleteMany({});
+        await prisma.store.deleteMany({});
+    } catch (e) { }
 
     // Hardcoded PIN for managers
     const managerPinHash = await bcrypt.hash('1234', 10);
@@ -58,6 +70,18 @@ async function main() {
         });
         console.log(`Created Delivery Person [${phone}]`);
     }
+
+    console.log('Creating SMS templates...');
+    await prisma.smsTemplate.create({
+        data: {
+            name: 'OTP Verification',
+            key: 'otp_verification',
+            content: '##OTP## is the OTP for signing into NEYOKART. Please do not share it with anyone.',
+            variables: ['OTP'],
+            msg91FlowId: '69bfac455b90308046079ba4',
+            type: 'OTP',
+        },
+    });
 
     console.log('Seeding complete!');
 }
