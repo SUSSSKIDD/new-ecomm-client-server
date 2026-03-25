@@ -77,6 +77,11 @@ echo "[5/6] Stopping old $ACTIVE_COLOR containers..."
 docker compose -f $DOCKER_COMPOSE_FILE stop server-$ACTIVE_COLOR client-$ACTIVE_COLOR
 docker compose -f $DOCKER_COMPOSE_FILE rm -f server-$ACTIVE_COLOR client-$ACTIVE_COLOR
 
+# 6. Cleanup old dangling images specifically for this project's server and client
+echo "[6/6] Cleaning up old neyokart server and client images..."
+# Explicitly finds dangling images with neyokart-server/client in their repo name and removes them
+docker images -f "dangling=true" --format '{{.Repository}} {{.ID}}' | grep -E "neyokart-server|neyokart-client" | awk '{print $2}' | xargs -r docker rmi
+
 # Update the state file
 echo "$NEW_COLOR" > "$STATE_FILE"
 
