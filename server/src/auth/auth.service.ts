@@ -45,8 +45,9 @@ export class AuthService {
       await this.smsService.sendOtp(dto.phone);
       return { message: 'OTP sent successfully' };
     } catch (error) {
+      this.logger.error(`OTP Sending failed: ${error.message}`, error.stack);
       throw new BadRequestException(
-        'Failed to send OTP. Please try again later.',
+        error.message || 'Failed to send OTP. Please try again later.',
       );
     }
   }
