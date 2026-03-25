@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../../../context/AuthContext';
-import { api } from '../../../lib/api';
+import { api, API_URL } from '../../../lib/api';
 import { getParcelStatusLabel, getParcelStatusColor } from '../../../lib/status';
 import { PARCEL_CATEGORIES } from '../../../constants';
 
@@ -11,7 +11,7 @@ const ParcelOrderList = () => {
     const [cancellingId, setCancellingId] = useState(null);
     const [cancelError, setCancelError] = useState('');
 
-    const fetchParcels = async () => {
+    const fetchParcels = useCallback(async () => {
         try {
             const res = await api(token).get('/parcels?limit=20');
             setParcels(res.data.data || []);
@@ -20,9 +20,48 @@ const ParcelOrderList = () => {
         } finally {
             setLoading(false);
         }
-    };
+    }, [token]);
 
-    useEffect(() => { fetchParcels(); }, [token]);
+    useEffect(() => { fetchParcels(); }, [fetchParcels]);
+
+    // Real-time SSE updates for parcels
+    const reconnectTimeout = useRef(null);
+    useEffect(() => {
+        if (!token) return;
+
+        let eventSource;
+        const connect = () => {
+            const url = new URL(`${API_URL}/orders/sse`);
+            url.searchParams.append('token', token);
+            
+            eventSource = new EventSource(url.toString());
+
+            eventSource.onmessage = (event) => {
+                try {
+                    const { type, data } = JSON.parse(event.data);
+                    if (type === 'PARCEL_STATUS_UPDATED') {
+                        setParcels((prev) => prev.map((p) => 
+                            p.id === data.parcelId ? { ...p, status: data.status } : p
+                        ));
+                    }
+                } catch (err) {
+                    console.error('SSE parse error:', err);
+                }
+            };
+
+            eventSource.onerror = () => {
+                eventSource.close();
+                reconnectTimeout.current = setTimeout(connect, 5000);
+            };
+        };
+
+        connect();
+
+        return () => {
+            if (eventSource) eventSource.close();
+            if (reconnectTimeout.current) clearTimeout(reconnectTimeout.current);
+        };
+    }, [token]);
 
     const handleCancel = async (id) => {
         if (!confirm('Cancel this parcel booking?')) return;
@@ -85,6 +124,23 @@ const ParcelOrderList = () => {
                                 {getParcelStatusLabel(parcel.status)}
                             </span>
                         </div>
+
+                        {/* Delivery PIN — visible only for active parcels */}
+                        {parcel.deliveryPin && parcel.status !== 'DELIVERED' && parcel.status !== 'CANCELLED' && (
+                            <div className="bg-purple-50 border border-purple-100 rounded-lg p-2.5 flex items-center justify-between">
+                                <div>
+                                    <p className="text-[10px] font-bold text-purple-600 uppercase tracking-widest leading-none">Security PIN</p>
+                                    <p className="text-[10px] text-purple-500 mt-1">Share with the delivery agent only at drop-off</p>
+                                </div>
+                                <div className="flex gap-1">
+                                    {parcel.deliveryPin.split('').map((digit, i) => (
+                                        <span key={i} className="w-7 h-8 bg-white border border-purple-200 rounded flex items-center justify-center text-base font-black text-purple-700 shadow-sm">
+                                            {digit}
+                                        </span>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
 
                         {/* Route summary */}
                         <div className="flex items-start gap-3">

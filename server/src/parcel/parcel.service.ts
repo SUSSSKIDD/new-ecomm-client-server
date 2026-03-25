@@ -7,13 +7,15 @@ import {
 import { PrismaService } from '../prisma.service';
 import { AutoAssignService } from '../delivery/auto-assign.service';
 import { OrderPoolService } from '../delivery/order-pool.service';
-import { DeliverySseService } from '../delivery/delivery-sse.service';
+import { DeliverySseService } from '../sse/delivery-sse.service';
 import { paginate } from '../common/utils/pagination.util';
 import { CreateParcelOrderDto } from './dto/create-parcel-order.dto';
 import { ApproveParcelDto } from './dto/approve-parcel.dto';
 import { UpdateParcelStatusDto } from './dto/update-parcel-status.dto';
 import { ParcelQueryDto } from './dto/parcel-query.dto';
+import { UserSseService } from '../sse/user-sse.service';
 import { ParcelStatus, ParcelCategory, Prisma } from '@prisma/client';
+
 import { randomBytes } from 'crypto';
 
 @Injectable()
@@ -25,13 +27,19 @@ export class ParcelService {
         private readonly autoAssignService: AutoAssignService,
         private readonly orderPoolService: OrderPoolService,
         private readonly sseService: DeliverySseService,
+        private readonly userSseService: UserSseService,
     ) { }
+
 
     private generateParcelNumber(): string {
         const now = new Date();
         const datePart = now.toISOString().slice(0, 10).replace(/-/g, '');
         const randomPart = randomBytes(4).toString('hex').toUpperCase().slice(0, 6);
         return `PD-${datePart}-${randomPart}`;
+    }
+
+    private generateDeliveryPin(): string {
+        return Math.floor(1000 + Math.random() * 9000).toString();
     }
 
     // ── Customer Methods ──────────────────────────────────────────────
@@ -55,11 +63,13 @@ export class ParcelService {
         }
 
         const parcelNumber = this.generateParcelNumber();
+        const deliveryPin = this.generateDeliveryPin();
 
         const parcel = await this.prisma.parcelOrder.create({
             data: {
                 userId,
                 parcelNumber,
+                deliveryPin,
                 status: ParcelStatus.PENDING,
                 pickupAddress: dto.pickupAddress as any,
                 pickupLat: dto.pickupAddress.lat,
@@ -75,7 +85,7 @@ export class ParcelService {
                 height: dto.height,
                 pickupTime,
                 dropTime,
-            },
+            } as any,
         });
 
         this.logger.log(`Parcel created: ${parcel.parcelNumber}`);
@@ -279,10 +289,18 @@ export class ParcelService {
             return this.cancelParcel(id, parcel);
         }
 
-        return this.prisma.parcelOrder.update({
+        const updated = await this.prisma.parcelOrder.update({
             where: { id },
             data: { status: dto.status },
         });
+
+        // Notify user via SSE
+        this.userSseService.notify(parcel.userId, {
+            type: 'PARCEL_STATUS_UPDATED',
+            data: { parcelId: id, status: dto.status, parcelNumber: parcel.parcelNumber },
+        });
+
+        return updated;
     }
 
     /** Handle all cancellation side-effects in one place. */

@@ -67,7 +67,7 @@ const sections = [
       },
       {
         heading: 'Delivery Charges',
-        body: 'A flat delivery charge of ₹40 applies to standard orders. Enjoy Free Delivery on all orders with a total value of ₹500 or more.',
+        body: 'A flat delivery charge of ₹30 applies to standard orders. Enjoy Free Delivery on 1st order and all orders with a total value of ₹500 or more.',
       },
       {
         heading: 'Delivery Timeframes',
@@ -114,7 +114,7 @@ const sections = [
       email: 'neyokart@gmail.com',
       phone: '+91-8378842740  +91-8808660084. +91-9651339273',
       address: ['NEYOKART', '[O, RAMCHANDIPUR, OLD SHIV MANDIR, RAMCHANDIPUR, JALHUPUR]', 'Varanasi, Uttar Pradesh, 221104', 'India'],
-      hours: 'Monday to Sunday, 8:00 AM – 6:00 PM',
+      hours: 'Monday to Sunday, 8:00 AM – 11:00 PM',
     },
   },
 ];

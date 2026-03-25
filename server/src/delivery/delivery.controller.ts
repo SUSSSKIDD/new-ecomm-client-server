@@ -19,7 +19,7 @@ import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { Request } from 'express';
 import { Observable } from 'rxjs';
 import { DeliveryService } from './delivery.service';
-import { DeliverySseService } from './delivery-sse.service';
+import { DeliverySseService } from '../sse/delivery-sse.service';
 import { AutoAssignService } from './auto-assign.service';
 import { OrderClaimService } from './order-claim.service';
 import { OrderPoolService } from './order-pool.service';
@@ -240,6 +240,7 @@ export class DeliveryController {
       req.user.sub,
       id,
       dto.result,
+      dto.deliveryPin,
       dto.reason,
     );
 
@@ -305,6 +306,7 @@ export class DeliveryController {
       req.user.sub,
       id,
       dto.result,
+      dto.deliveryPin,
       dto.reason,
     );
 

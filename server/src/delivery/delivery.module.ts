@@ -7,7 +7,6 @@ import { DeliveryController } from './delivery.controller';
 import { DeliveryAuthController } from './delivery-auth.controller';
 import { DeliveryService } from './delivery.service';
 import { DeliveryAuthService } from './delivery-auth.service';
-import { DeliverySseService } from './delivery-sse.service';
 import { AutoAssignService } from './auto-assign.service';
 import { RiderRedisService } from './rider-redis.service';
 import { OrderPoolService } from './order-pool.service';
@@ -32,13 +31,12 @@ import { ClaimTimeoutProcessor } from './processors/claim-timeout.processor';
   providers: [
     DeliveryService,
     DeliveryAuthService,
-    DeliverySseService,
     AutoAssignService,
     RiderRedisService,
     OrderPoolService,
     OrderClaimService,
     ClaimTimeoutProcessor,
   ],
-  exports: [AutoAssignService, DeliverySseService, OrderPoolService],
+  exports: [AutoAssignService, OrderPoolService],
 })
 export class DeliveryModule {}

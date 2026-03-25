@@ -14,4 +14,12 @@ export class CompleteDeliveryDto {
   @MinLength(5, { message: 'Reason must be at least 5 characters' })
   @MaxLength(500)
   reason?: string;
+
+  @ApiProperty({ description: '4-digit delivery PIN provided by the customer', required: false })
+  @ValidateIf((o) => o.result === 'DELIVERED')
+  @IsString()
+  @IsNotEmpty({ message: 'Delivery PIN is required' })
+  @MaxLength(4)
+  @MinLength(4)
+  deliveryPin?: string;
 }

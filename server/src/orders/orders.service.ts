@@ -10,6 +10,7 @@ import { PrismaService } from '../prisma.service';
 import { CartService } from '../cart/cart.service';
 import { RedisCacheService } from '../common/services/redis-cache.service';
 import { StockService } from '../common/services/stock.service';
+import { UserSseService } from '../sse/user-sse.service';
 import { paginate } from '../common/utils/pagination.util';
 import { OrderFulfillmentService, FulfillmentResult } from './order-fulfillment.service';
 import { AllocationResult } from './allocation.service';
@@ -43,6 +44,7 @@ export class OrdersService {
     private readonly autoAssignService: AutoAssignService,
     private readonly ledgerService: LedgerService,
     private readonly stockService: StockService,
+    private readonly userSseService: UserSseService,
   ) {
     this.deliveryFee = Number(this.config.get('DELIVERY_FEE', '30'));
 
@@ -90,6 +92,13 @@ export class OrdersService {
     const datePart = now.toISOString().slice(0, 10).replace(/-/g, '');
     const randomPart = randomBytes(4).toString('hex').toUpperCase().slice(0, 6);
     return `UD-${datePart}-${randomPart}`;
+  }
+
+  /**
+   * Generate a 4-digit delivery PIN (0000-9999).
+   */
+  private generateDeliveryPin(): string {
+    return Math.floor(1000 + Math.random() * 9000).toString();
   }
 
   /**
@@ -535,6 +544,7 @@ export class OrdersService {
     const total = Math.round((subtotal + deliveryFee + tax) * 100) / 100;
 
     const orderNumber = this.generateOrderNumber();
+    const deliveryPin = this.generateDeliveryPin();
 
     return this.prisma.$transaction(async (tx) => {
       await this.stockService.adjustStock(tx, orderItems, 'decrement');
@@ -543,6 +553,7 @@ export class OrdersService {
         data: {
           userId,
           orderNumber,
+          deliveryPin,
           status: orderStatus,
           paymentMethod: dto.paymentMethod,
           paymentStatus,
@@ -567,7 +578,7 @@ export class OrdersService {
               printProductId: oi.printProductId,
             })),
           },
-        },
+        } as any,
         include: { items: true },
       });
     });
@@ -627,6 +638,7 @@ export class OrdersService {
     const total = Math.round((subtotal + deliveryFee + tax) * 100) / 100;
 
     const parentOrderNumber = this.generateOrderNumber();
+    const deliveryPin = this.generateDeliveryPin();
 
     return this.prisma.$transaction(async (tx) => {
       // Batch decrement stock for ALL items across all stores
@@ -637,6 +649,7 @@ export class OrdersService {
         data: {
           userId,
           orderNumber: parentOrderNumber,
+          deliveryPin,
           status: orderStatus,
           paymentMethod: dto.paymentMethod,
           paymentStatus,
@@ -648,7 +661,7 @@ export class OrdersService {
           idempotencyKey,
           confirmedAt,
           isParent: true,
-        },
+        } as any,
       });
 
       // Create child orders — one per store
@@ -675,6 +688,7 @@ export class OrdersService {
           data: {
             userId,
             orderNumber: `${parentOrderNumber}-${i + 1}`,
+            deliveryPin,
             status: orderStatus,
             paymentMethod: dto.paymentMethod,
             paymentStatus,
@@ -745,12 +759,18 @@ export class OrdersService {
       parentStatus = OrderStatus.CONFIRMED;
     }
 
-    await this.prisma.order.update({
+    const updatedParent = await this.prisma.order.update({
       where: { id: parentOrderId },
       data: {
         status: parentStatus,
         ...(parentStatus === OrderStatus.DELIVERED ? { deliveredAt: new Date() } : {}),
       },
+    });
+
+    // Notify user of parent order update
+    this.userSseService.notify(updatedParent.userId, {
+      type: 'ORDER_STATUS_UPDATED',
+      data: { orderId: parentOrderId, status: parentStatus, orderNumber: updatedParent.orderNumber },
     });
   }
 
@@ -1421,6 +1441,15 @@ export class OrdersService {
     if (order.parentOrderId) {
       await this.syncParentStatus(order.parentOrderId);
     }
+
+    // Bust user's order list cache so their next poll sees the new status immediately
+    this.invalidateOrderCache(order.userId, id);
+
+    // Notify user via SSE for immediate reflection
+    this.userSseService.notify(order.userId, {
+      type: 'ORDER_STATUS_UPDATED',
+      data: { orderId: id, status, orderNumber: order.orderNumber },
+    });
 
     // Auto-trigger delivery search when order is packed
     if (status === OrderStatus.ORDER_PICKED) {

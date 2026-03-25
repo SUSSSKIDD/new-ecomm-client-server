@@ -1,7 +1,7 @@
 import { Inject, Injectable, Logger, OnModuleDestroy, OnModuleInit, ServiceUnavailableException } from '@nestjs/common';
 import { Subject } from 'rxjs';
 import Redis from 'ioredis';
-import { REDIS_CACHE, REDIS_CACHE_SUB } from '../common/redis/redis.constants.js';
+import { REDIS_CACHE, REDIS_CACHE_SUB } from '../common/redis/redis.constants';
 
 export interface SSEMessage {
   type: string;
@@ -22,7 +22,7 @@ interface ConnectionEntry {
 export class DeliverySseService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(DeliverySseService.name);
   private readonly connections = new Map<string, ConnectionEntry>();
-  private staleCheckInterval: ReturnType<typeof setInterval>;
+  private staleCheckInterval!: ReturnType<typeof setInterval>;
 
   private static readonly STALE_TIMEOUT_MS = 5 * 60 * 1000;
   private static readonly MAX_CONNECTIONS = 500;
@@ -41,8 +41,8 @@ export class DeliverySseService implements OnModuleInit, OnModuleDestroy {
 
     // Subscribe to Redis Pub/Sub for cross-instance SSE delivery
     if (this.subscriber) {
-      this.subscriber.subscribe(DeliverySseService.CHANNEL).catch((err) => {
-        this.logger.error(`Failed to subscribe to ${DeliverySseService.CHANNEL}: ${err.message}`);
+      this.subscriber.subscribe(DeliverySseService.CHANNEL).catch((err: any) => {
+        this.logger.error(`Failed to subscribe to ${DeliverySseService.CHANNEL}: ${err?.message || err}`);
       });
       this.subscriber.on('message', (channel, message) => {
         if (channel !== DeliverySseService.CHANNEL) return;
@@ -55,8 +55,8 @@ export class DeliverySseService implements OnModuleInit, OnModuleDestroy {
               entry.lastActivity = Date.now();
             }
           }
-        } catch (err) {
-          this.logger.error(`Pub/Sub message parse error: ${err.message}`);
+        } catch (err: any) {
+          this.logger.error(`Pub/Sub message parse error: ${err?.message || err}`);
         }
       });
       this.logger.log('SSE Pub/Sub subscriber initialized');

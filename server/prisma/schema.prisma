@@ -292,6 +292,7 @@ model Order {
   deliveredAt       DateTime?
   notDeliveredReason String?       // Rider-provided reason when delivery attempt fails
   notDeliveredAt     DateTime?     // When the NOT_DELIVERED was reported
+  deliveryPin        String?       // 4-digit PIN provided to customer for verification
   items             OrderItem[]
   assignment        OrderAssignment?
 
@@ -397,6 +398,7 @@ model ParcelOrder {
   deliveredAt         DateTime?
   notDeliveredReason  String?       // Rider-provided reason when delivery attempt fails
   notDeliveredAt      DateTime?     // When the NOT_DELIVERED was reported
+  deliveryPin         String?       // 4-digit PIN provided to customer for verification
 
   @@index([userId, createdAt(sort: Desc)])
   @@index([parcelNumber])

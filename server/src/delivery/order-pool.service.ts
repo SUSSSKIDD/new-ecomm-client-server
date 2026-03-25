@@ -4,7 +4,7 @@ import { InjectQueue } from '@nestjs/bullmq';
 import { Queue } from 'bullmq';
 import { PrismaService } from '../prisma.service';
 import { RiderRedisService } from './rider-redis.service';
-import { DeliverySseService } from './delivery-sse.service';
+import { DeliverySseService } from '../sse/delivery-sse.service';
 import { RedisCacheService } from '../common/services/redis-cache.service';
 import { DEFAULT_MAX_DELIVERY_RADIUS_KM } from '../common/utils/geo.util';
 import { DeliveryPersonStatus } from '@prisma/client';

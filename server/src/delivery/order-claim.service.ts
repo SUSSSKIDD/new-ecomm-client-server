@@ -7,7 +7,7 @@ import {
 import { PrismaService } from '../prisma.service';
 import { RiderRedisService } from './rider-redis.service';
 import { OrderPoolService } from './order-pool.service';
-import { DeliverySseService } from './delivery-sse.service';
+import { DeliverySseService } from '../sse/delivery-sse.service';
 import { DeliveryPersonStatus } from '@prisma/client';
 
 export interface ClaimResult {
@@ -139,7 +139,7 @@ export class OrderClaimService {
       },
       findExistingAssignment: (tx) => tx.orderAssignment.findUnique({ where: { orderId } }),
       createAssignment: (tx, rid) => tx.orderAssignment.create({
-        data: { orderId, deliveryPersonId: rid },
+        data: { orderId, deliveryPersonId: rid, acceptedAt: new Date() },
       }),
       getOrderNumber: async () => {
         const order = await this.prisma.order.findUnique({
@@ -167,7 +167,7 @@ export class OrderClaimService {
       findExistingAssignment: (tx) => tx.parcelAssignment.findUnique({ where: { parcelOrderId } }),
       createAssignment: async (tx, rid) => {
         await tx.parcelAssignment.create({
-          data: { parcelOrderId, deliveryPersonId: rid },
+          data: { parcelOrderId, deliveryPersonId: rid, acceptedAt: new Date() },
         });
         await tx.parcelOrder.update({
           where: { id: parcelOrderId },

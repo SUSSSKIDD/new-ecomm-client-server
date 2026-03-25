@@ -12,7 +12,11 @@ import {
   ParseUUIDPipe,
   HttpCode,
   Patch,
+  Sse,
+  MessageEvent,
 } from '@nestjs/common';
+import { map, Observable } from 'rxjs';
+import { UserSseService } from '../sse/user-sse.service';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { OrderStatus } from '@prisma/client';
@@ -41,7 +45,20 @@ interface AuthenticatedRequest extends Request {
 @UseGuards(AuthGuard('jwt'))
 @Controller('orders')
 export class OrdersController {
-  constructor(private readonly ordersService: OrdersService) { }
+  constructor(
+    private readonly ordersService: OrdersService,
+    private readonly userSseService: UserSseService,
+  ) { }
+
+  @Sse('sse')
+  @ApiOperation({ summary: 'Real-time SSE order status updates for the user' })
+  sse(@Req() req: AuthenticatedRequest): Observable<MessageEvent> {
+    const subject = this.userSseService.register(req.user.sub);
+    return subject.asObservable().pipe(
+      map((payload) => ({ data: payload.data } as MessageEvent)),
+    );
+  }
+
 
   @Post('preview')
   @HttpCode(200)

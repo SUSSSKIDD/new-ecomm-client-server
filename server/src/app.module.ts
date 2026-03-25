@@ -20,6 +20,8 @@ import { LedgerModule } from './ledger/ledger.module';
 import { SmsModule } from './sms/sms.module';
 import { ParcelModule } from './parcel/parcel.module';
 import { PrintModule } from './print/print.module';
+import { SseModule } from './sse/sse.module';
+
 
 @Module({
   imports: [
@@ -47,6 +49,8 @@ import { PrintModule } from './print/print.module';
     SmsModule,
     ParcelModule,
     PrintModule,
+    SseModule,
+
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -245,31 +245,22 @@ const DeliveryDashboard = () => {
             ? `/delivery/parcels/${orderId}/claim`
             : `/delivery/orders/${orderId}/claim`;
 
-        const acceptPath = isParcel
-            ? `/delivery/parcels/${orderId}/accept`
-            : `/delivery/orders/${orderId}/accept`;
-
         try {
             await api('post', claimPath);
-            // Auto-accept immediately after claim
-            try {
-                await api('post', acceptPath);
-            } catch {
-                // Accept may fail if CLAIM_CONFIRMED SSE hasn't processed yet, but assignment is created
-            }
-            // CLAIM_CONFIRMED SSE event will refresh assigned orders
+            // Assignment is now auto-accepted on claim.
+            // CLAIM_CONFIRMED SSE event will refresh assigned orders in real time.
         } catch (err) {
             if (err.response?.status === 409) {
                 showToast(err.response?.data?.message || 'Already claimed by another rider');
             } else {
-                console.error('Accept failed:', err);
-                showToast('Failed to accept');
-                // Re-fetch available orders to restore state
-                try {
-                    const res = await api('get', '/delivery/available-orders');
-                    setAvailableOrders(res.data);
-                } catch { }
+                console.error('Claim failed:', err);
+                showToast('Failed to accept order — please try again');
             }
+            // Re-fetch available orders to restore state on failure
+            try {
+                const res = await api('get', '/delivery/available-orders');
+                setAvailableOrders(res.data);
+            } catch { }
         }
     };
 
@@ -305,17 +296,21 @@ const DeliveryDashboard = () => {
         }
     };
 
-    const handleComplete = async (orderId, result, reason) => {
+    const handleComplete = async (orderId, result, deliveryPin, reason) => {
         try {
-            await api('post', `/delivery/orders/${orderId}/complete`, { result, reason });
+            await api('post', `/delivery/orders/${orderId}/complete`, { result, deliveryPin, reason });
             setOrders((prev) => prev.filter((a) => a.order?.id !== orderId));
             setStatus('FREE');
             showToast(`Order marked as ${result}`, 3000);
             // Invalidate history cache so it refreshes on next tab switch
             historyFetchedRef.current = false;
         } catch (err) {
-            console.error('Complete delivery failed:', err);
-            showToast(err.response?.data?.message || 'Failed to update', 3000);
+            const msg = err.response?.data?.message || 'Failed to update';
+            // Only show toast for non-PIN errors to avoid double error messages
+            if (!msg.toLowerCase().includes('pin')) {
+                showToast(msg, 3000);
+            }
+            throw err; // re-throw so the PIN modal can catch & display the error inline
         }
     };
 
@@ -347,16 +342,19 @@ const DeliveryDashboard = () => {
         }
     };
 
-    const handleParcelComplete = async (parcelOrderId, result, reason) => {
+    const handleParcelComplete = async (parcelOrderId, result, deliveryPin, reason) => {
         try {
-            await api('post', `/delivery/parcels/${parcelOrderId}/complete`, { result, reason });
+            await api('post', `/delivery/parcels/${parcelOrderId}/complete`, { result, deliveryPin, reason });
             setParcelOrders((prev) => prev.filter((a) => a.parcelOrder?.id !== parcelOrderId));
             setStatus('FREE');
             showToast(`Parcel marked as ${result}`, 3000);
             historyFetchedRef.current = false;
         } catch (err) {
-            console.error('Complete parcel delivery failed:', err);
-            showToast(err.response?.data?.message || 'Failed to update', 3000);
+            const msg = err.response?.data?.message || 'Failed to update';
+            if (!msg.toLowerCase().includes('pin')) {
+                showToast(msg, 3000);
+            }
+            throw err; // re-throw so the PIN modal can catch & display the error inline
         }
     };
 

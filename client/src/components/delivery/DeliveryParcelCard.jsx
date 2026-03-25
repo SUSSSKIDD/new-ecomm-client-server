@@ -15,8 +15,11 @@ const DeliveryParcelCard = memo(({ assignment, onAccept, onReject, onComplete })
     const isAccepted = !!assignment.acceptedAt;
     const [actionLoading, setActionLoading] = useState(null);
     const [showReasonModal, setShowReasonModal] = useState(false);
+    const [showPinModal, setShowPinModal] = useState(false);
     const [reason, setReason] = useState('');
     const [reasonError, setReasonError] = useState('');
+    const [pin, setPin] = useState('');
+    const [pinError, setPinError] = useState('');
 
     const openInMaps = (addr) => {
         if (addr?.lat && addr?.lng) {
@@ -54,8 +57,48 @@ const DeliveryParcelCard = memo(({ assignment, onAccept, onReject, onComplete })
             return;
         }
         setShowReasonModal(false);
-        await handleAction('not_delivered', () => onComplete(parcelOrder.id, 'NOT_DELIVERED', trimmed));
+        await handleAction('not_delivered', () => onComplete(parcelOrder.id, 'NOT_DELIVERED', undefined, trimmed));
     };
+
+    const handleDeliveredClick = () => {
+        console.log(`[TRACE] Delivered button clicked for Parcel ${parcelOrder.id}. Opening PIN modal...`);
+        setPin('');
+        setPinError('');
+        setShowPinModal(true);
+        setTimeout(() => {
+            const el = document.getElementById(`parcel-pin-modal-overlay-${parcelOrder.id}`);
+            if(!el) {
+                 console.log(`[WARN] PIN Modal DOM element not found for parcel ${parcelOrder.id}. Firing browser fallback prompt...`);
+                 const fallbackPin = prompt("Enter 4-digit Delivery PIN:");
+                 if(fallbackPin && fallbackPin.length === 4) {
+                     setPin(fallbackPin);
+                     handleSubmitDeliveredWithPin(fallbackPin);
+                 }
+            }
+        }, 300);
+    };
+
+    const handleSubmitDeliveredWithPin = async (overridePin) => {
+        const finalPin = overridePin || pin;
+        if (finalPin.length !== 4) {
+            setPinError('Please enter the complete 4-digit PIN');
+            return;
+        }
+        setPinError('');
+        setActionLoading('delivered');
+        try {
+            await onComplete(assignment.parcelOrder.id, 'DELIVERED', finalPin);
+            setShowPinModal(false);
+        } catch (err) {
+            const msg = err?.response?.data?.message || 'Invalid PIN. Please try again.';
+            setPinError(msg);
+            alert(msg);
+        } finally {
+            setActionLoading(null);
+        }
+    };
+
+    const handleSubmitDelivered = () => handleSubmitDeliveredWithPin();
 
     const pickup = parcelOrder.pickupAddress || {};
     const drop = parcelOrder.dropAddress || {};
@@ -184,7 +227,7 @@ const DeliveryParcelCard = memo(({ assignment, onAccept, onReject, onComplete })
                                 {actionLoading === 'not_delivered' ? 'Updating...' : 'Not Delivered'}
                             </RippleButton>
                             <RippleButton
-                                onClick={() => handleAction('delivered', () => onComplete(parcelOrder.id, 'DELIVERED'))}
+                                onClick={handleDeliveredClick}
                                 disabled={!!actionLoading}
                                 className="flex-1 py-2.5 bg-gradient-to-r from-purple-500 to-violet-600 text-white rounded-xl font-bold text-sm shadow-lg shadow-purple-500/20 hover:shadow-purple-500/30 transition-all disabled:opacity-50"
                             >
@@ -194,6 +237,82 @@ const DeliveryParcelCard = memo(({ assignment, onAccept, onReject, onComplete })
                     )}
                 </div>
             </div>
+
+            {/* PIN Verification Modal */}
+            {showPinModal && (
+                <div id={`parcel-pin-modal-overlay-${parcelOrder.id}`} className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+                    <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden animate-in fade-in zoom-in duration-200">
+                        <div className="p-6">
+                            <div className="w-12 h-12 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                                <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                                </svg>
+                            </div>
+                            <h3 className="text-lg font-bold text-gray-900 text-center mb-1">Verify Delivery PIN</h3>
+                            <p className="text-sm text-gray-500 text-center mb-6">Ask the customer for the 4-digit PIN displayed on their parcel booking screen.</p>
+                            
+                            <div className="flex justify-center gap-3 mb-6">
+                                {[0, 1, 2, 3].map((i) => (
+                                    <input
+                                        key={i}
+                                        type="text"
+                                        inputMode="numeric"
+                                        maxLength={1}
+                                        value={pin[i] || ''}
+                                        onChange={(e) => {
+                                            const val = e.target.value.replace(/\D/g, '');
+                                            if (val) {
+                                                const newPin = pin.split('');
+                                                newPin[i] = val;
+                                                const pinStr = newPin.join('');
+                                                setPin(pinStr);
+                                                if (pinStr.length === 4) setPinError('');
+                                                // Auto focus next
+                                                if (i < 3) {
+                                                    const next = e.target.nextElementSibling;
+                                                    if (next) next.focus();
+                                                }
+                                            }
+                                        }}
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Backspace' && !pin[i] && i > 0) {
+                                                const newPin = pin.split('');
+                                                newPin[i - 1] = '';
+                                                setPin(newPin.join(''));
+                                                const prev = e.target.previousElementSibling;
+                                                if (prev) prev.focus();
+                                            }
+                                        }}
+                                        className={`w-12 h-14 text-center text-2xl font-bold bg-gray-50 border-2 rounded-xl focus:ring-2 focus:outline-none transition-all ${
+                                            pinError ? 'border-red-300 focus:ring-red-400' : 'border-gray-200 focus:ring-purple-400 focus:border-purple-400'
+                                        }`}
+                                    />
+                                ))}
+                            </div>
+
+                            {pinError && (
+                                <p className="text-red-500 text-xs text-center mb-4">{pinError}</p>
+                            )}
+
+                            <div className="flex gap-2">
+                                <RippleButton
+                                    onClick={() => setShowPinModal(false)}
+                                    className="flex-1 py-3 border-2 border-gray-100 text-gray-500 rounded-xl font-bold text-sm hover:bg-gray-50"
+                                >
+                                    Cancel
+                                </RippleButton>
+                                <RippleButton
+                                    onClick={handleSubmitDelivered}
+                                    disabled={pin.length !== 4 || !!actionLoading}
+                                    className="flex-1 py-3 bg-purple-500 text-white rounded-xl font-bold text-sm shadow-lg shadow-purple-500/20 hover:bg-purple-600 disabled:opacity-50"
+                                >
+                                    {actionLoading === 'delivered' ? 'Verifying...' : 'Verify & Deliver'}
+                                </RippleButton>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* NOT_DELIVERED Reason Modal */}
             {showReasonModal && (

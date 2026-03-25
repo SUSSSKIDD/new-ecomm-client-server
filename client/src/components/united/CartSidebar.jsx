@@ -48,6 +48,8 @@ const CartSidebar = () => {
                     const body = { addressId: defaultAddr.id };
                     if (buyNowProduct) {
                         body.items = [{ productId: buyNowProduct.id, quantity: buyNowProduct.quantity || 1 }];
+                    } else if (cart.length > 0) {
+                        body.items = cart.map((item) => ({ productId: item.id, quantity: item.quantity }));
                     }
                     const pRes = await api(token).post('/orders/preview', body);
                     setPreview(pRes.data);
@@ -61,6 +63,32 @@ const CartSidebar = () => {
             setError('Failed to load addresses.');
         }
     }, [token, buyNowProduct]);
+
+    const loadGeneralPreview = useCallback(async () => {
+        if (!isAuthenticated || !token) return;
+        setPreviewLoading(true);
+        try {
+            const body = {};
+            if (buyNowProduct) {
+                body.items = [{ productId: buyNowProduct.id, quantity: buyNowProduct.quantity || 1 }];
+            } else if (cart.length > 0) {
+                body.items = cart.map((item) => ({ productId: item.id, quantity: item.quantity }));
+            }
+            const pRes = await api(token).post('/orders/preview', body);
+            setPreview(pRes.data);
+            setError('');
+        } catch (err) {
+            console.error('Failed to load cart preview', err);
+        } finally {
+            setPreviewLoading(false);
+        }
+    }, [token, isAuthenticated, buyNowProduct, cart]);
+
+    useEffect(() => {
+        if (isCartOpen && step === 'cart' && (cart.length > 0 || buyNowProduct)) {
+            loadGeneralPreview();
+        }
+    }, [cart, isCartOpen, step, loadGeneralPreview, buyNowProduct]);
 
     useEffect(() => {
         if (isCartOpen) {
@@ -80,6 +108,7 @@ const CartSidebar = () => {
                 loadAddressesAndCheckout();
             } else {
                 setStep('cart');
+                loadGeneralPreview();
             }
         }
     }, [isCartOpen, buyNowProduct, isAuthenticated, openLoginModal, loadAddressesAndCheckout]);
@@ -91,7 +120,9 @@ const CartSidebar = () => {
             setStep('checkout');
             loadAddressesAndCheckout();
         }
-    }, [isAuthenticated, pendingCheckout, isCartOpen, loadAddressesAndCheckout]); const subTotal = buyNowProduct 
+    }, [isAuthenticated, pendingCheckout, isCartOpen, loadAddressesAndCheckout]);
+
+    const subTotal = buyNowProduct 
         ? parsePrice(buyNowProduct.price) * (buyNowProduct.quantity || 1)
         : cart.reduce((total, item) => total + parsePrice(item.price) * item.quantity, 0);
 
@@ -108,6 +139,12 @@ const CartSidebar = () => {
         }, 0);
 
     const grandTotal = Math.round((subTotal + deliveryFee + tax) * 100) / 100;
+
+    // Use server preview values if available to avoid checkout jumps
+    const displaySubtotal = preview ? preview.subtotal : subTotal;
+    const displayDelivery = preview ? preview.deliveryFee : deliveryFee;
+    const displayTax = preview ? preview.tax : tax;
+    const displayTotal = preview ? preview.total : grandTotal;
 
     const http = api(token);
 
@@ -132,6 +169,8 @@ const CartSidebar = () => {
                 body.items = overrideItems;
             } else if (buyNowProduct) {
                 body.items = [{ productId: buyNowProduct.id, quantity: buyNowProduct.quantity || 1 }];
+            } else if (cart.length > 0) {
+                body.items = cart.map((item) => ({ productId: item.id, quantity: item.quantity }));
             }
             const res = await http.post('/orders/preview', body);
             setPreview(res.data);
@@ -923,28 +962,34 @@ const CartSidebar = () => {
                     <div className="border-t border-gray-100 p-4 bg-gray-50 space-y-2">
                         <div className="flex justify-between items-center text-sm">
                             <span className="text-gray-600">Subtotal</span>
-                            <span className="font-medium text-gray-900">₹{subTotal.toFixed(2)}</span>
+                            <span className="font-medium text-gray-900">₹{displaySubtotal.toFixed(2)}</span>
                         </div>
                         <div className="flex justify-between items-center text-sm">
-                            <span className="text-gray-600">Delivery Fee</span>
+                            <div>
+                                <span className="text-gray-600">Delivery Fee</span>
+                                <p className="text-[10px] text-emerald-600 font-medium">Free for new users!</p>
+                            </div>
                             <div className="flex items-center gap-2">
-                                {isFreeDelivery ? (
+                                {displayDelivery === 0 ? (
                                     <>
                                         <span className="text-gray-400 line-through text-xs">₹{DELIVERY_FEE}</span>
                                         <span className="text-green-600 font-bold">FREE</span>
                                     </>
                                 ) : (
-                                    <span className="font-medium text-gray-900">₹{DELIVERY_FEE}</span>
+                                    <span className="font-medium text-gray-900">₹{displayDelivery}</span>
                                 )}
                             </div>
                         </div>
                         <div className="flex justify-between items-center text-sm">
                             <span className="text-gray-600">Est. Tax</span>
-                            <span className="font-medium text-gray-900">₹{tax.toFixed(2)}</span>
+                            <span className="font-medium text-gray-900">₹{displayTax.toFixed(2)}</span>
                         </div>
                         <div className="border-t border-gray-200 my-2 pt-2 flex justify-between items-center">
-                            <span className="text-base font-bold text-gray-900">Total</span>
-                            <span className="text-xl font-bold text-ud-primary">₹{grandTotal.toFixed(2)}</span>
+                            <div>
+                                <span className="text-base font-bold text-gray-900">Est. Total</span>
+                                <p className="text-[10px] text-gray-400">Exact amount confirmed at checkout</p>
+                            </div>
+                            <span className="text-xl font-bold text-ud-primary">₹{displayTotal.toFixed(2)}</span>
                         </div>
                         <InteractiveHoverButton
                             onClick={handleProceedToCheckout}

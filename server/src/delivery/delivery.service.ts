@@ -11,6 +11,8 @@ import { CreateDeliveryPersonDto } from './dto/create-delivery-person.dto';
 import { DeliveryPersonStatus } from '@prisma/client';
 import { TTL } from '../common/redis/ttl.config.js';
 import * as bcrypt from 'bcryptjs';
+import { UserSseService } from '../sse/user-sse.service';
+
 
 
 @Injectable()
@@ -21,7 +23,9 @@ export class DeliveryService {
         private readonly prisma: PrismaService,
         private readonly cache: RedisCacheService,
         private readonly riderRedis: RiderRedisService,
+        private readonly userSseService: UserSseService,
     ) { }
+
 
     // ── Admin: Manage delivery persons ──────────────────────────────
 
@@ -204,16 +208,35 @@ export class DeliveryService {
 
     /** Get assigned orders for a delivery person. */
     async getAssignedOrders(personId: string) {
-        return this.prisma.orderAssignment.findMany({
+        const assignments = await this.prisma.orderAssignment.findMany({
             where: { deliveryPersonId: personId, completedAt: null },
             include: {
                 order: {
                     include: {
-                        items: true,
+                        items: {
+                            include: {
+                                store: {
+                                    select: { id: true, name: true, address: true, lat: true, lng: true },
+                                },
+                            },
+                        },
                     },
                 },
             },
             orderBy: { assignedAt: 'desc' },
+        });
+
+        // Attach primary store info to each assignment for easy access in the rider app
+        return assignments.map((a) => {
+            const storeMap = new Map<string, any>();
+            for (const item of a.order.items) {
+                if (item.store && !storeMap.has(item.store.id)) {
+                    storeMap.set(item.store.id, item.store);
+                }
+            }
+            const stores = Array.from(storeMap.values());
+            const primaryStore = stores[0] ?? null;
+            return { ...a, primaryStore };
         });
     }
 
@@ -254,9 +277,31 @@ export class DeliveryService {
                 where: { id: personId },
                 data: { status: DeliveryPersonStatus.BUSY },
             }),
+            // Mark order as SHIPPED when rider picks it up
+            this.prisma.order.update({
+                where: { id: orderId },
+                data: { status: 'SHIPPED' },
+            }),
         ]);
 
-        this.logger.log(`Assignment accepted for order ${orderId} by person ${personId}`);
+        const updatedOrder = await this.prisma.order.update({
+            where: { id: orderId },
+            include: { user: { select: { id: true } } },
+            data: { status: 'SHIPPED' },
+        });
+
+        // Trigger parent status re-sync if applicable
+        if (updatedOrder.parentOrderId) {
+            await this.syncParentOrderStatus(updatedOrder.parentOrderId);
+        } else {
+            // No parent: just notify the user directly of this order's update
+            this.userSseService.notify(updatedOrder.userId, {
+                type: 'ORDER_STATUS_UPDATED',
+                data: { orderId, status: 'SHIPPED', orderNumber: updatedOrder.orderNumber },
+            });
+        }
+
+        this.logger.log(`Assignment accepted for order ${orderId} by person ${personId} - Status SHIPPED`);
         return { orderId, accepted: true };
     }
 
@@ -275,9 +320,25 @@ export class DeliveryService {
                 where: { id: personId },
                 data: { status: DeliveryPersonStatus.BUSY },
             }),
+            // Mark parcel as PICKED_UP
+            this.prisma.parcelOrder.update({
+                where: { id: parcelOrderId },
+                data: { status: 'PICKED_UP' },
+            }),
         ]);
 
-        this.logger.log(`Assignment accepted for parcel ${parcelOrderId} by person ${personId}`);
+        const updatedParcel = await this.prisma.parcelOrder.update({
+            where: { id: parcelOrderId },
+            data: { status: 'PICKED_UP' },
+        });
+
+        // Notify user of parcel pickup
+        this.userSseService.notify(updatedParcel.userId, {
+            type: 'PARCEL_STATUS_UPDATED',
+            data: { parcelId: parcelOrderId, status: 'PICKED_UP', parcelNumber: updatedParcel.parcelNumber },
+        });
+
+        this.logger.log(`Assignment accepted for parcel ${parcelOrderId} by person ${personId} - Status PICKED_UP`);
         return { parcelOrderId, accepted: true };
     }
 
@@ -328,14 +389,30 @@ export class DeliveryService {
         return { parcelOrderId, rejected: true };
     }
 
-    async completeDelivery(personId: string, orderId: string, result: 'DELIVERED' | 'NOT_DELIVERED', reason?: string) {
+    async completeDelivery(personId: string, orderId: string, result: 'DELIVERED' | 'NOT_DELIVERED', deliveryPin?: string, reason?: string) {
         const assignment = await this.prisma.orderAssignment.findFirst({
             where: { orderId, deliveryPersonId: personId },
         });
+
+        this.logger.log(`COMPLETING DELIVERY for order ${orderId}. PIN provided: [${deliveryPin}] Result: ${result}`);
         this.validateAssignment(assignment, 'complete');
 
         if (result === 'NOT_DELIVERED' && (!reason || reason.trim().length < 5)) {
             throw new BadRequestException('A reason is required when marking as NOT_DELIVERED');
+        }
+
+        if (result === 'DELIVERED') {
+            const order = await (this.prisma.order.findUnique({
+                where: { id: orderId },
+                select: { deliveryPin: true } as any,
+            }) as Promise<any>);
+            if (!order) throw new NotFoundException('Order not found');
+            if (!deliveryPin) {
+                throw new BadRequestException('A delivery PIN is required to complete this delivery.');
+            }
+            if (order.deliveryPin && order.deliveryPin !== deliveryPin) {
+                throw new BadRequestException('Invalid delivery PIN provided by customer');
+            }
         }
 
         const now = new Date();
@@ -368,6 +445,18 @@ export class DeliveryService {
             await this.syncParentOrderStatus(order.parentOrderId);
         }
 
+        const orderWithUser = await this.prisma.order.findUnique({
+            where: { id: orderId },
+            select: { userId: true, orderNumber: true },
+        });
+
+        if (orderWithUser) {
+            this.userSseService.notify(orderWithUser.userId, {
+                type: 'ORDER_STATUS_UPDATED',
+                data: { orderId, status: result, orderNumber: orderWithUser.orderNumber },
+            });
+        }
+
         return { orderId, result, completed: true };
     }
 
@@ -394,12 +483,18 @@ export class DeliveryService {
         else if (activeStatuses.some((s) => s === 'ORDER_PICKED')) parentStatus = 'ORDER_PICKED';
         else parentStatus = 'CONFIRMED';
 
-        await this.prisma.order.update({
+        const updatedParent = await this.prisma.order.update({
             where: { id: parentOrderId },
             data: {
                 status: parentStatus as any,
                 ...(parentStatus === 'DELIVERED' ? { deliveredAt: new Date() } : {}),
             },
+        });
+
+        // Notify user of parent order update so the UI tracker advances
+        this.userSseService.notify(updatedParent.userId, {
+            type: 'ORDER_STATUS_UPDATED',
+            data: { orderId: parentOrderId, status: parentStatus, orderNumber: updatedParent.orderNumber },
         });
     }
 
@@ -412,7 +507,7 @@ export class DeliveryService {
         });
     }
 
-    async completeParcelDelivery(personId: string, parcelOrderId: string, result: 'DELIVERED' | 'NOT_DELIVERED', reason?: string) {
+    async completeParcelDelivery(personId: string, parcelOrderId: string, result: 'DELIVERED' | 'NOT_DELIVERED', deliveryPin?: string, reason?: string) {
         const assignment = await this.prisma.parcelAssignment.findFirst({
             where: { parcelOrderId, deliveryPersonId: personId },
         });
@@ -420,6 +515,20 @@ export class DeliveryService {
 
         if (result === 'NOT_DELIVERED' && (!reason || reason.trim().length < 5)) {
             throw new BadRequestException('A reason is required when marking as NOT_DELIVERED');
+        }
+
+        if (result === 'DELIVERED') {
+            const parcel = await (this.prisma.parcelOrder.findUnique({
+                where: { id: parcelOrderId },
+                select: { deliveryPin: true } as any,
+            }) as Promise<any>);
+            if (!parcel) throw new NotFoundException('Parcel not found');
+            if (!deliveryPin) {
+                throw new BadRequestException('A delivery PIN is required to complete this parcel delivery.');
+            }
+            if (parcel.deliveryPin && parcel.deliveryPin !== deliveryPin) {
+                throw new BadRequestException('Invalid delivery PIN provided by customer');
+            }
         }
 
         const now = new Date();
@@ -442,6 +551,18 @@ export class DeliveryService {
         ]);
 
         this.logger.log(`Parcel delivery ${result} for parcel ${parcelOrderId} by person ${personId}${!isDelivered ? ` — reason: ${reason}` : ''}`);
+        const parcelWithUser = await this.prisma.parcelOrder.findUnique({
+            where: { id: parcelOrderId },
+            select: { userId: true, parcelNumber: true },
+        });
+
+        if (parcelWithUser) {
+            this.userSseService.notify(parcelWithUser.userId, {
+                type: 'PARCEL_STATUS_UPDATED',
+                data: { parcelId: parcelOrderId, status: result, parcelNumber: parcelWithUser.parcelNumber },
+            });
+        }
+
         return { parcelOrderId, result, completed: true };
     }
 

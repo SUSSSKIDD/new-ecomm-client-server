@@ -1,11 +1,13 @@
 import { RippleButton } from '../../../components/ui/ripple-button';
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
+
 import { useAuth } from '../../../context/AuthContext';
-import { api } from '../../../lib/api';
+import { api, API_URL } from '../../../lib/api';
 import { STATUS_MAP, getStatusLabel } from '../../../lib/status';
 import { usePolling } from '../../../hooks/usePolling';
 import { loadRazorpayScript } from '../../../lib/utils';
 
+// The steps correspond exactly to STATUS_MAP.step (1, 2, 3, 4).
 const STEPS = ['Confirmed', 'Packed', 'Shipped', 'Delivered'];
 
 const StatusTracker = ({ status }) => {
@@ -15,6 +17,7 @@ const StatusTracker = ({ status }) => {
     return (
         <div className="flex items-center gap-1 w-full mt-3 mb-1">
             {STEPS.map((label, i) => {
+                // STATUS_MAP mapped steps: CONFIRMED(1), PACKED(2), SHIPPED(3), DELIVERED(4)
                 const stepNum = i + 1;
                 const isComplete = cfg.step >= stepNum;
                 const isCurrent = cfg.step === stepNum;
@@ -164,16 +167,14 @@ const OrderList = ({ onBack }) => {
         }
     }, [token]);
 
-    // Polling: returns true if there are active orders (keep polling)
+    // Polling: always keep running while on orders page
     const fetchOrders = useCallback(async () => {
         try {
             const res = await api(token).get('/orders', { params: { limit: 50 } });
             const fetchedOrders = res.data.data || [];
             setOrders(fetchedOrders);
             setLoading(false);
-            return fetchedOrders.some(o =>
-                ['PENDING', 'CONFIRMED', 'ORDER_PICKED', 'SHIPPED'].includes(o.status)
-            );
+            return true; // keep polling always
         } catch (err) {
             console.error("Failed to fetch orders", err);
             setLoading(false);
@@ -181,7 +182,51 @@ const OrderList = ({ onBack }) => {
         }
     }, [token]);
 
-    usePolling(fetchOrders, 15000, !!token);
+    usePolling(fetchOrders, 8000, !!token);
+
+    // Real-time SSE updates
+    const reconnectTimeout = useRef(null);
+    useEffect(() => {
+        if (!token) return;
+
+        let eventSource;
+        const connect = () => {
+            const url = new URL(`${API_URL}/orders/sse`);
+            url.searchParams.append('token', token);
+
+            eventSource = new EventSource(url.toString());
+
+            eventSource.onmessage = (event) => {
+                try {
+                    const { type, data } = JSON.parse(event.data);
+                    if (type === 'ORDER_STATUS_UPDATED') {
+                        setOrders((prev) => prev.map((o) =>
+                            o.id === data.orderId ? { ...o, status: data.status } : o
+                        ));
+                        // If current order status changed, maybe trigger a notification or highlight?
+                        console.log(`SSE UPDATE RECEIVED: Order ${data.orderNumber} status updated to ${data.status} (ID: ${data.orderId})`);
+                    }
+
+                } catch (err) {
+                    console.error('SSE message parse error:', err);
+                }
+            };
+
+            eventSource.onerror = () => {
+                eventSource.close();
+                // Attempt to reconnect after 5 seconds
+                reconnectTimeout.current = setTimeout(connect, 5000);
+            };
+        };
+
+        connect();
+
+        return () => {
+            if (eventSource) eventSource.close();
+            if (reconnectTimeout.current) clearTimeout(reconnectTimeout.current);
+        };
+    }, [token]);
+
 
     const getCfg = (status) => STATUS_MAP[status] || { label: status, color: 'bg-gray-100 text-gray-700', step: 0 };
 
@@ -261,6 +306,23 @@ const OrderList = ({ onBack }) => {
                                             </svg>
                                         </div>
                                     </div>
+
+                                    {/* Delivery PIN — visible only for active orders */}
+                                    {order.deliveryPin && order.status !== 'DELIVERED' && order.status !== 'CANCELLED' && (
+                                        <div className="mt-3 px-3 py-2 bg-emerald-50 border border-emerald-100 rounded-lg flex items-center justify-between">
+                                            <div>
+                                                <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest leading-none">Delivery PIN</p>
+                                                <p className="text-xs text-emerald-500 mt-0.5">Share this with the rider</p>
+                                            </div>
+                                            <div className="flex gap-1.5">
+                                                {order.deliveryPin.split('').map((digit, i) => (
+                                                    <span key={i} className="w-8 h-9 bg-white border border-emerald-200 rounded flex items-center justify-center text-lg font-black text-emerald-700 shadow-sm">
+                                                        {digit}
+                                                    </span>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
 
                                     {/* Quick summary when collapsed */}
                                     {!isExpanded && (
