@@ -511,7 +511,7 @@ CANCELLED  CANCELLED     CANCELLED       CANCELLED   CANCELLED   CANCELLED
 - **StoreInventory** — id, storeId, productId, stock (unique: [storeId, productId])
 - **DeliveryPerson** — id, name, phone (unique), pinHash, status (DUTY_OFF/FREE/BUSY), lat?, lng?, isActive, lastLocationAt?, assignments[], parcelAssignments[]
 - **OrderAssignment** — id, orderId, deliveryPersonId, assignedAt, completedAt, result
-- **Order** — id, userId, orderNumber (UD-YYYYMMDD-XXXX), status, paymentMethod, paymentStatus, deliveryAddress (JSON snapshot), subtotal, deliveryFee, tax, total, idempotencyKey (unique), razorpayOrderId (unique), razorpayPaymentId, razorpaySignature, paidAt, deliveredAt, items[], assignments[], fulfillingStoreId?
+- **Order** — id, userId, orderNumber, status, paymentMethod, paymentStatus, deliveryAddress (JSON snapshot), subtotal, deliveryFee, tax, total, deliveryPin (4-digit string), idempotencyKey (unique), razorpayOrderId, razorpayPaymentId, razorpaySignature, paidAt, deliveredAt, items[], assignments[], fulfillingStoreId?
   - Indexes: [userId+createdAt], orderNumber, razorpayOrderId, status
 - **OrderItem** — id, orderId, productId, name (snapshot), price (snapshot), quantity, total, taxRate (snapshot, default 0), selectedSize?, userUploadUrls[], printProductId?
   - Cascade delete when order is deleted
@@ -519,7 +519,7 @@ CANCELLED  CANCELLED     CANCELLED       CANCELLED   CANCELLED   CANCELLED
 - **PrintProduct** — id, name, productType, sizes (JSON), basePrice, image?, isActive, createdAt, updatedAt
 - **CustomSubcategory** — id, storeType, name, @@unique([storeType, name])
 - **SmsTemplate** — id, name, key (unique), content, variables[], type (SmsType), isActive, msg91TemplateId?, msg91FlowId?, logs[]
-- **ParcelOrder** — id, userId, parcelNumber (unique, `PD-YYYYMMDD-XXXXXX`), status (ParcelStatus), pickupAddress (JSON), pickupLat, pickupLng, dropAddress (JSON), dropLat, dropLng, category (ParcelCategory), categoryOther?, weight, length?, width?, height?, pickupTime, dropTime, codAmount?, paymentMethod ("COD"), paymentStatus, adminNotes?, createdAt, updatedAt, approvedAt?, pickedUpAt?, deliveredAt?, assignment?
+- **ParcelOrder** — id, userId, parcelNumber (unique), status, pickupAddress (JSON), pickupLat, pickupLng, dropAddress (JSON), dropLat, dropLng, category, categoryOther?, weight, length?, width?, height?, pickupTime, dropTime, codAmount?, paymentMethod ("COD"), paymentStatus, deliveryPin (4-digit string), adminNotes?, createdAt, updatedAt, approvedAt?, pickedUpAt?, deliveredAt?, assignment?
 - **ParcelAssignment** — id, parcelOrderId (unique), deliveryPersonId, assignedAt, acceptedAt?, completedAt?, result?
 - **SmsLog** — id, templateId?, recipientPhone, variables (JSON), status (SmsStatus), msg91RequestId?, sentAt, deliveredAt?, failureReason?, metadata (JSON)
 
@@ -553,7 +553,7 @@ CANCELLED  CANCELLED     CANCELLED       CANCELLED   CANCELLED   CANCELLED
 | `SUPER_ADMIN_PIN` | — | Super admin 4-digit PIN (hashed at startup with bcrypt) |
 | `DELIVERY_FEE` | 30 | Delivery fee in INR (waived for first-time orders) |
 | `TAX_RATE` | *(removed)* | Replaced by per-item `taxRate` on Product model (GST %) |
-| `FREE_DELIVERY_THRESHOLD` | 500 | Free delivery above this subtotal |
+| `FREE_DELIVERY_THRESHOLD` | 299 | Free delivery above this subtotal |
 | `RAZORPAY_KEY_ID` | (empty) | Empty = mock mode, `rzp_test_*` = test mode |
 | `RAZORPAY_KEY_SECRET` | (empty) | Empty = mock mode |
 | `RAZORPAY_WEBHOOK_SECRET` | (empty) | For webhook signature verification |
@@ -566,7 +566,7 @@ CANCELLED  CANCELLED     CANCELLED       CANCELLED   CANCELLED   CANCELLED
 
 Client-side constants used for display estimates (final totals always come from server preview):
 - `DELIVERY_FEE = 30` (Waived for first-time orders)
-- `FREE_DELIVERY_THRESHOLD = 500`
+- `FREE_DELIVERY_THRESHOLD = 299`
 - `TAX_RATE = 0.05` (legacy estimate only — server uses per-item `taxRate` from Product)
 
 **Note:** Checkout uses server `POST /orders/preview` response exclusively for pricing. Client constants are only for the pre-checkout estimate display. Tax is now calculated per-item using each product's `taxRate` field (GST percentage 0-100).
@@ -646,6 +646,13 @@ Use `StoreGuard` for store-scoped operations (validates `req.user.storeId` match
 - Idempotency keys prevent duplicate orders
 - Atomic stock decrement with race condition detection
 - Auto-assign race condition guards (re-checks order + delivery person status in transaction)
+- **Delivery PIN Security**:
+  - Orders and parcels now include a 4-digit `deliveryPin` generated at creation.
+  - Delivery completion via riders requires the correct `deliveryPin` in the body payload (e.g., `POST /delivery/orders/:id/complete`).
+  - Correct PIN is mandatory for `result=DELIVERED` status updates.
+- **Real-time Status & SSE Notifications**:
+  - `UserSseService` pushes real-time `ORDER_STATUS_UPDATED` and `PARCEL_STATUS_UPDATED` events to the customer.
+  - Parent order status is automatically synchronized with children via `syncParentOrderStatus()` triggered by child order status changes.
 - Raw body enabled (`rawBody: true` in NestFactory) for webhook signature verification
 - `ValidationPipe` with whitelist + transform on all inputs
 - File upload validation: MIME type, file size (5MB max)

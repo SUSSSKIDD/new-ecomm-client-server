@@ -49,7 +49,7 @@ export class OrdersService {
     this.deliveryFee = Number(this.config.get('DELIVERY_FEE', '30'));
 
     this.freeDeliveryThreshold = Number(
-      this.config.get('FREE_DELIVERY_THRESHOLD', '500'),
+      this.config.get('FREE_DELIVERY_THRESHOLD', '299'),
     );
   }
 
