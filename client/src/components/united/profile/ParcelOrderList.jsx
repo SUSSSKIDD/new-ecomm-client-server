@@ -31,7 +31,7 @@ const ParcelOrderList = () => {
 
         let eventSource;
         const connect = () => {
-            const url = new URL(`${API_URL}/orders/sse`);
+            const url = new URL(`${API_URL}/orders/sse`, window.location.origin);
             url.searchParams.append('token', token);
             
             eventSource = new EventSource(url.toString());
