@@ -11,7 +11,11 @@ import {
   Req,
   UseGuards,
   ParseUUIDPipe,
+  UseInterceptors,
+  UploadedFile,
+  BadRequestException,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { AuthGuard } from '@nestjs/passport';
 import {
   ApiTags,
@@ -41,6 +45,7 @@ import {
   STORE_CATEGORY_LABELS,
   CATEGORY_SUBCATEGORIES,
 } from '../common/constants/store-categories';
+import { SupabaseStorageService } from '../common/services/supabase-storage.service';
 
 interface AuthenticatedRequest {
   user: { sub: string; phone: string; role: string; storeId?: string };
@@ -52,6 +57,7 @@ export class StoresController {
   constructor(
     private readonly storesService: StoresService,
     private readonly subcategoryService: SubcategoryService,
+    private readonly supabaseStorage: SupabaseStorageService,
   ) { }
 
   // ── Public ───────────────────────────────────────────────────────
@@ -64,10 +70,12 @@ export class StoresController {
       this.subcategoryService.getAllCustomSubcategories(),
       this.subcategoryService.getAllCategoryConfigs(),
     ]);
-    const configMap = new Map(allConfigs.map((c: { storeType: string; subcategory: string; uploadType: string }) => [`${c.storeType}:${c.subcategory}`, c.uploadType]));
+    const configMap = new Map(allConfigs.map((c: any) => [`${c.storeType}:${c.subcategory}`, c]));
 
     const mergedSubcategories: Record<string, string[]> = {};
     const uploadTypes: Record<string, Record<string, string>> = {};
+    const photoUrls: Record<string, Record<string, string>> = {};
+
     for (const storeType of STORE_CATEGORIES) {
       const staticSubs = CATEGORY_SUBCATEGORIES[storeType] || [];
       const customSubs = allCustom
@@ -75,19 +83,25 @@ export class StoresController {
         .map((c) => c.name);
       mergedSubcategories[storeType] = [...staticSubs, ...customSubs];
 
-      // Build uploadType map per subcategory
+      // Build uploadType map and photoUrls map per subcategory
       const typeMap: Record<string, string> = {};
+      const photoMap: Record<string, string> = {};
       for (const sub of mergedSubcategories[storeType]) {
-        const ut = configMap.get(`${storeType}:${sub}`);
-        if (ut && ut !== 'NONE') typeMap[sub] = ut;
+        const conf = configMap.get(`${storeType}:${sub}`);
+        if (conf) {
+          if (conf.uploadType && conf.uploadType !== 'NONE') typeMap[sub] = conf.uploadType;
+          if (conf.photoUrl) photoMap[sub] = conf.photoUrl;
+        }
       }
       if (Object.keys(typeMap).length > 0) uploadTypes[storeType] = typeMap;
+      if (Object.keys(photoMap).length > 0) photoUrls[storeType] = photoMap;
     }
     return {
       categories: STORE_CATEGORIES,
       labels: STORE_CATEGORY_LABELS,
       subcategories: mergedSubcategories,
       uploadTypes,
+      photoUrls,
     };
   }
 
@@ -248,5 +262,39 @@ export class StoresController {
   @ApiOperation({ summary: 'Delete a category config' })
   deleteCategoryConfig(@Param('id', ParseUUIDPipe) id: string) {
     return this.subcategoryService.removeCategoryConfig(id);
+  }
+
+  // ── Subcategory Photo Uploads ─────────────────────────────────────
+
+  @Post('subcategories/photo')
+  @ApiBearerAuth()
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles('ADMIN', 'STORE_MANAGER')
+  @UseInterceptors(FileInterceptor('photo'))
+  @ApiOperation({ summary: 'Upload/Update subcategory photo (SuperAdmin)' })
+  async uploadSubcategoryPhoto(
+    @Body() dto: { storeType: string, subcategory: string },
+    @UploadedFile() file: Express.Multer.File,
+  ) {
+    if (!file) throw new BadRequestException('No photo provided');
+    if (!dto.storeType || !dto.subcategory) throw new BadRequestException('storeType and subcategory required');
+    
+    // Upload image to Supabase
+    const photoUrl = await this.supabaseStorage.upload(file, `subcategories photo/${dto.storeType}`);
+    
+    // Update CategoryConfig (create if not exists)
+    const config = await this.subcategoryService.upsertCategoryConfig(dto.storeType, dto.subcategory, undefined, photoUrl);
+    return { photoUrl, config };
+  }
+
+  @Delete('subcategories/photo')
+  @ApiBearerAuth()
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles('ADMIN')
+  @ApiOperation({ summary: 'Delete subcategory photo (SuperAdmin)' })
+  async deleteSubcategoryPhoto(@Body() dto: { storeType: string, subcategory: string }) {
+     if (!dto.storeType || !dto.subcategory) throw new BadRequestException('storeType and subcategory required');
+     await this.subcategoryService.removePhotoUrl(dto.storeType, dto.subcategory);
+     return { message: 'Photo removed successfully' };
   }
 }

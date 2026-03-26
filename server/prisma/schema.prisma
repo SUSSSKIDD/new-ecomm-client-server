@@ -436,6 +436,7 @@ model CategoryConfig {
   storeType   String
   subcategory String
   uploadType  String   @default("NONE") // NONE | PHOTO_UPLOAD | DESIGN_UPLOAD
+  photoUrl    String?  // Photo URL for the subcategory
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 

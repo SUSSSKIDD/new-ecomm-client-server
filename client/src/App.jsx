@@ -23,6 +23,7 @@ const AdminManagers = lazy(() => import('./components/admin/AdminManagers'));
 const AdminDelivery = lazy(() => import('./components/admin/AdminDelivery'));
 const AdminParcelOrders = lazy(() => import('./components/admin/AdminParcelOrders'));
 const AdminSubcategories = lazy(() => import('./components/admin/AdminSubcategories'));
+const AdminSubcategoryPhoto = lazy(() => import('./components/admin/AdminSubcategoryPhoto'));
 const AdminPrintProducts = lazy(() => import('./components/admin/AdminPrintProducts'));
 const LegalPage = lazy(() => import('./views/LegalPage'));
 
@@ -60,6 +61,7 @@ function App() {
                       <Route path="delivery" element={<AdminDelivery />} />
                       <Route path="parcels" element={<AdminParcelOrders />} />
                       <Route path="subcategories" element={<AdminSubcategories />} />
+                      <Route path="subcategory-photo" element={<AdminSubcategoryPhoto />} />
                       <Route path="print-products" element={<AdminPrintProducts />} />
                       <Route index element={<AdminDashboard />} />
                     </Route>

@@ -16,6 +16,7 @@ const TITLE_TO_STORE_TYPE = {
 const HomeCategoryList = () => {
     const { selectedCategory, setActiveSubCategory, activeSubCategory } = useCategory();
     const [categories, setCategories] = useState(HOME_CATEGORIES);
+    const [photoUrls, setPhotoUrls] = useState({});
 
     useEffect(() => {
         let cancelled = false;
@@ -26,9 +27,10 @@ const HomeCategoryList = () => {
                 const merged = HOME_CATEGORIES.map(section => {
                     const storeType = TITLE_TO_STORE_TYPE[section.title];
                     if (!storeType || !data.subcategories[storeType]) return section;
-                    return { ...section, items: data.subcategories[storeType] };
+                    return { ...section, storeType, items: data.subcategories[storeType] };
                 });
                 setCategories(merged);
+                if (data.photoUrls) setPhotoUrls(data.photoUrls);
             })
             .catch(() => {});
         return () => { cancelled = true; };
@@ -65,10 +67,12 @@ const HomeCategoryList = () => {
                                         className="snap-start flex-shrink-0 w-28 md:w-40 flex flex-col items-center gap-2 group cursor-pointer"
                                         onClick={() => setActiveSubCategory(item)}
                                     >
-                                        <div className={`w-28 h-28 md:w-40 md:h-40 rounded-xl shadow-sm border flex items-center justify-center overflow-hidden transition-all ${activeSubCategory === item ? 'border-2 border-ud-primary ring-2 ring-ud-primary/20' : 'border-gray-100 group-hover:shadow-md'}`}>
-                                            <div className="bg-white w-full h-full flex items-center justify-center">
+                                        <div className={`w-28 h-28 md:w-40 md:h-40 rounded-xl shadow-sm border flex items-center justify-center overflow-hidden transition-all ${activeSubCategory === item ? 'border-2 border-ud-primary ring-2 ring-ud-primary/20 bg-ud-primary/5' : 'border-gray-100 group-hover:shadow-md bg-white'}`}>
+                                            {photoUrls[section.storeType]?.[item] ? (
+                                                <img src={photoUrls[section.storeType][item]} alt={item} className="w-full h-full object-cover" />
+                                            ) : (
                                                 <span className={`text-4xl font-black select-none ${activeSubCategory === item ? 'text-ud-primary' : 'text-gray-200'}`}>{item.charAt(0)}</span>
-                                            </div>
+                                            )}
                                         </div>
                                         <span className={`text-xs md:text-sm font-medium text-center leading-tight transition-colors ${activeSubCategory === item ? 'text-ud-primary font-bold' : 'text-gray-700 group-hover:text-ud-primary'}`}>
                                             {item}

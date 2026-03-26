@@ -122,6 +122,7 @@ const dpTokens = [];
 const dpPins = [];
 
 const orderIds = {};    // { storeType: orderId }
+const orderPins = {};   // { storeType: deliveryPin }
 const parcelId = { value: null };
 
 // ══════════════════════════════════════════════════════════════════════
@@ -428,6 +429,7 @@ for (const storeType of STORE_TYPES) {
     }, authWithIdempotency(userToken, idemKey));
     assert(r.status === 201 || r.status === 200, `${r.status}: ${r.data?.message}`);
     orderIds[storeType] = r.data.id;
+    orderPins[storeType] = r.data.deliveryPin;
     assert(r.data.status === 'CONFIRMED', `Expected CONFIRMED, got ${r.data.status}`);
     // Verify per-item tax is persisted on order
     assert(r.data.tax > 0, `Expected per-item tax > 0 on order, got ${r.data.tax}`);
@@ -503,7 +505,8 @@ for (const storeType of STORE_TYPES) {
   });
 
   await step(`[${storeType}] Rider completes delivery`, async () => {
-    const r = await api.post(`/delivery/orders/${orderId}/complete`, { result: 'DELIVERED' }, auth(rToken));
+    const pin = orderPins[storeType];
+    const r = await api.post(`/delivery/orders/${orderId}/complete`, { result: 'DELIVERED', deliveryPin: pin }, auth(rToken));
     if (r.status === 400 || r.status === 404) {
       console.log(`    ⚠️  Complete unavailable: ${r.data?.message}`);
       return;
@@ -747,7 +750,9 @@ await step('Rider accepts parcel', async () => {
 });
 
 await step('Rider completes parcel delivery', async () => {
-  const r = await api.post(`/delivery/parcels/${parcelId.value}/complete`, { result: 'DELIVERED' }, auth(dpTokens[parcelRiderIdx]));
+  const pRes = await api.get(`/parcels/${parcelId.value}`, auth(userToken));
+  const parcelPin = pRes?.data?.deliveryPin || '0000'; 
+  const r = await api.post(`/delivery/parcels/${parcelId.value}/complete`, { result: 'DELIVERED', deliveryPin: parcelPin }, auth(dpTokens[parcelRiderIdx]));
   if (r.status === 400 || r.status === 404) {
     for (let i = 0; i < DP_COUNT; i++) {
       if (i === parcelRiderIdx) continue;
@@ -806,12 +811,14 @@ await step('Add items for race test order', async () => {
 });
 
 let raceOrderId;
+let raceOrderPin;
 await step('Place order for race test', async () => {
   const r = await api.post('/orders', {
     addressId, paymentMethod: 'COD', lat: 12.9720, lng: 77.5950,
   }, authWithIdempotency(userToken, `e2e-race-${RUN_ID}`));
   assert(r.status === 201 || r.status === 200, `${r.status}: ${r.data?.message}`);
   raceOrderId = r.data.id;
+  raceOrderPin = r.data.deliveryPin;
 });
 
 // Advance to SHIPPED so it can be assigned
@@ -928,7 +935,7 @@ await step('Race: concurrent complete — only 1 succeeds', async () => {
     const winnerToken = dpTokens[raceWinnerIdx];
     // Fire 3 simultaneous complete requests
     const completePromises = Array.from({ length: 3 }, () =>
-      api.post(`/delivery/orders/${raceOrderId}/complete`, { result: 'DELIVERED' }, auth(winnerToken))
+      api.post(`/delivery/orders/${raceOrderId}/complete`, { result: 'DELIVERED', deliveryPin: raceOrderPin }, auth(winnerToken))
     );
     const results = await Promise.all(completePromises);
     const successes = results.filter(r => r.status === 200 || r.status === 201);
@@ -956,6 +963,7 @@ for (const token of dpTokens) {
 await new Promise(r => setTimeout(r, 500));
 
 let raceOrder2Id;
+let raceOrder2Pin;
 await step('Add items for reject-reclaim race test', async () => {
   const r = await api.post('/cart/items', { productId: groceryStore.productIds[0], quantity: 1 }, auth(userToken));
   assert(r.status === 200 || r.status === 201, `${r.status}`);
@@ -966,6 +974,7 @@ await step('Place order for reject-reclaim test', async () => {
   }, authWithIdempotency(userToken, `e2e-reject-race-${RUN_ID}`));
   assert(r.status === 201 || r.status === 200, `${r.status}: ${r.data?.message}`);
   raceOrder2Id = r.data.id;
+  raceOrder2Pin = r.data.deliveryPin;
 });
 
 // Advance to ORDER_PICKED (claim service checks for ORDER_PICKED status)
@@ -1009,7 +1018,7 @@ await step('Reject-reclaim: rider 2 claims rejected order', async () => {
   if (r.status === 200 || r.status === 201) {
     console.log('    ✅ Rider 2 claimed the rejected order');
     await api.post(`/delivery/orders/${raceOrder2Id}/accept`, {}, auth(dpTokens[1]));
-    await api.post(`/delivery/orders/${raceOrder2Id}/complete`, { result: 'DELIVERED' }, auth(dpTokens[1]));
+    await api.post(`/delivery/orders/${raceOrder2Id}/complete`, { result: 'DELIVERED', deliveryPin: raceOrder2Pin }, auth(dpTokens[1]));
   } else {
     // 409 means order was auto-assigned or already taken — that's fine
     console.log(`    ⚠️  Rider 2 claim returned ${r.status} — order may have been auto-assigned`);
@@ -1024,6 +1033,7 @@ await new Promise(r => setTimeout(r, 500));
 
 // ── Delivery Race Condition: Concurrent parcel claims ──
 let raceParcelId;
+let raceParcelPin;
 await step('Race: book parcel for concurrent claim test', async () => {
   const racePickup = new Date(Date.now() + 3 * 60 * 60 * 1000);
   const raceDrop = new Date(Date.now() + 7 * 60 * 60 * 1000);
@@ -1043,6 +1053,7 @@ await step('Race: book parcel for concurrent claim test', async () => {
   }, auth(userToken));
   assert(r.status === 201 || r.status === 200, `${r.status}: ${r.data?.message}`);
   raceParcelId = r.data.id;
+  raceParcelPin = r.data.deliveryPin;
 });
 
 // Admin approves + sets ready
@@ -1077,7 +1088,7 @@ if (raceParcelId) {
     if (winners.length === 1) {
       const winIdx = claims.findIndex(r => r.status === 200 || r.status === 201);
       await api.post(`/delivery/parcels/${raceParcelId}/accept`, {}, auth(dpTokens[winIdx]));
-      await api.post(`/delivery/parcels/${raceParcelId}/complete`, { result: 'DELIVERED' }, auth(dpTokens[winIdx]));
+      await api.post(`/delivery/parcels/${raceParcelId}/complete`, { result: 'DELIVERED', deliveryPin: raceParcelPin || '0000' }, auth(dpTokens[winIdx]));
     }
   });
 }
@@ -1113,7 +1124,7 @@ await step('IDOR: Other user cannot cancel my order', async () => {
 await step('Double complete delivery rejected', async () => {
   // Try completing an already delivered order
   const deliveredOrderId = orderIds['GROCERY'];
-  const r = await api.post(`/delivery/orders/${deliveredOrderId}/complete`, { result: 'DELIVERED' }, auth(dpTokens[0]));
+  const r = await api.post(`/delivery/orders/${deliveredOrderId}/complete`, { result: 'DELIVERED', deliveryPin: orderPins['GROCERY'] || '0000' }, auth(dpTokens[0]));
   assert(r.status === 400 || r.status === 404, `Expected 400/404, got ${r.status}`);
 });
 

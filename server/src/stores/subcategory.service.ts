@@ -144,20 +144,41 @@ export class SubcategoryService {
   }
 
   /**
-   * Upsert category config (set upload type for a subcategory).
+   * Upsert category config (set upload type and/or photo URL for a subcategory).
    */
-  async upsertCategoryConfig(storeType: string, subcategory: string, uploadType: string) {
+  async upsertCategoryConfig(storeType: string, subcategory: string, uploadType?: string, photoUrl?: string) {
     const validTypes = ['NONE', 'PHOTO_UPLOAD', 'DESIGN_UPLOAD'];
-    if (!validTypes.includes(uploadType)) {
+    if (uploadType && !validTypes.includes(uploadType)) {
       throw new BadRequestException(`Invalid uploadType. Must be one of: ${validTypes.join(', ')}`);
     }
 
+    const dataToUpdate: any = {};
+    if (uploadType) dataToUpdate.uploadType = uploadType;
+    if (photoUrl !== undefined) dataToUpdate.photoUrl = photoUrl; // can be null to clear
+    
+    // Default values if creating
+    const createData = {
+      storeType,
+      subcategory,
+      uploadType: uploadType || 'NONE',
+      photoUrl: photoUrl || null,
+    };
+
     const result = await this.prisma.categoryConfig.upsert({
       where: { storeType_subcategory: { storeType, subcategory } },
-      update: { uploadType },
-      create: { storeType, subcategory, uploadType },
+      update: dataToUpdate,
+      create: createData,
     });
-    this.logger.log(`Category config set: ${storeType}/${subcategory} → ${uploadType}`);
+    this.logger.log(`Category config updated: ${storeType}/${subcategory}`);
+    return result;
+  }
+
+  async removePhotoUrl(storeType: string, subcategory: string) {
+    const result = await this.prisma.categoryConfig.upsert({
+      where: { storeType_subcategory: { storeType, subcategory } },
+      update: { photoUrl: null },
+      create: { storeType, subcategory, photoUrl: null },
+    });
     return result;
   }
 
