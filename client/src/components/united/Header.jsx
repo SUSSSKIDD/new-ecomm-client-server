@@ -38,7 +38,7 @@ const Header = () => {
                                     delay={300}
                                     className="text-xs font-bold tracking-tight text-emerald-700"
                                 >
-                                    {`Neyokart in ${deliveryMins} mins  ·  Free delivery above ₹500  ·  `}
+                                    {`Neyokart in ${deliveryMins} mins  ·  Free delivery above ₹299  · Free delivery for New Users  · `}
                                 </TextMarquee>
                             </div>
                         ) : locationStatus === 'requesting' ? (
