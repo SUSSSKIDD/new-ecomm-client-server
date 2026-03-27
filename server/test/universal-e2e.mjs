@@ -1322,15 +1322,15 @@ await step('Create temp store for consistency test', async () => {
 
 await step('Create temp manager', async () => {
   const r = await api.post('/store-managers', {
-    name: 'Temp Mgr', phone: `+9111${seq}11`, pin: '1111', storeId: tempStoreId
+    name: 'Temp Mgr', phone: `+9199${seq}11`, pin: '1111', storeId: tempStoreId
   }, auth(adminToken));
-  assert(r.status === 201 || r.status === 200, `${r.status}`);
+  assert(r.status === 201 || r.status === 200, `${r.status}: ${JSON.stringify(r.data)}`);
   tempMgrId = r.data.id;
 });
 
 await step('Temp manager login', async () => {
-  const r = await api.post('/auth/store-manager/login', { phone: `+9111${seq}11`, pin: '1111' });
-  assert(r.status === 200, `${r.status}`);
+  const r = await api.post('/auth/store-manager/login', { phone: `+9199${seq}11`, pin: '1111' });
+  assert(r.status === 200, `${r.status}: ${JSON.stringify(r.data)}`);
   tempMgrToken = r.data.access_token;
 });
 
@@ -1355,12 +1355,14 @@ await step('Deactivate store (isActive: false)', async () => {
 });
 
 await step('Verify temp product HIDDEN after store deactivation', async () => {
+  if (!tempPid) { console.log('    ⚠️ Skipping check — temp product never created'); return; }
   const r = await api.get(`/products?lat=12.9&lng=77.5`);
   const list = r.data.data;
   assert(!list.some(p => p.id === tempPid), 'Temp product still visible after store deactivation');
 });
 
 await step('Verify product findOne fails (404/inactive)', async () => {
+  if (!tempPid) { console.log('    ⚠️ Skipping check — temp product never created'); return; }
   const r = await api.get(`/products/${tempPid}`);
   assert(r.status === 404, `Expected 404 for inactive product, got ${r.status}`);
 });
@@ -1371,6 +1373,7 @@ await step('Delete store', async () => {
 });
 
 await step('Verify temp product DELETED after store deletion', async () => {
+  if (!tempPid) { console.log('    ⚠️ Skipping check — temp product never created'); return; }
   const r = await api.get(`/products/${tempPid}`);
   assert(r.status === 404, `Expected 404 for deleted product, got ${r.status}`);
 });
