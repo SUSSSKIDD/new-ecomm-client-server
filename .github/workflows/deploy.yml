@@ -76,76 +76,36 @@ jobs:
           # Run the E2E script (Testing + Native Cleanup)
           node test/universal-e2e.mjs http://localhost:3000
 
-  build-and-push:
-    name: Build & Push Docker Images
+  # DELETED build-and-push job as we now build directly on the VPS for privacy and performance.
+
+  deploy:
+    name: Zero-Downtime VPS Deployment
     needs: test
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Log in to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
-
-      - name: Build and Push Server
-        uses: docker/build-push-action@v5
-        with:
-          context: ./server
-          push: true
-          tags: ${{ secrets.DOCKER_USERNAME }}/neyokart-server:latest,${{ secrets.DOCKER_USERNAME }}/neyokart-server:${{ github.sha }}
-
-      - name: Build and Push Client
-        uses: docker/build-push-action@v5
-        with:
-          context: ./client
-          push: true
-          build-args: |
-            VITE_API_URL=/api
-          tags: ${{ secrets.DOCKER_USERNAME }}/neyokart-client:latest,${{ secrets.DOCKER_USERNAME }}/neyokart-client:${{ github.sha }}
-
-  deploy:
-    name: Zero-Downtime VPS Deployment
-    needs: build-and-push
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-      - name: Copy Deploy Script to VPS
+      - name: Securely Copy Source Code to VPS
         uses: appleboy/scp-action@master
         with:
           host: ${{ secrets.VPS_IP }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
-          source: "scripts/deployment/deploy.sh"
+          source: "server/,client/,scripts/,docker-compose.prod.yml"
           target: "/opt/neyokart"
-          strip_components: 2
 
-      - name: Copy Docker Compose to VPS
-        uses: appleboy/scp-action@master
-        with:
-          host: ${{ secrets.VPS_IP }}
-          username: ${{ secrets.VPS_USER }}
-          key: ${{ secrets.VPS_SSH_KEY }}
-          source: "docker-compose.prod.yml"
-          target: "/opt/neyokart"
+      # docker-compose.prod.yml is already included in the source copy above.
 
       - name: Execute Deployment Script via SSH
         uses: appleboy/ssh-action@v1.0.3
-        env:
-          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
         with:
           host: ${{ secrets.VPS_IP }}
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
-          envs: DOCKER_USERNAME
           script: |
             # Ensure script is executable
-            chmod +x /opt/neyokart/deploy.sh
+            chmod +x /opt/neyokart/scripts/deployment/deploy.sh
             cd /opt/neyokart
-            # Export DOCKER_USERNAME inside the session so docker-compose.prod.yml can read it
-            export DOCKER_USERNAME=$DOCKER_USERNAME
-            # Triggers blue/green deploy
-            bash ./deploy.sh
+            # Triggers local build and blue/green swap
+            bash ./scripts/deployment/deploy.sh

@@ -24,7 +24,9 @@ services:
   # ENVIRONMENT: BLUE (Routes to 3001)
   # ==========================================
   server-blue:
-    image: ${DOCKER_USERNAME}/neyokart-server:latest
+    build:
+      context: ./server
+    image: neyokart-server:latest
     container_name: neyokart-server-blue
     ports:
       - "3001:3000"
@@ -41,7 +43,11 @@ services:
     restart: unless-stopped
 
   client-blue:
-    image: ${DOCKER_USERNAME}/neyokart-client:latest
+    build:
+      context: ./client
+      args:
+        - VITE_API_URL=https://api.neyokart.site
+    image: neyokart-client:latest
     container_name: neyokart-client-blue
     ports:
       - "8001:80"
@@ -53,7 +59,9 @@ services:
   # ENVIRONMENT: GREEN (Routes to 3002)
   # ==========================================
   server-green:
-    image: ${DOCKER_USERNAME}/neyokart-server:latest
+    build:
+      context: ./server
+    image: neyokart-server:latest
     container_name: neyokart-server-green
     ports:
       - "3002:3000"
@@ -70,7 +78,11 @@ services:
     restart: unless-stopped
 
   client-green:
-    image: ${DOCKER_USERNAME}/neyokart-client:latest
+    build:
+      context: ./client
+      args:
+        - VITE_API_URL=https://api.neyokart.site
+    image: neyokart-client:latest
     container_name: neyokart-client-green
     ports:
       - "8002:80"

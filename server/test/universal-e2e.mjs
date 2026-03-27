@@ -1304,6 +1304,78 @@ await step('Buy Now: Preview with quantity update updates total', async () => {
 });
 
 // ══════════════════════════════════════════════════════════════════════
+//  Phase 13.5: Store Deactivation & Deletion Consistency
+// ══════════════════════════════════════════════════════════════════════
+
+console.log('\n🔷 Phase 13.5: Store Deactivation & Deletion Consistency');
+
+let tempStoreId, tempMgrId, tempMgrToken, tempPid;
+
+await step('Create temp store for consistency test', async () => {
+  const r = await api.post('/stores', {
+    name: `Temp Store ${RUN_ID}`, pincode: '560001', lat: 12.9, lng: 77.5,
+    address: 'Temp Address', storeType: 'GROCERY'
+  }, auth(adminToken));
+  assert(r.status === 201 || r.status === 200, `${r.status}`);
+  tempStoreId = r.data.id;
+});
+
+await step('Create temp manager', async () => {
+  const r = await api.post('/store-managers', {
+    name: 'Temp Mgr', phone: `+9111${seq}11`, pin: '1111', storeId: tempStoreId
+  }, auth(adminToken));
+  assert(r.status === 201 || r.status === 200, `${r.status}`);
+  tempMgrId = r.data.id;
+});
+
+await step('Temp manager login', async () => {
+  const r = await api.post('/auth/store-manager/login', { phone: `+9111${seq}11`, pin: '1111' });
+  assert(r.status === 200, `${r.status}`);
+  tempMgrToken = r.data.access_token;
+});
+
+await step('Create temp product', async () => {
+  const fd = new FormData();
+  fd.append('name', 'Temp Product'); fd.append('price', '100');
+  fd.append('category', 'Atta, Rice & Dal'); fd.append('stock', '50');
+  const r = await api.post('/products', fd, auth(tempMgrToken));
+  assert(r.status === 201 || r.status === 200, `${r.status}`);
+  tempPid = r.data.id;
+});
+
+await step('Verify temp product visible (lat/lng)', async () => {
+  const r = await api.get(`/products?lat=12.9&lng=77.5`);
+  const list = r.data.data;
+  assert(list.some(p => p.id === tempPid), 'Temp product not visible');
+});
+
+await step('Deactivate store (isActive: false)', async () => {
+  const r = await api.patch(`/stores/${tempStoreId}`, { isActive: false }, auth(adminToken));
+  assert(r.status === 200, `${r.status}`);
+});
+
+await step('Verify temp product HIDDEN after store deactivation', async () => {
+  const r = await api.get(`/products?lat=12.9&lng=77.5`);
+  const list = r.data.data;
+  assert(!list.some(p => p.id === tempPid), 'Temp product still visible after store deactivation');
+});
+
+await step('Verify product findOne fails (404/inactive)', async () => {
+  const r = await api.get(`/products/${tempPid}`);
+  assert(r.status === 404, `Expected 404 for inactive product, got ${r.status}`);
+});
+
+await step('Delete store', async () => {
+  const r = await api.delete(`/stores/${tempStoreId}`, auth(adminToken));
+  assert(r.status === 200, `${r.status}`);
+});
+
+await step('Verify temp product DELETED after store deletion', async () => {
+  const r = await api.get(`/products/${tempPid}`);
+  assert(r.status === 404, `Expected 404 for deleted product, got ${r.status}`);
+});
+
+// ══════════════════════════════════════════════════════════════════════
 //  Phase 14: Cleanup — Orders, Parcels, Redis Pool/Queue, DB entities
 // ══════════════════════════════════════════════════════════════════════
 
@@ -1614,7 +1686,8 @@ console.log('  ├── Delivery: DUTY_OFF→FREE→BUSY→FREE, GPS, claim/acc
 console.log(`  ├── Race Conditions: ${DP_COUNT} concurrent claims, reject-reclaim, concurrent complete, BUSY-claim, parcel race`);
 console.log('  ├── Security: idempotency, IDOR, double-submit, RBAC, invalid transitions');
 console.log('  ├── Print Products: Create, list, update, deactivate');
-console.log('  └── Buy Now: Isolated ordering logic bypassing cart state');
+console.log('  ├── Buy Now: Isolated ordering logic bypassing cart state');
+console.log('  └── Store Consistency: Auto-deactivate/delete products with store status change');
 
 // ══════════════════════════════════════════════════════════════════════
 //  FINAL CLEANUP: Wipe Test DB + Test Redis + Test BullMQ

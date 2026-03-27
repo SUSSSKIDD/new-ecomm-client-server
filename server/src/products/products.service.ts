@@ -143,6 +143,9 @@ export class ProductsService {
       where.subCategory = { equals: subCategory, mode: 'insensitive' };
     }
 
+    // Default to active products only for customers/public view
+    where.isActive = true;
+
     let storeIdsHash = '';
     let storeIds: string[] = [];
     if (lat !== undefined && lng !== undefined) {
@@ -228,6 +231,10 @@ export class ProductsService {
 
     if (!product) {
       throw new NotFoundException(`Product ${id} not found`);
+    }
+
+    if (!product.isActive) {
+      throw new NotFoundException(`Product ${id} is currently inactive`);
     }
 
     if (storeIds.length > 0 && (product as any).storeInventory !== undefined) {

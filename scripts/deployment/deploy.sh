@@ -33,9 +33,9 @@ fi
 echo "Current Active: $ACTIVE_COLOR ($OLD_PORT)"
 echo "Deploying to:   $NEW_COLOR ($NEW_PORT)"
 
-# 1. Pull the absolute latest images from Docker Hub
-echo "[1/6] Pulling latest images..."
-docker compose -f $DOCKER_COMPOSE_FILE pull
+# 1. Build the absolute latest images locally on the VPS
+echo "[1/6] Building latest images locally..."
+docker compose -f $DOCKER_COMPOSE_FILE build --no-cache server-$NEW_COLOR client-$NEW_COLOR
 
 # 2. Start the new container in the background
 echo "[2/6] Starting $NEW_COLOR containers..."
@@ -48,7 +48,7 @@ MAX_RETRIES=20
 HEALTHY=false
 
 while [ $RETRIES -lt $MAX_RETRIES ]; do
-    if curl -s http://localhost:$NEW_PORT/ > /dev/null; then
+    if curl -sf http://localhost:$NEW_PORT/ > /dev/null; then
         HEALTHY=true
         break
     fi
@@ -69,6 +69,16 @@ echo "[4/6] Swapping Nginx upstream to port $NEW_PORT (Server) and $NEW_CLIENT (
 # Correctly matches proxy_pass http://127.0.0.1:CURRENT in the Nginx config
 sudo sed -i "s/127.0.0.1:$OLD_PORT/127.0.0.1:$NEW_PORT/g" /etc/nginx/sites-available/neyokart
 sudo sed -i "s/127.0.0.1:$OLD_CLIENT/127.0.0.1:$NEW_CLIENT/g" /etc/nginx/sites-available/neyokart
+
+# Safety check: Test Nginx configuration before reloading
+if ! sudo nginx -t; then
+    echo "❌ Nginx configuration test failed! Rolling back changes."
+    # Revert the sed replacements
+    sudo sed -i "s/127.0.0.1:$NEW_PORT/127.0.0.1:$OLD_PORT/g" /etc/nginx/sites-available/neyokart
+    sudo sed -i "s/127.0.0.1:$NEW_CLIENT/127.0.0.1:$OLD_CLIENT/g" /etc/nginx/sites-available/neyokart
+    exit 1
+fi
+
 # Reloading Nginx doesn't drop active connections. It gracefully drains.
 sudo nginx -s reload
 
