@@ -155,7 +155,8 @@ const AdminOrders = () => {
                                                 {formatDate(o.createdAt)}
                                             </td>
                                             <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
-                                                {o.user?.name || o.user?.phone || '—'}
+                                                <div className="font-medium text-gray-900">{o.user?.name || '—'}</div>
+                                                <div className="text-[11px] text-blue-600 font-medium">{o.user?.phone}</div>
                                             </td>
                                             <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
                                                 {items.length}
@@ -315,9 +316,63 @@ const AdminOrders = () => {
                                                                 </div>
                                                             </>
                                                         ) : (
-                                                            <>
-                                                                <p className="text-xs font-bold text-gray-500 uppercase mb-2">Order Items</p>
-                                                                <div className="space-y-1.5">
+                                                            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                                                                <div className="lg:col-span-1">
+                                                                    <p className="text-xs font-bold text-gray-500 uppercase mb-2">Customer & Delivery</p>
+                                                                    <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm">
+                                                                        <div className="flex items-center gap-3 mb-4">
+                                                                            <div className="w-10 h-10 rounded-full bg-ud-primary/10 flex items-center justify-center text-ud-primary font-bold text-sm">
+                                                                                {(o.user?.name || 'U').charAt(0).toUpperCase()}
+                                                                            </div>
+                                                                            <div>
+                                                                                <p className="text-sm font-bold text-gray-800">{o.user?.name || 'Guest User'}</p>
+                                                                                <p className="text-xs text-blue-600 font-medium">{o.user?.phone || 'No phone'}</p>
+                                                                            </div>
+                                                                        </div>
+
+                                                                        {o.deliveryAddress && (
+                                                                            <div className="pt-3 border-t border-gray-50">
+                                                                                <div className="flex items-center gap-1.5 mb-2 text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                                                                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                                                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                                                                                    </svg>
+                                                                                    Delivery Address
+                                                                                </div>
+                                                                                <div className="text-xs text-gray-700 leading-relaxed bg-gray-50 rounded-lg p-3 border border-gray-100 italic">
+                                                                                    {o.deliveryAddress.houseNo && <span className="font-bold text-gray-900 not-italic mr-1">{o.deliveryAddress.houseNo},</span>}
+                                                                                    {o.deliveryAddress.street}
+                                                                                    {o.deliveryAddress.landmark && (
+                                                                                        <div className="mt-1 flex items-start gap-1 text-[11px] text-gray-500 italic">
+                                                                                            <span className="font-bold text-orange-500 not-italic">Landmark:</span> {o.deliveryAddress.landmark}
+                                                                                        </div>
+                                                                                    )}
+                                                                                    <div className="mt-1 font-medium text-gray-800 not-italic">
+                                                                                        {o.deliveryAddress.city}, {o.deliveryAddress.state} {o.deliveryAddress.zipCode}
+                                                                                    </div>
+                                                                                </div>
+                                                                                
+                                                                                {(o.deliveryAddress.mapsLink || (o.deliveryAddress.lat && o.deliveryAddress.lng)) && (
+                                                                                    <a 
+                                                                                        href={o.deliveryAddress.mapsLink || `https://www.google.com/maps/search/?api=1&query=${o.deliveryAddress.lat},${o.deliveryAddress.lng}`}
+                                                                                        target="_blank" 
+                                                                                        rel="noopener noreferrer"
+                                                                                        className="w-full mt-3 flex items-center justify-center gap-1.5 py-2 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-lg text-xs font-bold transition-all border border-blue-100"
+                                                                                    >
+                                                                                        <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
+                                                                                            <path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/>
+                                                                                        </svg>
+                                                                                        Open in Google Maps
+                                                                                    </a>
+                                                                                )}
+                                                                            </div>
+                                                                        )}
+                                                                    </div>
+                                                                </div>
+
+                                                                <div className="lg:col-span-2">
+                                                                    <p className="text-xs font-bold text-gray-500 uppercase mb-2">Order Items</p>
+                                                                    <div className="space-y-1.5">
                                                                     {items.map((item, idx) => (
                                                                         <div key={item.id || idx} className="bg-white rounded-lg px-4 py-2 border border-gray-100">
                                                                             <div className="flex items-center justify-between">
@@ -344,8 +399,9 @@ const AdminOrders = () => {
                                                                             )}
                                                                         </div>
                                                                     ))}
+                                                                    </div>
                                                                 </div>
-                                                            </>
+                                                            </div>
                                                         )}
                                                         <div className="mt-3 pt-2 border-t border-gray-200 flex justify-end gap-6 text-xs text-gray-500">
                                                             {o.subtotal != null && <span>Subtotal: <b className="text-gray-700">₹{o.subtotal}</b></span>}
