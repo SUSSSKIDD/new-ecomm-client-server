@@ -28,6 +28,10 @@ import { OrderStatus, PaymentMethod, PaymentStatus, Prisma } from '@prisma/clien
 import { randomBytes } from 'crypto';
 import { TTL } from '../common/redis/ttl.config.js';
 
+import { DeliverySseService } from '../sse/delivery-sse.service';
+import { OrderPoolService } from '../delivery/order-pool.service';
+
+
 @Injectable()
 export class OrdersService {
   private readonly logger = new Logger(OrdersService.name);
@@ -45,6 +49,8 @@ export class OrdersService {
     private readonly ledgerService: LedgerService,
     private readonly stockService: StockService,
     private readonly userSseService: UserSseService,
+    private readonly deliverySseService: DeliverySseService,
+    private readonly orderPoolService: OrderPoolService,
   ) {
     this.deliveryFee = Number(this.config.get('DELIVERY_FEE', '30'));
 
@@ -1451,16 +1457,6 @@ export class OrdersService {
       data: { orderId: id, status, orderNumber: order.orderNumber },
     });
 
-    // Auto-trigger delivery search when order is packed
-    if (status === OrderStatus.ORDER_PICKED) {
-      this.autoAssignService
-        .assignOrder(id)
-        .catch((err) =>
-          this.logger.error(
-            `Auto-assign failed for order ${id}: ${err.message}`,
-          ),
-        );
-    }
 
     return updated;
   }
@@ -1518,5 +1514,66 @@ export class OrdersService {
     }
 
     return { message: 'No free delivery partners available at the moment' };
+  }
+
+  /**
+   * Manually assign an order to a specific delivery person (admin action).
+   */
+  async manualAssignDelivery(orderId: string, deliveryPersonId: string, storeId?: string) {
+    const order = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      include: { items: true, assignment: true },
+    });
+    if (!order) throw new NotFoundException('Order not found');
+
+    if (storeId) {
+      const hasStoreItems = order.items.some((i) => i.storeId === storeId);
+      if (!hasStoreItems) {
+        throw new ForbiddenException('Order does not contain items from your store');
+      }
+    }
+
+    if (['CANCELLED', 'DELIVERED', 'PENDING'].includes(order.status)) {
+      throw new BadRequestException(`Cannot assign delivery for order with status "${order.status}"`);
+    }
+
+    if (order.assignment) {
+      throw new BadRequestException('Order already has a delivery assignment');
+    }
+
+    // 1. Remove from broadcast pool
+    await this.orderPoolService.removeOrder(orderId).catch(() => { });
+
+    // 2. Create pending assignment
+    const assignment = await this.prisma.orderAssignment.create({
+      data: {
+        orderId,
+        deliveryPersonId,
+        acceptedAt: null, // Rider must accept
+      },
+      include: {
+        order: {
+          select: {
+            id: true,
+            orderNumber: true,
+            total: true, // Use 'total' from schema
+            paymentMethod: true,
+            items: { select: { id: true, name: true, quantity: true, total: true } },
+          }
+        },
+        deliveryPerson: true,
+      }
+    });
+
+    // 3. Notify rider via SSE (matches notifyNewOrder payload)
+    this.deliverySseService.notifyNewOrder(deliveryPersonId, assignment.order);
+
+    // 4. Schedule timeout (wait 5 mins for acceptance, else revert to pool)
+    await this.orderPoolService.scheduleManualTimeout(orderId);
+
+    return {
+      message: `Assignment request sent to ${assignment.deliveryPerson.name}`,
+      assignment,
+    };
   }
 }

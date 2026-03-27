@@ -441,11 +441,10 @@ const DeliveryDashboard = () => {
                 <div className="flex bg-gray-200 rounded-xl p-1">
                     <button
                         onClick={() => setActiveTab('active')}
-                        className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all ${
-                            activeTab === 'active'
-                                ? 'bg-white text-gray-900 shadow-sm'
-                                : 'text-gray-500 hover:text-gray-700'
-                        }`}
+                        className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all ${activeTab === 'active'
+                            ? 'bg-white text-gray-900 shadow-sm'
+                            : 'text-gray-500 hover:text-gray-700'
+                            }`}
                     >
                         Active {(totalAssigned + availableOrders.length) > 0 && (
                             <span className="ml-1 bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full text-xs">
@@ -455,11 +454,10 @@ const DeliveryDashboard = () => {
                     </button>
                     <button
                         onClick={() => setActiveTab('history')}
-                        className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all ${
-                            activeTab === 'history'
-                                ? 'bg-white text-gray-900 shadow-sm'
-                                : 'text-gray-500 hover:text-gray-700'
-                        }`}
+                        className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all ${activeTab === 'history'
+                            ? 'bg-white text-gray-900 shadow-sm'
+                            : 'text-gray-500 hover:text-gray-700'
+                            }`}
                     >
                         My Deliveries
                     </button>
@@ -574,25 +572,22 @@ const HistoryCard = ({ item }) => {
     return (
         <div className="bg-white rounded-2xl shadow-sm overflow-hidden border border-gray-100">
             {/* Header */}
-            <div className={`px-4 py-3 flex items-center justify-between ${
-                isParcel
-                    ? 'bg-gradient-to-r from-purple-50 to-violet-50'
-                    : 'bg-gradient-to-r from-blue-50 to-indigo-50'
-            }`}>
+            <div className={`px-4 py-3 flex items-center justify-between ${isParcel
+                ? 'bg-gradient-to-r from-purple-50 to-violet-50'
+                : 'bg-gradient-to-r from-blue-50 to-indigo-50'
+                }`}>
                 <div>
                     <div className="flex items-center gap-2">
-                        <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
-                            isParcel
-                                ? 'bg-purple-100 text-purple-700'
-                                : 'bg-blue-100 text-blue-700'
-                        }`}>
+                        <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${isParcel
+                            ? 'bg-purple-100 text-purple-700'
+                            : 'bg-blue-100 text-blue-700'
+                            }`}>
                             {isParcel ? 'Parcel' : 'Order'}
                         </span>
-                        <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
-                            isDelivered
-                                ? 'bg-emerald-100 text-emerald-700'
-                                : 'bg-red-100 text-red-700'
-                        }`}>
+                        <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${isDelivered
+                            ? 'bg-emerald-100 text-emerald-700'
+                            : 'bg-red-100 text-red-700'
+                            }`}>
                             {isDelivered ? 'Delivered' : 'Not Delivered'}
                         </span>
                     </div>

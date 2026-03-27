@@ -15,6 +15,10 @@ import { UserSseService } from '../sse/user-sse.service';
 
 
 
+import { haversineDistance } from '../common/utils/geo.util';
+import { OrderPoolService } from './order-pool.service';
+
+
 @Injectable()
 export class DeliveryService {
     private readonly logger = new Logger(DeliveryService.name);
@@ -24,6 +28,7 @@ export class DeliveryService {
         private readonly cache: RedisCacheService,
         private readonly riderRedis: RiderRedisService,
         private readonly userSseService: UserSseService,
+        private readonly orderPool: OrderPoolService,
     ) { }
 
 
@@ -84,6 +89,45 @@ export class DeliveryService {
                 _count: { select: { assignments: true } },
             },
         });
+    }
+
+    /** List all delivery persons with distance from a store. */
+    async findAllNearStore(storeId: string) {
+        const store = await this.prisma.store.findUnique({ where: { id: storeId } });
+        if (!store || store.lat == null || store.lng == null) {
+            return this.findAllPersons();
+        }
+
+        const persons = await this.prisma.deliveryPerson.findMany({
+            orderBy: { createdAt: 'desc' },
+            select: {
+                id: true,
+                name: true,
+                phone: true,
+                status: true,
+                isActive: true,
+                lat: true,
+                lng: true,
+                createdAt: true,
+                _count: { select: { assignments: true } },
+            },
+        });
+
+        return persons.map((p) => {
+            const distance = (p.lat != null && p.lng != null)
+                ? haversineDistance(store.lat!, store.lng!, p.lat, p.lng)
+                : Infinity;
+            return {
+                id: p.id,
+                name: p.name,
+                phone: p.phone,
+                status: p.status,
+                isActive: p.isActive,
+                createdAt: p.createdAt,
+                _count: p._count,
+                distance: Math.round(distance * 100) / 100, // round to 2 decimal places
+            };
+        }).sort((a, b) => (a.distance || 0) - (b.distance || 0));
     }
 
     /** Update a delivery person (admin). */
@@ -364,6 +408,12 @@ export class DeliveryService {
         ]);
 
         this.logger.log(`Assignment rejected for order ${orderId} by person ${personId}`);
+
+        // Re-add to broadcast pool so other riders can claim it
+        await this.orderPool.broadcastOrder(orderId).catch(err => {
+            this.logger.error(`Failed to re-broadcast order ${orderId} after rejection: ${err.message}`);
+        });
+
         return { orderId, rejected: true };
     }
 
@@ -386,6 +436,12 @@ export class DeliveryService {
         ]);
 
         this.logger.log(`Assignment rejected for parcel ${parcelOrderId} by person ${personId}`);
+
+        // Re-add to broadcast pool so other riders can claim it
+        await this.orderPool.broadcastParcelOrder(parcelOrderId).catch(err => {
+            this.logger.error(`Failed to re-broadcast parcel ${parcelOrderId} after rejection: ${err.message}`);
+        });
+
         return { parcelOrderId, rejected: true };
     }
 

@@ -5,6 +5,7 @@ import { useState, useCallback } from 'react';
 import { adminApi } from '../../lib/api';
 import { getStatusLabel, getStatusColor } from '../../lib/status';
 import { usePolling } from '../../hooks/usePolling';
+import { Store } from 'lucide-react';
 
 // What the admin can transition TO from each status (one-way)
 // DELIVERED is not here — only delivery person can set it
@@ -25,6 +26,9 @@ const AdminOrders = () => {
     const [updatingId, setUpdatingId] = useState(null);
     const [expandedId, setExpandedId] = useState(null);
     const [actionError, setActionError] = useState('');
+    const [assigningOrder, setAssigningOrder] = useState(null);
+    const [assignmentType, setAssignmentType] = useState(null);
+    const [isAssigning, setIsAssigning] = useState(false);
     const limit = 10;
 
     const fetchOrders = useCallback(async () => {
@@ -78,10 +82,53 @@ const AdminOrders = () => {
         }
     };
 
+    const manualAssign = async (orderId, riderId) => {
+        setUpdatingId(orderId);
+        setIsAssigning(true);
+        setActionError('');
+        try {
+            await adminApi().post(`/orders/admin/${orderId}/manual-assign`, { deliveryPersonId: riderId });
+            fetchOrders();
+        } catch (err) {
+            const msg = err.response?.data?.message || 'Failed to assign rider';
+            setActionError(msg);
+            throw err; // re-throw so modal can clear pendingRiderId
+        } finally {
+            setUpdatingId(null);
+            setIsAssigning(false);
+        }
+    };
+
+    const handleAutoAssign = async (orderId) => {
+        try {
+            setUpdatingId(orderId);
+            const res = await adminApi().post(`/orders/admin/${orderId}/assign-delivery`, {});
+            alert(res.data.message || 'Automatic assignment triggered successfully');
+            fetchOrders();
+        } catch (err) {
+            console.error(err);
+            setActionError(err.response?.data?.message || 'Failed to trigger automatic assignment');
+        } finally {
+            setUpdatingId(null);
+        }
+    };
+
     const formatDate = (d) => new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
 
     const getOrderItems = (o) => o.items || o.orderItems || [];
 
+
+    const latestAssigningOrder = React.useMemo(() => {
+        if (!assigningOrder) return null;
+        for (const o of orders) {
+            if (o.id === assigningOrder.id) return o;
+            if (o.subOrders) {
+                const child = o.subOrders.find(s => s.id === assigningOrder.id);
+                if (child) return child;
+            }
+        }
+        return assigningOrder;
+    }, [orders, assigningOrder]);
 
     return (
         <div>
@@ -182,14 +229,32 @@ const AdminOrders = () => {
                                                     <span className="text-xs text-green-700 font-medium">
                                                         {o.assignment.deliveryPerson?.name || 'Assigned'}
                                                     </span>
-                                                ) : o.notDeliveredReason ? (
-                                                    <span className="text-xs text-red-600 font-medium" title={o.notDeliveredReason}>
-                                                        Delivery failed
-                                                    </span>
-                                                ) : o.status === 'ORDER_PICKED' || o.status === 'SHIPPED' ? (
-                                                    <span className="text-xs text-orange-600 animate-pulse">Searching...</span>
                                                 ) : (
-                                                    <span className="text-xs text-gray-400">—</span>
+                                                     <div className="flex flex-col gap-1">
+                                                         {o.notDeliveredReason && (
+                                                            <span className="text-[10px] text-red-600 font-bold uppercase tracking-tighter leading-none mb-1">
+                                                                Delivery failed
+                                                            </span>
+                                                         )}
+                                                         {['SHIPPED'].includes(o.status) ? (
+                                                             <div className="flex items-center gap-3">
+                                                                <button 
+                                                                    onClick={(e) => { e.stopPropagation(); handleAutoAssign(o.id); }}
+                                                                    className="text-[11px] font-bold text-blue-600 hover:text-blue-800 underline underline-offset-2"
+                                                                >
+                                                                    Auto
+                                                                </button>
+                                                                <button 
+                                                                    onClick={(e) => { e.stopPropagation(); setAssigningOrder(o); setAssignmentType('MANUAL'); }}
+                                                                    className="text-[11px] font-bold text-emerald-600 hover:text-emerald-800 underline underline-offset-2"
+                                                                >
+                                                                    Manual
+                                                                </button>
+                                                             </div>
+                                                         ) : (
+                                                             <span className="text-xs text-gray-400">—</span>
+                                                         )}
+                                                     </div>
                                                 )}
                                             </td>
                                             <td className="px-4 py-4 whitespace-nowrap text-sm" onClick={e => e.stopPropagation()}>
@@ -231,7 +296,7 @@ const AdminOrders = () => {
                                                         {o.notDeliveredReason && (
                                                             <div className="mb-3 flex items-start gap-2 bg-red-50 border border-red-200 rounded-lg px-4 py-2.5">
                                                                 <svg className="w-4 h-4 text-red-500 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                                                                 </svg>
                                                                 <div>
                                                                     <p className="text-xs font-bold text-red-700">Delivery attempt failed</p>
@@ -247,73 +312,50 @@ const AdminOrders = () => {
                                                         ) : o.isParent && o.childOrders?.length > 0 ? (
                                                             <>
                                                                 <p className="text-xs font-bold text-blue-600 uppercase mb-2">Sub-orders ({o.childOrders?.length || 0} stores)</p>
-                                                                <div className="space-y-3">
-                                                                    {o.childOrders?.map((child) => {
-                                                                        const childItems = child.items || [];
-                                                                        const childNext = NEXT_STATUS[child.status];
-                                                                        return (
-                                                                            <div key={child.id} className="bg-white rounded-lg border border-gray-200 p-3">
-                                                                                <div className="flex justify-between items-center mb-2">
-                                                                                    <span className="text-xs font-bold text-gray-700">#{child.orderNumber}</span>
-                                                                                    <div className="flex items-center gap-2">
-                                                                                        <span className={`px-2 py-0.5 text-[10px] font-bold rounded-full ${getStatusColor(child.status)}`}>
-                                                                                            {getStatusLabel(child.status)}
-                                                                                        </span>
-                                                                                        {childNext && (
-                                                                                            <RippleButton
-                                                                                                onClick={(e) => { e.stopPropagation(); advanceStatus(child.id, childNext); }}
-                                                                                                disabled={updatingId === child.id}
-                                                                                                className="px-2 py-1 text-[10px] bg-ud-primary text-white rounded hover:bg-emerald-600 disabled:opacity-50 font-medium"
-                                                                                            >
-                                                                                                {updatingId === child.id ? '...' : getStatusLabel(childNext)}
-                                                                                            </RippleButton>
-                                                                                        )}
-                                                                                        {!['DELIVERED', 'CANCELLED'].includes(child.status) && (
-                                                                                            <button
-                                                                                                onClick={(e) => { e.stopPropagation(); cancelOrder(child.id); }}
-                                                                                                disabled={updatingId === child.id}
-                                                                                                className="px-2 py-1 text-[10px] text-red-600 bg-red-50 border border-red-200 rounded hover:bg-red-100 disabled:opacity-50 font-medium"
-                                                                                            >
-                                                                                                Cancel
-                                                                                            </button>
-                                                                                        )}
-                                                                                    </div>
-                                                                                </div>
-                                                                                {child.assignment?.deliveryPerson && (
-                                                                                    <p className="text-[11px] text-green-700 mb-1.5">Delivery: {child.assignment.deliveryPerson.name}</p>
-                                                                                )}
-                                                                                <div className="space-y-1">
-                                                                                    {childItems.map((item, idx) => (
-                                                                                        <div key={item.id || idx} className="text-xs">
-                                                                                            <div className="flex justify-between">
-                                                                                                <span className="text-gray-700">{item.name} <span className="text-gray-400">×{item.quantity}</span></span>
-                                                                                                <span className="font-medium text-gray-800">₹{item.total || (item.price * item.quantity)}</span>
-                                                                                            </div>
-                                                                                            {(item.selectedSize || item.userUploadUrls?.length > 0) && (
-                                                                                                <div className="flex flex-wrap items-center gap-1.5 mt-0.5">
-                                                                                                    {item.printProductId && (
-                                                                                                        <span className="px-1.5 py-0.5 bg-purple-50 text-purple-600 rounded text-[10px] font-medium">Custom Print</span>
-                                                                                                    )}
-                                                                                                    {item.selectedSize && (
-                                                                                                        <span className="px-1.5 py-0.5 bg-blue-50 text-blue-600 rounded text-[10px] font-medium">Size: {item.selectedSize}</span>
-                                                                                                    )}
-                                                                                                    {item.userUploadUrls?.map((url, ui) => (
-                                                                                                        <a key={ui} href={url} target="_blank" rel="noopener noreferrer" className="inline-block w-8 h-8 rounded border border-gray-200 overflow-hidden hover:ring-2 hover:ring-blue-400">
-                                                                                                            <img src={url} alt={`Upload ${ui + 1}`} className="w-full h-full object-cover" />
-                                                                                                        </a>
-                                                                                                    ))}
-                                                                                                </div>
-                                                                                            )}
-                                                                                        </div>
-                                                                                    ))}
-                                                                                </div>
-                                                                                <div className="mt-1.5 pt-1 border-t border-gray-100 text-right text-xs font-bold text-gray-700">
-                                                                                    ₹{child.subtotal || 0}
-                                                                                </div>
-                                                                            </div>
-                                                                        );
-                                                                    })}
+                                                                <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center text-xs text-gray-500 font-semibold bg-gray-50/50">
+                                                                    <span>STORE</span>
+                                                                    <span>RIDER ASSIGNMENT</span>
                                                                 </div>
+                                                                {o.childOrders.map(child => (
+                                                                    <div key={child.id} className="px-6 py-3 border-b border-gray-50 last:border-none hover:bg-gray-50/30 transition-colors flex justify-between items-center">
+                                                                        <div className="flex items-center gap-3">
+                                                                            <div className="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center">
+                                                                                <Store className="w-4 h-4 text-emerald-600" />
+                                                                            </div>
+                                                                            <div>
+                                                                                <div className="text-sm font-semibold text-gray-900">{child.items[0]?.storeName || `Store ${child.id.substring(0, 4)}`}</div>
+                                                                                <div className="text-[11px] text-gray-500">{child.items.length} items</div>
+                                                                            </div>
+                                                                        </div>
+                                                                        <div>
+                                                                            {child.assignment ? (
+                                                                                <div className="flex items-center gap-2 px-3 py-1.5 bg-green-50 text-green-700 rounded-full border border-green-100">
+                                                                                    <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+                                                                                    <span className="text-xs font-bold">{child.assignment.deliveryPerson?.name}</span>
+                                                                                </div>
+                                                                            ) : (
+                                                                                <div className="flex flex-col gap-2">
+                                                                                    {['SHIPPED'].includes(child.status) && (
+                                                                                        <div className="flex items-center gap-3">
+                                                                                            <button 
+                                                                                                onClick={() => handleAutoAssign(child.id)}
+                                                                                                className="px-3 py-1 bg-blue-50 text-blue-600 rounded text-[10px] font-bold hover:bg-blue-100 transition-colors border border-blue-200"
+                                                                                            >
+                                                                                                Auto
+                                                                                            </button>
+                                                                                            <button 
+                                                                                                onClick={() => { setAssigningOrder(child); setAssignmentType('MANUAL'); }}
+                                                                                                className="px-3 py-1 bg-emerald-50 text-emerald-600 rounded text-[10px] font-bold hover:bg-emerald-100 transition-colors border border-emerald-200"
+                                                                                            >
+                                                                                                Manual
+                                                                                            </button>
+                                                                                        </div>
+                                                                                    )}
+                                                                                </div>
+                                                                            )}
+                                                                        </div>
+                                                                    </div>
+                                                                ))}
                                                             </>
                                                         ) : (
                                                             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -440,8 +482,181 @@ const AdminOrders = () => {
                     </div>
                 </div>
             )}
+
+            <RiderSelectionModal 
+                isOpen={!!assigningOrder && assignmentType === 'MANUAL'}
+                order={latestAssigningOrder}
+                onClose={() => { setAssigningOrder(null); setAssignmentType(null); }}
+                onAssign={(riderId) => manualAssign(latestAssigningOrder?.id, riderId)}
+                isAssigning={isAssigning}
+            />
+        </div>
+    );
+};
+
+// --- Modal Component ---
+const RiderSelectionModal = ({ order, isOpen, onClose, onAssign, isAssigning }) => {
+    const [riders, setRiders] = useState([]);
+    const [loadingRiders, setLoadingRiders] = useState(true);
+    const [pendingRiderId, setPendingRiderId] = useState(null); // which rider has a pending request
+
+    const fetchRiders = useCallback(async () => {
+        if (!isOpen || !order) return;
+        setLoadingRiders(true);
+        try {
+            const res = await adminApi().get('/delivery/persons');
+            setRiders(Array.isArray(res.data) ? res.data : []);
+        } catch (err) {
+            console.error('Failed to fetch riders:', err);
+        } finally {
+            setLoadingRiders(false);
+        }
+    }, [isOpen, order]);
+
+    React.useEffect(() => {
+        if (isOpen) {
+            fetchRiders();
+            setPendingRiderId(null);
+        }
+    }, [isOpen, fetchRiders]);
+
+    React.useEffect(() => {
+        if (!order || !isOpen) return;
+
+        // If an assignment exists and is accepted, assignment is complete
+        if (order.assignment && order.assignment.acceptedAt) {
+            onClose();
+        } 
+        // If pendingRiderId is set, but the assignment vanished (was rejected and deleted from DB)
+        else if (pendingRiderId && !order.assignment) {
+            setPendingRiderId(null);
+        }
+    }, [order, pendingRiderId, isOpen, onClose]);
+
+    if (!isOpen) return null;
+
+    const handleAssign = async (riderId) => {
+        setPendingRiderId(riderId);
+        try {
+            await onAssign(riderId);
+            // On success, parent closes the modal
+        } catch {
+            // On error, unlock all riders so admin can try another
+            setPendingRiderId(null);
+        }
+    };
+
+    return (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+            <div className="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden flex flex-col max-h-[85vh]">
+                {/* Header */}
+                <div className="p-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
+                    <div>
+                        <h3 className="font-bold text-gray-900">Manual Delivery Assignment</h3>
+                        <p className="text-[11px] text-gray-500 mt-0.5">Order #{order.orderNumber || order.id?.substring(0, 8)}</p>
+                    </div>
+                    <button onClick={onClose} disabled={isAssigning} className="text-gray-400 hover:text-gray-600 text-2xl transition-colors disabled:opacity-40">&times;</button>
+                </div>
+
+                {/* Pending notice */}
+                {pendingRiderId && (
+                    <div className="mx-4 mt-4 px-4 py-3 bg-amber-50 border border-amber-200 rounded-xl flex items-center gap-2.5">
+                        <div className="w-4 h-4 border-2 border-amber-400 border-t-transparent rounded-full animate-spin flex-shrink-0" />
+                        <p className="text-xs font-semibold text-amber-700">
+                            Request sent — waiting for rider to accept or reject. Other riders are locked until they respond.
+                        </p>
+                    </div>
+                )}
+
+                {/* List */}
+                <div className="flex-1 overflow-y-auto p-3 space-y-2">
+                    {loadingRiders ? (
+                        <div className="flex flex-col items-center justify-center py-16 gap-3">
+                            <div className="w-8 h-8 border-2 border-ud-primary/20 border-t-ud-primary rounded-full animate-spin"></div>
+                            <p className="text-sm text-gray-500 font-medium">Loading delivery partners...</p>
+                        </div>
+                    ) : riders.length === 0 ? (
+                        <div className="py-16 text-center flex flex-col items-center gap-2">
+                            <div className="w-12 h-12 bg-gray-50 rounded-full flex items-center justify-center text-gray-300">
+                                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                                </svg>
+                            </div>
+                            <p className="text-sm text-gray-400 italic">No registered delivery partners found.</p>
+                        </div>
+                    ) : (
+                        riders.map(rider => {
+                            const isPending = pendingRiderId === rider.id;
+                            const isLocked = !!pendingRiderId && !isPending;
+                            return (
+                                <div
+                                    key={rider.id}
+                                    className={`flex items-center justify-between p-3 rounded-xl border-2 transition-all ${
+                                        isPending ? 'border-amber-300 bg-amber-50' :
+                                        isLocked ? 'border-gray-100 bg-gray-50 opacity-50' :
+                                        'border-gray-100 hover:border-gray-200 hover:bg-gray-50/80'
+                                    }`}
+                                >
+                                    {/* Rider info */}
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center text-sm font-bold text-gray-500 flex-shrink-0">
+                                            {(rider.name || 'R').charAt(0).toUpperCase()}
+                                        </div>
+                                        <div>
+                                            <p className="font-bold text-sm text-gray-900 flex items-center gap-1.5">
+                                                {rider.name}
+                                                {!rider.isActive && (
+                                                    <span className="text-[9px] bg-red-100 text-red-600 px-1.5 py-0.5 rounded font-bold uppercase">Inactive</span>
+                                                )}
+                                            </p>
+                                            <p className="text-xs text-blue-600 font-medium">{rider.phone}</p>
+                                            <span className={`mt-0.5 inline-block text-[9px] px-2 py-0.5 rounded font-bold uppercase ${
+                                                rider.status === 'FREE' ? 'bg-emerald-50 text-emerald-600' :
+                                                rider.status === 'BUSY' ? 'bg-amber-50 text-amber-600' :
+                                                'bg-gray-100 text-gray-400'
+                                            }`}>
+                                                {rider.status}
+                                            </span>
+                                        </div>
+                                    </div>
+
+                                    {/* Action */}
+                                    <div className="flex-shrink-0">
+                                        {isPending ? (
+                                            <div className="flex items-center gap-1.5 text-xs font-semibold text-amber-600">
+                                                <div className="w-3.5 h-3.5 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
+                                                Waiting...
+                                            </div>
+                                        ) : (
+                                            <button
+                                                onClick={() => handleAssign(rider.id)}
+                                                disabled={isLocked || isAssigning}
+                                                className="px-4 py-2 bg-ud-primary text-white text-xs font-bold rounded-lg hover:bg-emerald-600 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                                            >
+                                                Assign
+                                            </button>
+                                        )}
+                                    </div>
+                                </div>
+                            );
+                        })
+                    )}
+                </div>
+
+                {/* Footer */}
+                <div className="p-4 bg-gray-50 border-t border-gray-100 flex items-start gap-2">
+                    <svg className="w-4 h-4 mt-0.5 text-blue-400 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <p className="text-[10px] leading-relaxed italic text-gray-500">
+                        Click Assign to send a request to a rider. While a request is pending, all other riders are locked.
+                        Once the rider rejects, you can assign another.
+                    </p>
+                </div>
+            </div>
         </div>
     );
 };
 
 export default AdminOrders;
+

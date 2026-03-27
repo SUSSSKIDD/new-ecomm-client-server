@@ -30,6 +30,19 @@ export class OrderPoolService {
   }
 
   /**
+   * Schedule a timeout check for a manual assignment.
+   * If not accepted by the rider within X mins, it reverts to broadcast pool.
+   */
+  async scheduleManualTimeout(orderId: string, isParcel = false) {
+    const timeoutMs = 5 * 60 * 1000; // 5 minutes for manual assignment acceptance
+    await this.deliveryQueue.add(
+      'manual-assignment-timeout',
+      { orderId, isParcel },
+      { delay: timeoutMs, removeOnComplete: true }
+    );
+  }
+
+  /**
    * Broadcast an order to all nearby FREE riders.
    * Called when an order reaches ORDER_PICKED status.
    */
@@ -145,6 +158,31 @@ export class OrderPoolService {
 
     await this.riderRedis.deleteEligibleRiders(parcelOrderId);
     await this.broadcastParcelOrder(parcelOrderId);
+  }
+
+  /**
+   * Handle timeout for a manual assignment that wasn't accepted.
+   */
+  async handleManualAssignmentTimeout(orderId: string, isParcel = false): Promise<void> {
+    if (isParcel) {
+      const assignment = await this.prisma.parcelAssignment.findUnique({
+        where: { parcelOrderId: orderId },
+      });
+      if (assignment && !assignment.acceptedAt) {
+        this.logger.log(`Manual parcel assignment for ${orderId} timed out. Reverting to pool.`);
+        await this.prisma.parcelAssignment.delete({ where: { id: assignment.id } });
+        await this.broadcastParcelOrder(orderId);
+      }
+    } else {
+      const assignment = await this.prisma.orderAssignment.findUnique({
+        where: { orderId },
+      });
+      if (assignment && !assignment.acceptedAt) {
+        this.logger.log(`Manual order assignment for ${orderId} timed out. Reverting to pool.`);
+        await this.prisma.orderAssignment.delete({ where: { id: assignment.id } });
+        await this.broadcastOrder(orderId);
+      }
+    }
   }
 
   /**

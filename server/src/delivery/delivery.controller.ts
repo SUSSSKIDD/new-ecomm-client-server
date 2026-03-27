@@ -72,7 +72,7 @@ export class DeliveryController {
   @Get('persons')
   @ApiBearerAuth()
   @UseGuards(AuthGuard('jwt'), RolesGuard)
-  @Roles('ADMIN')
+  @Roles('ADMIN', 'STORE_MANAGER')
   @ApiOperation({ summary: 'List all delivery persons' })
   findAllPersons() {
     return this.deliveryService.findAllPersons();
@@ -142,6 +142,15 @@ export class DeliveryController {
     }
 
     return result;
+  }
+
+  @Get('persons/near-store/:storeId')
+  @ApiBearerAuth()
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles('ADMIN', 'STORE_MANAGER')
+  @ApiOperation({ summary: 'List all delivery persons with distance from a store (Admin/Store only)' })
+  async findAllNearStore(@Param('storeId') storeId: string) {
+    return this.deliveryService.findAllNearStore(storeId);
   }
 
   @Get('orders')

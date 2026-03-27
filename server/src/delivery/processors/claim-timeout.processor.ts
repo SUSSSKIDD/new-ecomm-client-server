@@ -20,6 +20,10 @@ export class ClaimTimeoutProcessor extends WorkerHost {
       } else {
         await this.orderPool.handleClaimTimeout(orderId);
       }
+    } else if (job.name === 'manual-assignment-timeout') {
+      const { orderId, isParcel } = job.data;
+      this.logger.log(`Processing manual-assignment-timeout for ${isParcel ? 'parcel' : 'order'} ${orderId}`);
+      await this.orderPool.handleManualAssignmentTimeout(orderId, isParcel);
     }
   }
 }

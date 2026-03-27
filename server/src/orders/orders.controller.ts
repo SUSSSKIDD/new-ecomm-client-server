@@ -166,4 +166,17 @@ export class OrdersController {
   ) {
     return this.ordersService.triggerDeliveryAssignment(id, req.user.storeId);
   }
+
+  @Post('admin/:id/manual-assign')
+  @UseGuards(RolesGuard)
+  @Roles('ADMIN', 'STORE_MANAGER')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Manually assign a rider to an order' })
+  async manualAssign(
+    @Req() req: AuthenticatedRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body('deliveryPersonId') riderId: string,
+  ) {
+    return this.ordersService.manualAssignDelivery(id, riderId, req.user.storeId);
+  }
 }
