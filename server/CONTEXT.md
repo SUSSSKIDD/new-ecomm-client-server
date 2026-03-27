@@ -88,7 +88,12 @@ new grocery/
 │       └── App.jsx, main.jsx
 │
 └── server/
-    ├── CONTEXT.md                               # This file — project documentation
+│   ├── scripts/
+│   │   └── deployment/
+│   │       └── deploy.sh                    # Zero-downtime Blue/Green logic + Nginx swap
+│   ├── .github/workflows/
+│   │   └── deploy.yml                       # Direct SCP deployment + VPS build trigger
+│   ├── CONTEXT.md                               # This file — project documentation
     ├── BUGFIX-REPORT.md                         # Comprehensive bug fix & E2E report
     └── src/
         ├── auth/                                # OTP login + JWT + RBAC
@@ -503,7 +508,7 @@ CANCELLED  CANCELLED     CANCELLED       CANCELLED   CANCELLED   CANCELLED
 ### Models
 - **User** — id, phone (unique), name, role, orders[], addresses[]
 - **Address** — id, userId, type (HOME/WORK/OTHER), houseNo, street, city, state, zipCode, landmark, mapsLink, recipientName, recipientPhone, lat, lng
-- **Product** — id, name, price, mrp, category, subCategory, stock, storeLocation, isGrocery, images[], storeId?, taxRate (GST %, default 0), storeInventory[]
+- **Product** — id, name, price, mrp, category, subCategory, stock, storeLocation, isGrocery, images[], storeId?, taxRate (GST %, default 0), isActive, storeInventory[]
   - Indexes: name, category, subCategory, storeLocation, isGrocery, createdAt, [category+createdAt], [isGrocery+category]
 - **Store** — id, name, pincode, lat, lng, address?, storeType, storeCode (unique, auto-generated A1/A2...), isActive, managers[], inventory[], deliveryPersons[], products[], ledgerEntries[]
 - **StoreManager** — id, name, phone (unique), pinHash, storeId, isActive, store (relation, onDelete: Cascade)
@@ -1013,3 +1018,22 @@ To properly route custom domains (`neyokart.com`, `neyokart.in`) into the isolat
 - Traffic originating on standard ports (`80/443`) are intercepted by Nginx natively. Let's Encrypt handles SSL verification and actively redirects standard HTTP traffic implicitly to secure HTTPS strings.
 - Internal frontend static React routing handles client-side displays. All incoming proxy `http://neyokart.com/api/*` intercepts are physically stripped and forwarded secretly to `http://127.0.0.1:3001` or `3002`. This sidesteps CORS entirely, resulting in robust security routing.  
 - Important VPS execution note: `sudo visudo` was strictly modified to empower the non-root `pratyush` user with `NOPASSWD: ALL` over Nginx restart actions to enable the robot pipeline to operate frictionlessly without terminal password prompts.
+
+## Store & Product Lifecycle Consistency (2026-03-27)
+
+### Strategy
+- **Propagation**: Deactivating a store (`isActive: false`) now automatically deactivates all its associated products via `StoresService.update()`. Inactive products are hidden from customers.
+- **Cascade Deletion**: Deleting a store triggers an atomic Prisma transaction that deletes all associated `Product` records and `StoreInventory` entries, ensuring no orphaned inventory data.
+- **Frontend Filtering**: Public listing endpoints (`GET /products`) and searches automatically exclude inactive products. Direct product detail access (`GET /products/:id`) returns a `404 Not Found` for inactive items.
+
+## Bulletproof "Build-on-VPS" Deployment (2026-03-27)
+
+### Shift to Local Building
+- **Registry Privacy**: The deployment pipeline now bypasses Docker Hub entirely for proprietary images. Source code folders (`server/`, `client/`, `scripts/`) are transferred directly to the VPS via SCP.
+- **Local VPS Build**: Docker images are built locally on the Hostinger VPS (`docker compose build`), ensuring alignment with the host environment and improving deployment speed by avoiding large image transfers.
+
+### Deployment Safety Checks (`deploy.sh`)
+- **Nginx Integrity**: The script runs `sudo nginx -t` (configuration test) immediately after upstream substitution. If the syntax check fails, it automatically rolls back the `sed` changes before they are reloaded, preventing site-wide downtime.
+- **Strict HTTP Health Check**: Uses `curl -sf` to verify that the new container is returning a valid `200 OK` (not just "running") before swapping traffic.
+- **Zero-Downtime Swap**: Maintains the Blue/Green strategy using dormant port swapping (3001/3002 and 8001/8002) with graceful Nginx reloads.
+
