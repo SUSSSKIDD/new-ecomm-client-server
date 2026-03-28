@@ -1390,13 +1390,6 @@ export class OrdersService {
       );
     }
 
-    // Block admin from manually setting SHIPPED — only delivery person can
-    if (status === OrderStatus.SHIPPED) {
-      throw new BadRequestException(
-        'SHIPPED status can only be set by the delivery person',
-      );
-    }
-
     if (storeId) {
       const hasStoreItems = order.items.some((i) => i.storeId === storeId);
       if (!hasStoreItems) {

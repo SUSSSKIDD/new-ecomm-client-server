@@ -456,14 +456,13 @@ for (const storeType of STORE_TYPES) {
       console.log(`  ⚠️  [${storeType}] PROCESSING transition not available — skipping`);
     }
 
-    for (const nextStatus of ['ORDER_PICKED']) {
+    for (const nextStatus of ['ORDER_PICKED', 'SHIPPED']) {
       await step(`[${storeType}] Admin → ${nextStatus}`, async () => {
         const r = await api.patch(`/orders/admin/${orderIds[storeType]}/status`,
           { status: nextStatus }, auth(s.managerToken));
         assert(r.status === 200, `${r.status}: ${r.data?.message}`);
       });
     }
-    // NOTE: Manual patch to 'SHIPPED' is now blocked — must follow claim/accept flow
   }
 
   // Trigger delivery assignment
@@ -904,10 +903,10 @@ await step('Race: BUSY rider cannot claim another order', async () => {
   // The winner is BUSY — try to claim a different order (one of the delivered ones)
   if (raceWinnerIdx >= 0) {
     const busyToken = dpTokens[raceWinnerIdx];
-    // Try to claim one of the Phase 7 orders (already delivered, will fail either way)
-    const someOrderId = orderIds['PIZZA_TOWN'];
+    // Try to claim a dummy order that doesn't exist, which should fail because they are BUSY (or 404)
+    const someOrderId = '00000000-0000-0000-0000-000000000000';
     const r = await api.post(`/delivery/orders/${someOrderId}/claim`, {}, auth(busyToken));
-    // Should be 409 (BUSY), 400, or 404 (order not claimable)
+    // Should be 409 (BUSY) or 404 (order not found)
     assert(r.status === 409 || r.status === 400 || r.status === 404,
       `Expected 409/400/404 for BUSY rider claim, got ${r.status}`);
   }

@@ -48,14 +48,21 @@ export class DeliveryController {
     private readonly orderPoolService: OrderPoolService,
   ) { }
 
-  /** Broadcast all pending orders + parcels to a FREE rider (fire-and-forget). */
+  /** Broadcast currently active pool pending orders + parcels to a newly FREE rider (fire-and-forget). */
   private broadcastPendingToRider(riderId: string): void {
-    this.autoAssignService
-      .checkPendingOrders(riderId)
-      .catch((err) => this.logger.error(`checkPendingOrders error: ${err.message}`));
-    this.autoAssignService
-      .checkPendingParcelOrders(riderId)
-      .catch((err) => this.logger.error(`checkPendingParcelOrders error: ${err.message}`));
+    this.orderPoolService
+      .getAvailableOrdersForRider(riderId)
+      .then((snapshots) => {
+        for (const snap of snapshots) {
+          this.sseService.notify(riderId, {
+            type: 'NEW_AVAILABLE_ORDER',
+            data: snap,
+          });
+        }
+      })
+      .catch((err) =>
+        this.logger.error(`broadcastPendingToRider error: ${err.message}`),
+      );
   }
 
   // ── Admin endpoints ─────────────────────────────────────────────
