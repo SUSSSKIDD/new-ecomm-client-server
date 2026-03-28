@@ -450,12 +450,20 @@ export class DeliveryService {
     }
 
     async completeDelivery(personId: string, orderId: string, result: 'DELIVERED' | 'NOT_DELIVERED', deliveryPin?: string, reason?: string) {
-        const assignment = await this.prisma.orderAssignment.findFirst({
-            where: { orderId, deliveryPersonId: personId },
-        });
+        // Prevent race condition on completion (Atomic guard)
+        const lockKey = `lock:complete:${orderId}`;
+        const lockAcquired = await this.riderRedis.acquireLock(lockKey, personId, 30); // 30s lock
+        if (!lockAcquired) {
+            throw new BadRequestException('Request already in progress for this order');
+        }
 
-        this.logger.log(`COMPLETING DELIVERY for order ${orderId}. PIN provided: [${deliveryPin}] Result: ${result}`);
-        this.validateAssignment(assignment, 'complete');
+        try {
+            const assignment = await this.prisma.orderAssignment.findFirst({
+                where: { orderId, deliveryPersonId: personId },
+            });
+
+            this.logger.log(`COMPLETING DELIVERY for order ${orderId}. PIN provided: [${deliveryPin}] Result: ${result}`);
+            this.validateAssignment(assignment, 'complete');
 
         if (result === 'NOT_DELIVERED' && (!reason || reason.trim().length < 5)) {
             throw new BadRequestException('A reason is required when marking as NOT_DELIVERED');
@@ -518,6 +526,10 @@ export class DeliveryService {
         }
 
         return { orderId, result, completed: true };
+        } finally {
+            // Clean up lock (optional but good practice)
+            // riderRedis doesn't have a direct releaseLock but TTL handles it
+        }
     }
 
     /**

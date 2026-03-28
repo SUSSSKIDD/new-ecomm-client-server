@@ -834,13 +834,14 @@ await step('Place order for race test', async () => {
     console.log('  ⚠️  PROCESSING not available — skipping');
   }
 }
-for (const status of ['ORDER_PICKED', 'SHIPPED']) {
+for (const status of ['ORDER_PICKED']) {
   await step(`Race order → ${status}`, async () => {
     const r = await api.patch(`/orders/admin/${raceOrderId}/status`,
       { status }, auth(groceryStore.managerToken));
     assert(r.status === 200, `${r.status}: ${r.data?.message}`);
   });
 }
+// NOTE: Manual 'SHIPPED' transition is now blocked. It's set by the claim/accept flow.
 
 // Trigger assignment
 await step('Trigger race order assignment', async () => {
@@ -1381,6 +1382,65 @@ await step('Verify temp product DELETED after store deletion', async () => {
 });
 
 // ══════════════════════════════════════════════════════════════════════
+//  Phase 13.7: Multi-Store Order Fulfillment
+// ══════════════════════════════════════════════════════════════════════
+
+console.log('\n🔷 Phase 13.7: Multi-Store Fulfillment (Parent/Child Sync)');
+
+let multiStoreParentId;
+await step('Multi-store checkout (Grocery + Pizza Town)', async () => {
+    const s1 = stores['GROCERY'];
+    const s2 = stores['PIZZA_TOWN'];
+    await api.post('/cart/items', { productId: s1.productIds[0], quantity: 1 }, auth(userToken));
+    await api.post('/cart/items', { productId: s2.productIds[0], quantity: 1 }, auth(userToken));
+    const r = await api.post('/orders', {
+        addressId, paymentMethod: 'COD', lat: 12.9720, lng: 77.5950,
+    }, auth(userToken));
+    assert(r.status === 201 || r.status === 200, `Failed to place multi-store order: ${r.status}`);
+    multiStoreParentId = r.data.id;
+    const items = r.data.items || [];
+    const childOrderIds = [...new Set(items.map(i => i.orderId).filter(id => id && id !== multiStoreParentId))];
+    assert(childOrderIds.length >= 2, `Expected at least 2 child orders, got ${childOrderIds.length}`);
+    
+    // Process child 1
+    const child1Id = childOrderIds[0];
+    await api.patch(`/orders/admin/${child1Id}/status`, { status: 'ORDER_PICKED' }, auth(adminToken));
+    await api.post(`/orders/admin/${child1Id}/assign-delivery`, {}, auth(adminToken));
+    await api.post('/delivery/status', { status: 'FREE' }, auth(dpTokens[0]));
+    await api.post('/delivery/location', { lat: 12.9720, lng: 77.5951 }, auth(dpTokens[0]));
+    await api.post(`/delivery/orders/${child1Id}/claim`, {}, auth(dpTokens[0]));
+    await api.post(`/delivery/orders/${child1Id}/accept`, {}, auth(dpTokens[0]));
+    
+    // Process child 2
+    const child2Id = childOrderIds[1];
+    await api.patch(`/orders/admin/${child2Id}/status`, { status: 'ORDER_PICKED' }, auth(adminToken));
+    await api.post(`/orders/admin/${child2Id}/assign-delivery`, {}, auth(adminToken));
+    await api.post('/delivery/status', { status: 'FREE' }, auth(dpTokens[1]));
+    await api.post('/delivery/location', { lat: 12.9720, lng: 77.5952 }, auth(dpTokens[1]));
+    await api.post(`/delivery/orders/${child2Id}/claim`, {}, auth(dpTokens[1]));
+    await api.post(`/delivery/orders/${child2Id}/accept`, {}, auth(dpTokens[1]));
+
+    const parentRes1 = await api.get(`/orders/${multiStoreParentId}`, auth(userToken));
+    assert(parentRes1.data.status === 'CONFIRMED', `Parent should be CONFIRMED, got ${parentRes1.data.status}`);
+
+    // Complete child 1
+    const pin1 = parentRes1.data.deliveryPin;
+    await api.post(`/delivery/orders/${child1Id}/complete`, { result: 'DELIVERED', deliveryPin: pin1 }, auth(dpTokens[0]));
+    
+    // Parent should still be CONFIRMED
+    const parentRes2 = await api.get(`/orders/${multiStoreParentId}`, auth(userToken));
+    assert(parentRes2.data.status === 'CONFIRMED', `Parent should still be CONFIRMED, got ${parentRes2.data.status}`);
+
+    // Complete child 2
+    await api.post(`/delivery/orders/${child2Id}/complete`, { result: 'DELIVERED', deliveryPin: pin1 }, auth(dpTokens[1]));
+
+    // Parent should NOW be DELIVERED
+    const parentRes3 = await api.get(`/orders/${multiStoreParentId}`, auth(userToken));
+    assert(parentRes3.data.status === 'DELIVERED', `Parent status sync error. Expected DELIVERED, got ${parentRes3.data.status}`);
+    console.log('    ✅ Multi-store fulfillment verified');
+});
+
+// ══════════════════════════════════════════════════════════════════════
 //  Phase 14: Cleanup — Orders, Parcels, Redis Pool/Queue, DB entities
 // ══════════════════════════════════════════════════════════════════════
 
@@ -1397,6 +1457,7 @@ const allOrderIds = [
   razorpayOrderId,
   raceOrderId,
   raceOrder2Id,
+  multiStoreParentId,
   buyNowOrderId,
 ].filter(Boolean);
 
