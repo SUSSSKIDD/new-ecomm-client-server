@@ -1390,6 +1390,13 @@ export class OrdersService {
       );
     }
 
+    // Block admin from manually setting SHIPPED — only delivery person can
+    if (status === OrderStatus.SHIPPED) {
+      throw new BadRequestException(
+        'SHIPPED status can only be set by the delivery person',
+      );
+    }
+
     if (storeId) {
       const hasStoreItems = order.items.some((i) => i.storeId === storeId);
       if (!hasStoreItems) {
@@ -1494,7 +1501,7 @@ export class OrdersService {
       throw new BadRequestException('Order already has a delivery assignment');
     }
 
-    await this.autoAssignService.assignOrder(orderId);
+    const notifiedCount = await this.autoAssignService.assignOrder(orderId);
 
     // Check if assignment was created
     const assignment = await this.prisma.orderAssignment.findUnique({
@@ -1513,7 +1520,11 @@ export class OrdersService {
       };
     }
 
-    return { message: 'No free delivery partners available at the moment' };
+    if (notifiedCount > 0) {
+      return { message: `No rider assigned yet, but broadcast sent to ${notifiedCount} nearby partners.` };
+    }
+
+    return { message: 'No free delivery partners available in the area at the moment.' };
   }
 
   /**
@@ -1565,8 +1576,11 @@ export class OrdersService {
       }
     });
 
-    // 3. Notify rider via SSE (matches notifyNewOrder payload)
+    // 3. Notify riders via SSE
+    // - Notify the specific rider of their new assignment
     this.deliverySseService.notifyNewOrder(deliveryPersonId, assignment.order);
+    // - Tell ALL other riders to hide this order from 'Available Orders' if it was broadcasted
+    this.deliverySseService.broadcastOrderClaimed(null, orderId);
 
     // 4. Schedule timeout (wait 5 mins for acceptance, else revert to pool)
     await this.orderPoolService.scheduleManualTimeout(orderId);

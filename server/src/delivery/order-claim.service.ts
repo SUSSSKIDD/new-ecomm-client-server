@@ -129,7 +129,7 @@ export class OrderClaimService {
     return this.genericClaim(riderId, {
       entityId: orderId,
       entityLabel: 'Order',
-      validStatuses: ['CONFIRMED', 'PROCESSING', 'ORDER_PICKED'],
+      validStatuses: ['CONFIRMED', 'PROCESSING', 'ORDER_PICKED', 'SHIPPED'],
       findEntity: async (tx) => {
         const order = await tx.order.findUnique({
           where: { id: orderId },

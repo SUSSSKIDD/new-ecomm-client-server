@@ -42,11 +42,17 @@ export class OrderPoolService {
     );
   }
 
+  private static readonly BROADCAST_VALID = new Set<string>([
+    'CONFIRMED',
+    'PROCESSING',
+    'ORDER_PICKED',
+    'SHIPPED',
+  ]);
+
   /**
    * Broadcast an order to all nearby FREE riders.
-   * Called when an order reaches ORDER_PICKED status.
    */
-  async broadcastOrder(orderId: string): Promise<void> {
+  async broadcastOrder(orderId: string): Promise<number> {
     const [order, existing] = await Promise.all([
       this.prisma.order.findUnique({
         where: { id: orderId },
@@ -55,13 +61,12 @@ export class OrderPoolService {
       this.prisma.orderAssignment.findUnique({ where: { orderId } }),
     ]);
 
-    if (!order || existing) return;
-    if (OrderPoolService.ORDER_TERMINAL.has(order.status)) return;
+    if (!order || existing || !OrderPoolService.BROADCAST_VALID.has(order.status)) return 0;
 
     // Skip parent orders — each child order gets its own delivery assignment
     if (order.isParent) {
       this.logger.log(`Skipping parent order ${order.orderNumber} — children have their own assignments`);
-      return;
+      return 0;
     }
 
     // Determine primary store (store with most items)
@@ -73,7 +78,7 @@ export class OrderPoolService {
     }
     if (storeCounts.size === 0) {
       this.logger.warn(`Order ${order.orderNumber} has no store assignments`);
-      return;
+      return 0;
     }
 
     let primaryStoreId = '';
@@ -88,18 +93,13 @@ export class OrderPoolService {
     const store = await this.prisma.store.findUnique({
       where: { id: primaryStoreId },
     });
-    if (!store || store.lat == null || store.lng == null) return;
+    if (!store || store.lat == null || store.lng == null) return 0;
 
-    const eligibleRiderIds = await this.getNearbyFreeRiders(store.lng, store.lat);
+    const eligibleRiderIds = await this.getNearbyFreeRiders(store.lng, store.lat, { fallbackToGlobal: true });
     const snapshot = this.buildOrderSnapshot(order, store);
 
     await this.storeAndBroadcast(orderId, snapshot, eligibleRiderIds, { orderId });
-
-    if (eligibleRiderIds.length === 0) {
-      this.logger.warn(`No FREE riders within ${this.maxDeliveryRadiusKm}km for order ${order.orderNumber}`);
-    } else {
-      this.logger.log(`Order ${order.orderNumber} broadcast to ${eligibleRiderIds.length} riders`);
-    }
+    return eligibleRiderIds.length;
   }
 
   /** Terminal statuses — orders in these states must NOT be re-broadcast. */
@@ -178,9 +178,9 @@ export class OrderPoolService {
         where: { orderId },
       });
       if (assignment && !assignment.acceptedAt) {
-        this.logger.log(`Manual order assignment for ${orderId} timed out. Reverting to pool.`);
+        this.logger.log(`Manual order assignment for ${orderId} timed out. Reverting to unassigned.`);
         await this.prisma.orderAssignment.delete({ where: { id: assignment.id } });
-        await this.broadcastOrder(orderId);
+        // NOTE: No broadcastOrder() here - manual assignment requires manual re-trigger if failed
       }
     }
   }

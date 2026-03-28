@@ -236,7 +236,7 @@ const AdminOrders = () => {
                                                                 Delivery failed
                                                             </span>
                                                          )}
-                                                         {['SHIPPED'].includes(o.status) ? (
+                                                         {['CONFIRMED', 'PROCESSING', 'ORDER_PICKED', 'SHIPPED'].includes(o.status) ? (
                                                              <div className="flex items-center gap-3">
                                                                 <button 
                                                                     onClick={(e) => { e.stopPropagation(); handleAutoAssign(o.id); }}
@@ -335,7 +335,7 @@ const AdminOrders = () => {
                                                                                 </div>
                                                                             ) : (
                                                                                 <div className="flex flex-col gap-2">
-                                                                                    {['SHIPPED'].includes(child.status) && (
+                                                                                    {['CONFIRMED', 'PROCESSING', 'ORDER_PICKED', 'SHIPPED'].includes(child.status) && (
                                                                                         <div className="flex items-center gap-3">
                                                                                             <button 
                                                                                                 onClick={() => handleAutoAssign(child.id)}

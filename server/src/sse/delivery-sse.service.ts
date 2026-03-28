@@ -175,7 +175,7 @@ export class DeliverySseService implements OnModuleInit, OnModuleDestroy {
   }
 
   /** Notify ALL connected riders that an order has been claimed (remove from their UI). */
-  broadcastOrderClaimed(excludeRiderId: string, orderId: string): void {
+  broadcastOrderClaimed(excludeRiderId: string | null, orderId: string): void {
     const message: SSEMessage = {
       type: 'ORDER_CLAIMED',
       data: { orderId },

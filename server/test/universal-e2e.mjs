@@ -456,20 +456,22 @@ for (const storeType of STORE_TYPES) {
       console.log(`  ⚠️  [${storeType}] PROCESSING transition not available — skipping`);
     }
 
-    for (const nextStatus of ['ORDER_PICKED', 'SHIPPED']) {
+    for (const nextStatus of ['ORDER_PICKED']) {
       await step(`[${storeType}] Admin → ${nextStatus}`, async () => {
         const r = await api.patch(`/orders/admin/${orderIds[storeType]}/status`,
           { status: nextStatus }, auth(s.managerToken));
         assert(r.status === 200, `${r.status}: ${r.data?.message}`);
       });
     }
+    // NOTE: Manual patch to 'SHIPPED' is now blocked — must follow claim/accept flow
   }
 
   // Trigger delivery assignment
-  await step(`[${storeType}] Trigger delivery assignment`, async () => {
+  await step(`[${storeType}] Admin triggers auto-assign`, async () => {
     const r = await api.post(`/orders/admin/${orderIds[storeType]}/assign-delivery`, {}, auth(adminToken));
-    assert(r.status === 200 || r.status === 201 || r.status === 400 || r.status === 409,
-      `${r.status}: ${r.data?.message}`);
+    assert(r.status === 200 || r.status === 201 || r.status === 409, `${r.status}: ${r.data?.message}`);
+    // Check for the new dynamic success message
+    assert(r.data.message.includes('sent to') || r.data.message.includes('assigned to') || r.data.message.includes('already has'), `Wrong message: ${r.data.message}`);
   });
 }
 

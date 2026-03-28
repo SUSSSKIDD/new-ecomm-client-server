@@ -11,22 +11,18 @@ export class AutoAssignService {
     private readonly orderPool: OrderPoolService,
   ) { }
 
-  /**
-   * Broadcast an order to all nearby FREE riders for competitive claiming.
-   * Called after COD order confirmed or Razorpay payment verified.
-   */
-  async assignOrder(orderId: string): Promise<void> {
-    await this.orderPool.broadcastOrder(orderId);
+  async assignOrder(orderId: string): Promise<number> {
+    return this.orderPool.broadcastOrder(orderId);
   }
 
   /**
    * When a rider becomes FREE, broadcast all unassigned ORDER_PICKED orders to them.
    */
   async checkPendingOrders(personId: string): Promise<void> {
-    // Find unassigned ORDER_PICKED orders
+    // Find unassigned pending/processing/picked orders
     const unassigned = await this.prisma.order.findMany({
       where: {
-        status: 'ORDER_PICKED',
+        status: { in: ['CONFIRMED', 'PROCESSING', 'ORDER_PICKED'] },
         assignment: null,
         isParent: false, // Exclude parent orders — children get their own assignments
         items: { some: { storeId: { not: null } } },

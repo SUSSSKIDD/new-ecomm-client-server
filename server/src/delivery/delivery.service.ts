@@ -241,9 +241,13 @@ export class DeliveryService {
 
         if (status === DeliveryPersonStatus.DUTY_OFF) {
             await this.riderRedis.setRiderOffline(personId);
+            await this.cache.geoRemove('riders_location', personId);
         } else if (status === DeliveryPersonStatus.FREE && person.lat && person.lng) {
-            await this.riderRedis.setRiderOnline(personId);
-            await this.riderRedis.setRiderLocation(personId, person.lat, person.lng);
+            await Promise.all([
+                this.riderRedis.setRiderOnline(personId),
+                this.riderRedis.setRiderLocation(personId, person.lat, person.lng),
+                this.cache.geoAdd('riders_location', person.lng, person.lat, personId),
+            ]);
         }
 
         this.logger.log(`Delivery person ${updated.name} set to ${status}`);

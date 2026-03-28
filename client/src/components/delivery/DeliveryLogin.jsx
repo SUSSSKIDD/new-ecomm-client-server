@@ -18,8 +18,9 @@ const DeliveryLogin = () => {
         setLoading(true);
 
         try {
+            const formattedPhone = phone.startsWith('+91') ? phone : `+91${phone}`;
             const res = await axios.post(`${API_URL}/delivery/auth/login`, {
-                phone,
+                phone: formattedPhone,
                 pin,
             });
             localStorage.setItem('delivery_token', res.data.access_token);
@@ -50,14 +51,21 @@ const DeliveryLogin = () => {
                 <form onSubmit={handleSubmit} className="bg-white rounded-2xl shadow-xl shadow-gray-200/50 p-6 space-y-5">
                     <div>
                         <label className="block text-xs font-bold text-gray-600 uppercase tracking-wide mb-2">Phone Number</label>
-                        <input
-                            type="tel"
-                            value={phone}
-                            onChange={(e) => setPhone(e.target.value)}
-                            placeholder="+919876543210"
-                            required
-                            className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all"
-                        />
+                        <div className="relative">
+                            <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500 font-bold text-sm">+91</span>
+                            <input
+                                type="tel"
+                                value={phone.replace('+91', '')}
+                                onChange={(e) => {
+                                    const val = e.target.value.replace(/\D/g, '').slice(0, 10);
+                                    setPhone('+91' + val);
+                                }}
+                                placeholder="9876543210"
+                                maxLength={10}
+                                required
+                                className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all font-medium tracking-wider"
+                            />
+                        </div>
                     </div>
 
                     <div>

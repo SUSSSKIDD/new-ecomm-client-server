@@ -233,6 +233,9 @@ const DeliveryDashboard = () => {
             showToast('Failed to update status');
         } finally {
             setStatusLoading(false);
+            if (newStatus !== 'FREE') {
+                setAvailableOrders([]);
+            }
         }
     };
 
@@ -468,7 +471,7 @@ const DeliveryDashboard = () => {
                 {activeTab === 'active' ? (
                     <>
                         {/* Available Orders (Accept/Reject) */}
-                        {availableOrders.length > 0 && (
+                        {availableOrders.length > 0 && status === 'FREE' && (
                             <section>
                                 <h2 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-3 flex items-center gap-2">
                                     <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span>
