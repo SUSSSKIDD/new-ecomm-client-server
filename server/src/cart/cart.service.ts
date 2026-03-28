@@ -49,6 +49,7 @@ export class CartService {
     const [product, maxStoreResult] = await Promise.all([
       this.prisma.product.findUnique({
         where: { id: dto.productId },
+        include: { store: true },
       }),
       this.prisma.storeInventory.aggregate({
         where: { productId: dto.productId },
@@ -84,6 +85,25 @@ export class CartService {
     }
 
     const cart = await this.getCart(userId);
+
+    // Cross-Category Validation: All items in cart must share the same storeType
+    if (cart.items.length > 0) {
+      // Fetch storeType of one existing item (sample first item)
+      const firstItem = cart.items[0];
+      const existingProduct = await this.prisma.product.findUnique({
+        where: { id: firstItem.productId },
+        include: { store: true },
+      });
+      
+      const existingType = existingProduct?.store?.storeType || 'GROCERY';
+      const newType = product.store?.storeType || 'GROCERY';
+      
+      if (existingType !== newType) {
+        throw new BadRequestException(
+          `Cannot add ${newType} items to a cart containing ${existingType} items. Please clear your cart first.`,
+        );
+      }
+    }
     const existingIndex = cart.items.findIndex(
       (item) => item.productId === dto.productId,
     );

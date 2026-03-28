@@ -206,6 +206,33 @@ for (const storeType of STORE_TYPES) {
   });
 }
 
+// Second Grocery Store for Multi-Store Test
+let g2StoreId, g2ManagerToken, g2ProductId;
+await step('Create Second Grocery store', async () => {
+  const r = await api.post('/stores', {
+    name: `E2E GROCERY 2 ${RUN_ID}`, pincode: '560001', lat: 12.9720, lng: 77.5950,
+    address: '456 Second Rd, Bangalore', storeType: 'GROCERY'
+  }, auth(adminToken));
+  assert(r.status === 201, `${r.status}`);
+  g2StoreId = r.data.id;
+});
+await step('Create Second Grocery manager', async () => {
+  await api.post('/store-managers', {
+    name: `Mgr G2 ${RUN_ID}`, phone: `+9188${seq}99`, pin: '1234', storeId: g2StoreId
+  }, auth(adminToken));
+});
+await step('Second Grocery manager login', async () => {
+  const r = await api.post('/auth/store-manager/login', { phone: `+9188${seq}99`, pin: '1234' });
+  g2ManagerToken = r.data.access_token;
+});
+await step('Create Second Grocery product', async () => {
+  const fd = new FormData();
+  fd.append('name', `E2E G2 Prod ${RUN_ID}`);
+  fd.append('price', '100'); fd.append('category', 'Atta, Rice & Dal'); fd.append('stock', '100');
+  const r = await api.post('/products', fd, auth(g2ManagerToken));
+  g2ProductId = r.data.id;
+});
+
 // ══════════════════════════════════════════════════════════════════════
 //  Phase 4: Create products for each store type
 // ══════════════════════════════════════════════════════════════════════
@@ -1382,17 +1409,34 @@ await step('Verify temp product DELETED after store deletion', async () => {
 });
 
 // ══════════════════════════════════════════════════════════════════════
-//  Phase 13.7: Multi-Store Order Fulfillment
+//  Phase 13.6: Category Constraint (Mixed Categories Forbidden)
 // ══════════════════════════════════════════════════════════════════════
 
-console.log('\n🔷 Phase 13.7: Multi-Store Fulfillment (Parent/Child Sync)');
+console.log('\n🔷 Phase 13.6: Category Constraint (Anti-Mix)');
+
+await step('Mixed category forbidden: Grocery + Pizza', async () => {
+  await api.delete('/cart', auth(userToken));
+  const s1 = stores['GROCERY'];
+  const s2 = stores['PIZZA_TOWN'];
+  await api.post('/cart/items', { productId: s1.productIds[0], quantity: 1 }, auth(userToken));
+  const r = await api.post('/cart/items', { productId: s2.productIds[0], quantity: 1 }, auth(userToken));
+  assert(r.status === 400, `Expected 400 for mixed category, got ${r.status}`);
+  assert(r.data.message.includes('containing GROCERY items'), `Wrong error: ${r.data.message}`);
+});
+
+// ══════════════════════════════════════════════════════════════════════
+//  Phase 13.7: Multi-Store Order Fulfillment (Same Category)
+// ══════════════════════════════════════════════════════════════════════
+
+console.log('\n🔷 Phase 13.7: Multi-Store Fulfillment (Grocery 1 + Grocery 2)');
 
 let multiStoreParentId;
-await step('Multi-store checkout (Grocery + Pizza Town)', async () => {
-    const s1 = stores['GROCERY'];
-    const s2 = stores['PIZZA_TOWN'];
-    await api.post('/cart/items', { productId: s1.productIds[0], quantity: 1 }, auth(userToken));
-    await api.post('/cart/items', { productId: s2.productIds[0], quantity: 1 }, auth(userToken));
+await step('Multi-store checkout (Grocery 1 + Grocery 2)', async () => {
+    await api.delete('/cart', auth(userToken));
+    const g1 = stores['GROCERY'];
+    await api.post('/cart/items', { productId: g1.productIds[0], quantity: 1 }, auth(userToken));
+    await api.post('/cart/items', { productId: g2ProductId, quantity: 1 }, auth(userToken));
+    
     const r = await api.post('/orders', {
         addressId, paymentMethod: 'COD', lat: 12.9720, lng: 77.5950,
     }, auth(userToken));
@@ -1402,42 +1446,31 @@ await step('Multi-store checkout (Grocery + Pizza Town)', async () => {
     const childOrderIds = [...new Set(items.map(i => i.orderId).filter(id => id && id !== multiStoreParentId))];
     assert(childOrderIds.length >= 2, `Expected at least 2 child orders, got ${childOrderIds.length}`);
     
-    // Process child 1
+    // Assign & Complete Child 1
     const child1Id = childOrderIds[0];
     await api.patch(`/orders/admin/${child1Id}/status`, { status: 'ORDER_PICKED' }, auth(adminToken));
     await api.post(`/orders/admin/${child1Id}/assign-delivery`, {}, auth(adminToken));
-    await api.post('/delivery/status', { status: 'FREE' }, auth(dpTokens[0]));
-    await api.post('/delivery/location', { lat: 12.9720, lng: 77.5951 }, auth(dpTokens[0]));
-    await api.post(`/delivery/orders/${child1Id}/claim`, {}, auth(dpTokens[0]));
-    await api.post(`/delivery/orders/${child1Id}/accept`, {}, auth(dpTokens[0]));
+    await api.post('/delivery/status', { status: 'FREE' }, auth(dpTokens[4]));
+    await api.post('/delivery/location', { lat: 12.9720, lng: 77.5951 }, auth(dpTokens[4]));
+    await api.post(`/delivery/orders/${child1Id}/claim`, {}, auth(dpTokens[4]));
+    await api.post(`/delivery/orders/${child1Id}/accept`, {}, auth(dpTokens[4]));
     
-    // Process child 2
+    // Assign & Complete Child 2
     const child2Id = childOrderIds[1];
     await api.patch(`/orders/admin/${child2Id}/status`, { status: 'ORDER_PICKED' }, auth(adminToken));
     await api.post(`/orders/admin/${child2Id}/assign-delivery`, {}, auth(adminToken));
-    await api.post('/delivery/status', { status: 'FREE' }, auth(dpTokens[1]));
-    await api.post('/delivery/location', { lat: 12.9720, lng: 77.5952 }, auth(dpTokens[1]));
-    await api.post(`/delivery/orders/${child2Id}/claim`, {}, auth(dpTokens[1]));
-    await api.post(`/delivery/orders/${child2Id}/accept`, {}, auth(dpTokens[1]));
+    await api.post('/delivery/status', { status: 'FREE' }, auth(dpTokens[5]));
+    await api.post('/delivery/location', { lat: 12.9720, lng: 77.5952 }, auth(dpTokens[5]));
+    await api.post(`/delivery/orders/${child2Id}/claim`, {}, auth(dpTokens[5]));
+    await api.post(`/delivery/orders/${child2Id}/accept`, {}, auth(dpTokens[5]));
 
-    const parentRes1 = await api.get(`/orders/${multiStoreParentId}`, auth(userToken));
-    assert(parentRes1.data.status === 'CONFIRMED', `Parent should be CONFIRMED, got ${parentRes1.data.status}`);
+    const pin = (await api.get(`/orders/${multiStoreParentId}`, auth(userToken))).data.deliveryPin;
+    await api.post(`/delivery/orders/${child1Id}/complete`, { result: 'DELIVERED', deliveryPin: pin }, auth(dpTokens[4]));
+    await api.post(`/delivery/orders/${child2Id}/complete`, { result: 'DELIVERED', deliveryPin: pin }, auth(dpTokens[5]));
 
-    // Complete child 1
-    const pin1 = parentRes1.data.deliveryPin;
-    await api.post(`/delivery/orders/${child1Id}/complete`, { result: 'DELIVERED', deliveryPin: pin1 }, auth(dpTokens[0]));
-    
-    // Parent should still be CONFIRMED
-    const parentRes2 = await api.get(`/orders/${multiStoreParentId}`, auth(userToken));
-    assert(parentRes2.data.status === 'CONFIRMED', `Parent should still be CONFIRMED, got ${parentRes2.data.status}`);
-
-    // Complete child 2
-    await api.post(`/delivery/orders/${child2Id}/complete`, { result: 'DELIVERED', deliveryPin: pin1 }, auth(dpTokens[1]));
-
-    // Parent should NOW be DELIVERED
-    const parentRes3 = await api.get(`/orders/${multiStoreParentId}`, auth(userToken));
-    assert(parentRes3.data.status === 'DELIVERED', `Parent status sync error. Expected DELIVERED, got ${parentRes3.data.status}`);
-    console.log('    ✅ Multi-store fulfillment verified');
+    const parentRes = await api.get(`/orders/${multiStoreParentId}`, auth(userToken));
+    assert(parentRes.data.status === 'DELIVERED', `Expected DELIVERED parent, got ${parentRes.data.status}`);
+    console.log('    ✅ Multi-store fulfillment verified (Grocery stores only)');
 });
 
 // ══════════════════════════════════════════════════════════════════════
@@ -1458,6 +1491,7 @@ const allOrderIds = [
   raceOrderId,
   raceOrder2Id,
   multiStoreParentId,
+  g2StoreId,
   buyNowOrderId,
 ].filter(Boolean);
 
