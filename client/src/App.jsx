@@ -5,7 +5,7 @@ import { LocationProvider } from './context/LocationContext';
 import { CartProvider } from './context/CartContext';
 import { CategoryProvider } from './context/CategoryContext';
 import ErrorBoundary from './components/ErrorBoundary';
-import { Routes, Route } from 'react-router-dom';
+import { Routes, Route, Navigate } from 'react-router-dom';
 import { Suspense, lazy } from 'react';
 
 const ProductDetails = lazy(() => import('./views/ProductDetails'));
@@ -41,7 +41,12 @@ function App() {
                   </div>
                 }>
                   <Routes>
-                    <Route path="/" element={<UnitedDealsHome />} />
+                    {/* Build-type based entry point redirection */}
+                    {import.meta.env.VITE_APP_TYPE === 'DELIVERY' ? (
+                      <Route index element={<Navigate to="/delivery/login" replace />} />
+                    ) : (
+                      <Route path="/" element={<UnitedDealsHome />} />
+                    )}
                     <Route path="/product/:id" element={<ProductDetails />} />
                     <Route path="/legal" element={<LegalPage />} />
                     <Route path="/delivery/login" element={<DeliveryLogin />} />

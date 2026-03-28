@@ -22,3 +22,8 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+android/
+ios/
+capacitor.config.json
+capacitor.delivery.json
+capacitor.user.json

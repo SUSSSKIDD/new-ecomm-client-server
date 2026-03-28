@@ -7,7 +7,16 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "cap:link:user": "rm -rf android ios capacitor.config.json && ln -sf ../app/android/user android && ln -sf ../app/ios/user ios && ln -sf capacitor.user.json capacitor.config.json",
+    "cap:link:delivery": "rm -rf android ios capacitor.config.json && ln -sf ../app/android/delivery android && ln -sf ../app/ios/delivery ios && ln -sf capacitor.delivery.json capacitor.config.json",
+    "cap:sync:user": "cross-env VITE_APP_TYPE=USER npm run build && npm run cap:link:user && npx cap sync",
+    "cap:sync:delivery": "cross-env VITE_APP_TYPE=DELIVERY npm run build && npm run cap:link:delivery && npx cap sync",
+    "cap:sync:all": "npm run cap:sync:user && npm run cap:sync:delivery",
+    "cap:run:user": "npm run cap:link:user && npx cap run android",
+    "cap:run:delivery": "npm run cap:link:delivery && npx cap run android",
+    "cap:open:user": "npm run cap:link:user && npx cap open android",
+    "cap:open:delivery": "npm run cap:link:delivery && npx cap open android"
   },
   "dependencies": {
     "@motionone/utils": "^10.18.0",
@@ -25,11 +34,16 @@
     "tailwind-merge": "^3.5.0"
   },
   "devDependencies": {
+    "@capacitor/android": "^8.3.0",
+    "@capacitor/cli": "^8.3.0",
+    "@capacitor/core": "^8.3.0",
+    "@capacitor/ios": "^8.3.0",
     "@eslint/js": "^9.39.1",
     "@types/react": "^19.2.5",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.1.1",
     "autoprefixer": "^10.4.24",
+    "cross-env": "^10.1.0",
     "eslint": "^9.39.1",
     "eslint-plugin-react": "^7.34.2",
     "eslint-plugin-react-hooks": "^7.0.1",
