@@ -5,12 +5,30 @@ on:
     branches: [ "main" ]
 
 jobs:
+  check_changes:
+    name: Check for Server Changes
+    runs-on: ubuntu-latest
+    outputs:
+      server: ${{ steps.filter.outputs.server }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Filter Server Changes
+        uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            server:
+              - 'server/**'
+
   test:
     name: Run E2E Tests
+    needs: check_changes
+    if: needs.check_changes.outputs.server == 'true'
     runs-on: ubuntu-latest
     
     # We only need Redis locally for the BullMQ queues and cache.
-    # We do NOT spin up Postgres here. We use the external TEST Supabase.
     services:
       redis:
         image: redis:7-alpine
@@ -39,11 +57,8 @@ jobs:
           DIRECT_URL: ${{ secrets.TEST_DIRECT_URL }}
         run: |
           cd server
-          # Ensure schema is pushed to the test database
           npx prisma db push --accept-data-loss
-          # Generate the Prisma types
           npx prisma generate
-          # Seed test data
           node seed.mjs
 
       - name: Run E2E Tests
@@ -64,23 +79,20 @@ jobs:
           MSG91_AUTH_KEY: mock_key
         run: |
           cd server
-          # Start server in background
           npm run start:dev &
-          
-          # Wait for server to be healthy
           echo "Waiting for backend to start..."
           until curl -s http://localhost:3000/ > /dev/null; do
             sleep 2
           done
-          
-          # Run the E2E script (Testing + Native Cleanup)
           node test/universal-e2e.mjs http://localhost:3000
-
-  # DELETED build-and-push job as we now build directly on the VPS for privacy and performance.
 
   deploy:
     name: Zero-Downtime VPS Deployment
-    needs: test
+    needs: [check_changes, test]
+    if: |
+      always() && 
+      needs.check_changes.result == 'success' && 
+      (needs.test.result == 'success' || needs.test.result == 'skipped')
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code
@@ -95,8 +107,6 @@ jobs:
           source: "server/,client/,scripts/,docker-compose.prod.yml"
           target: "/opt/neyokart"
 
-      # docker-compose.prod.yml is already included in the source copy above.
-
       - name: Execute Deployment Script via SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -104,8 +114,6 @@ jobs:
           username: ${{ secrets.VPS_USER }}
           key: ${{ secrets.VPS_SSH_KEY }}
           script: |
-            # Ensure script is executable
             chmod +x /opt/neyokart/scripts/deployment/deploy.sh
             cd /opt/neyokart
-            # Triggers local build and blue/green swap
             bash ./scripts/deployment/deploy.sh
