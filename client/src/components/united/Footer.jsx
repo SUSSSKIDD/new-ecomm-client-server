@@ -2,35 +2,30 @@ import { Link } from 'react-router-dom';
 
 const Footer = ({ className = "" }) => {
     return (
-        <div className={`bg-ud-dark text-white py-12 px-6 mt-auto ${className}`}>
-            <div className="max-w-2xl mx-auto flex flex-col items-center gap-4">
-                <div className="flex flex-col items-center gap-1.5 mb-2">
-                    <p className="text-[10px] font-black text-green-400 tracking-[0.4em] uppercase">NEYOKART</p>
-                    <div className="w-12 h-0.5 bg-ud-primary rounded-full"></div>
-                </div>
+        <footer className={`bg-[#0a0f18] text-gray-400 py-8 px-6 mt-auto border-t border-gray-800/50 ${className}`}>
+            <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-8">
                 
-                <p className="text-xs text-gray-400 text-center leading-relaxed font-medium max-w-sm">
-                    Your neighborhood delivery partner — Serving Groceries, Prints &amp; Parcels direct to your doorstep.
-                </p>
-
-                <div className="flex flex-wrap justify-center gap-x-4 gap-y-2 mt-4">
-                    <Link to="/legal#terms" className="text-[10px] text-gray-500 hover:text-white uppercase tracking-wider font-bold transition-colors">Terms &amp; Conditions</Link>
-                    <span className="text-gray-800 text-xs hidden sm:inline">•</span>
-                    <Link to="/legal#privacy" className="text-[10px] text-gray-500 hover:text-white uppercase tracking-wider font-bold transition-colors">Privacy Policy</Link>
-                    <span className="text-gray-800 text-xs hidden sm:inline">•</span>
-                    <Link to="/legal#shipping" className="text-[10px] text-gray-500 hover:text-white uppercase tracking-wider font-bold transition-colors">Shipping Policy</Link>
-                    <span className="text-gray-800 text-xs hidden sm:inline">•</span>
-                    <Link to="/legal#refunds" className="text-[10px] text-gray-500 hover:text-white uppercase tracking-wider font-bold transition-colors">Cancellations &amp; Refunds</Link>
-                    <span className="text-gray-800 text-xs hidden sm:inline">•</span>
-                    <Link to="/legal#contact" className="text-[10px] text-gray-500 hover:text-white uppercase tracking-wider font-bold transition-colors">Contact Us</Link>
+                {/* Policy Links */}
+                <div className="flex flex-col md:flex-row items-center gap-x-8 gap-y-3">
+                    <h4 className="text-white text-[10px] font-black uppercase tracking-widest md:mr-4">Policies</h4>
+                    <div className="flex flex-wrap justify-center gap-x-4 gap-y-2 text-[10px] uppercase font-bold tracking-wider">
+                        <Link to="/legal#terms" className="hover:text-white transition-colors">Terms</Link>
+                        <Link to="/legal#privacy" className="hover:text-white transition-colors">Privacy</Link>
+                        <Link to="/legal#refunds" className="hover:text-white transition-colors">Refunds</Link>
+                        <Link to="/legal#shipping" className="hover:text-white transition-colors">Shipping</Link>
+                    </div>
                 </div>
 
-                <div className="flex flex-col items-center gap-1 mt-8">
-                    <p className="text-[8px] text-gray-600 uppercase tracking-widest">Powered by Advanced Logistics</p>
-                    <p className="text-[10px] text-gray-500 font-medium opacity-50">© 2026 NEYOKART. All rights reserved.</p>
+                {/* Support & Legal */}
+                <div className="flex flex-col md:flex-row items-center gap-x-8 gap-y-3">
+                    <div className="flex items-center gap-4 text-[10px] uppercase font-bold tracking-wider">
+                        <Link to="/legal#contact" className="text-white hover:text-ud-primary transition-colors">Contact Us</Link>
+                        <span className="text-gray-800 hidden md:inline">|</span>
+                        <p className="text-gray-600 opacity-60">© 2026 NEYOKART</p>
+                    </div>
                 </div>
             </div>
-        </div>
+        </footer>
     );
 };
 
