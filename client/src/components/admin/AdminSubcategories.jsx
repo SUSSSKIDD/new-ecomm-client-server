@@ -73,18 +73,15 @@ const AdminSubcategories = () => {
         e.preventDefault();
         const trimmed = newName.trim();
         if (!trimmed) return;
+        if (!isAdmin) return;
 
         setCreating(true);
         setError('');
         try {
-            if (isAdmin) {
-                await adminApi().post('/stores/subcategories/custom/admin', {
-                    storeType: selectedStoreType,
-                    name: trimmed,
-                });
-            } else {
-                await adminApi().post('/stores/subcategories/custom', { name: trimmed });
-            }
+            await adminApi().post('/stores/subcategories/custom/admin', {
+                storeType: selectedStoreType,
+                name: trimmed,
+            });
             setNewName('');
             fetchCustomSubs();
         } catch (err) {
@@ -95,7 +92,8 @@ const AdminSubcategories = () => {
     };
 
     const handleDelete = async (id, name) => {
-        if (!window.confirm(`Delete subcategory "${name}"? Products using it will keep their current category.`)) return;
+        if (!isAdmin) return;
+        if (!window.confirm(`CAUTION: Deleting subcategory "${name}" will PERMANENTLY delete all products belonging to it. This action cannot be undone. \n\nAre you sure?`)) return;
         try {
             await adminApi().delete(`/stores/subcategories/custom/${id}`);
             fetchCustomSubs();
@@ -105,6 +103,7 @@ const AdminSubcategories = () => {
     };
 
     const handleUploadTypeChange = async (subcategory, uploadType) => {
+        if (!isAdmin) return;
         setSavingConfig(subcategory);
         try {
             await adminApi().put('/stores/category-config', {
@@ -138,7 +137,7 @@ const AdminSubcategories = () => {
                     <select
                         value={selectedStoreType}
                         onChange={e => setSelectedStoreType(e.target.value)}
-                        className="border border-gray-300 rounded px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-ud-primary"
+                        className="border border-gray-300 rounded px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-ud-primary cursor-pointer"
                     >
                         {STORE_CATEGORIES.map(st => (
                             <option key={st} value={st}>{STORE_CATEGORY_LABELS[st] || st}</option>
@@ -147,32 +146,34 @@ const AdminSubcategories = () => {
                 )}
             </div>
 
-            {/* Add new subcategory */}
-            <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
-                <h2 className="text-sm font-bold text-gray-700 uppercase mb-3">
-                    Add New Subcategory {!isAdmin && `to ${storeTypeLabel}`}
-                </h2>
-                <form onSubmit={handleCreate} className="flex gap-3 items-start">
-                    <div className="flex-1">
-                        <input
-                            type="text"
-                            value={newName}
-                            onChange={e => { setNewName(e.target.value); if (error) setError(''); }}
-                            placeholder="Enter subcategory name..."
-                            className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ud-primary text-gray-900"
-                            maxLength={100}
-                        />
-                        {error && <p className="text-red-500 text-xs mt-1">{error}</p>}
-                    </div>
-                    <RippleButton
-                        type="submit"
-                        disabled={creating || !newName.trim()}
-                        className="bg-ud-primary text-white px-4 py-2 rounded text-sm hover:bg-ud-primary/90 disabled:opacity-50 transition-colors font-medium whitespace-nowrap"
-                    >
-                        {creating ? 'Adding...' : 'Add Subcategory'}
-                    </RippleButton>
-                </form>
-            </div>
+            {/* Add new subcategory — SuperAdmin Only */}
+            {isAdmin && (
+                <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
+                    <h2 className="text-sm font-bold text-gray-700 uppercase mb-3">
+                        Add New Subcategory to {storeTypeLabel}
+                    </h2>
+                    <form onSubmit={handleCreate} className="flex gap-3 items-start">
+                        <div className="flex-1">
+                            <input
+                                type="text"
+                                value={newName}
+                                onChange={e => { setNewName(e.target.value); if (error) setError(''); }}
+                                placeholder="Enter subcategory name..."
+                                className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ud-primary text-gray-900"
+                                maxLength={100}
+                            />
+                            {error && <p className="text-red-500 text-xs mt-1">{error}</p>}
+                        </div>
+                        <RippleButton
+                            type="submit"
+                            disabled={creating || !newName.trim()}
+                            className="bg-ud-primary text-white px-4 py-2 rounded text-sm hover:bg-ud-primary/90 disabled:opacity-50 transition-colors font-medium whitespace-nowrap"
+                        >
+                            {creating ? 'Adding...' : 'Add Subcategory'}
+                        </RippleButton>
+                    </form>
+                </div>
+            )}
 
             {loading ? (
                 <div className="text-center p-10 animate-pulse text-gray-500">Loading subcategories...</div>
@@ -198,106 +199,108 @@ const AdminSubcategories = () => {
                                             <div key={name} className="flex items-center justify-between py-2 px-3 rounded-lg hover:bg-gray-50">
                                                 <span className="text-sm font-medium text-gray-800">{name}</span>
                                                 <div className="flex items-center gap-2">
-                                                    {isSaving && (
-                                                        <span className="text-xs text-gray-400 animate-pulse">Saving...</span>
-                                                    )}
-                                                    <select
-                                                        value={currentType}
-                                                        onChange={e => handleUploadTypeChange(name, e.target.value)}
-                                                        disabled={isSaving}
-                                                        className={`text-xs px-2 py-1 rounded border font-medium transition-colors ${
-                                                            currentType === 'PHOTO_UPLOAD' ? 'border-blue-300 bg-blue-50 text-blue-700' :
-                                                            currentType === 'DESIGN_UPLOAD' ? 'border-purple-300 bg-purple-50 text-purple-700' :
-                                                            'border-gray-200 bg-gray-50 text-gray-500'
-                                                        } ${isSaving ? 'opacity-50' : ''}`}
-                                                    >
-                                                        {UPLOAD_TYPE_OPTIONS.map(opt => (
-                                                            <option key={opt.value} value={opt.value}>{opt.label}</option>
-                                                        ))}
-                                                    </select>
-                                                </div>
-                                            </div>
-                                        );
-                                    })}
-                                    {allSubcategories.length === 0 && (
-                                        <p className="text-sm text-gray-400">No subcategories to configure.</p>
-                                    )}
-                                </div>
-                            </div>
-                        </div>
-                    )}
+                                                     {isSaving && (
+                                                         <span className="text-xs text-gray-400 animate-pulse">Saving...</span>
+                                                     )}
+                                                     <select
+                                                         value={currentType}
+                                                         onChange={e => handleUploadTypeChange(name, e.target.value)}
+                                                         disabled={isSaving || !isAdmin}
+                                                         className={`text-xs px-2 py-1 rounded border font-medium transition-colors ${
+                                                             currentType === 'PHOTO_UPLOAD' ? 'border-blue-300 bg-blue-50 text-blue-700' :
+                                                             currentType === 'DESIGN_UPLOAD' ? 'border-purple-300 bg-purple-50 text-purple-700' :
+                                                             'border-gray-200 bg-gray-50 text-gray-500'
+                                                         } ${(isSaving || !isAdmin) ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                                                     >
+                                                         {UPLOAD_TYPE_OPTIONS.map(opt => (
+                                                             <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                                         ))}
+                                                     </select>
+                                                 </div>
+                                             </div>
+                                         );
+                                     })}
+                                     {allSubcategories.length === 0 && (
+                                         <p className="text-sm text-gray-400">No subcategories to configure.</p>
+                                     )}
+                                 </div>
+                             </div>
+                         </div>
+                     )}
 
-                    {/* Default subcategories */}
-                    <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-                        <div className="px-6 py-4 bg-gray-50 border-b border-gray-200">
-                            <h2 className="text-sm font-bold text-gray-600 uppercase">
-                                Default Subcategories — {storeTypeLabel}
-                            </h2>
-                            <p className="text-xs text-gray-400 mt-0.5">These are built-in and cannot be removed</p>
-                        </div>
-                        <div className="p-6">
-                            <div className="flex flex-wrap gap-2">
-                                {staticSubs.map(name => {
-                                    const uploadType = getUploadType(name);
-                                    return (
-                                        <span key={name} className="px-3 py-1.5 bg-gray-100 text-gray-700 rounded-full text-sm font-medium inline-flex items-center gap-1.5">
-                                            {name}
-                                            {uploadType !== 'NONE' && (
-                                                <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold ${
-                                                    uploadType === 'PHOTO_UPLOAD' ? 'bg-blue-200 text-blue-700' : 'bg-purple-200 text-purple-700'
-                                                }`}>
-                                                    {uploadType === 'PHOTO_UPLOAD' ? 'Photo' : 'Design'}
-                                                </span>
-                                            )}
-                                        </span>
-                                    );
-                                })}
-                                {staticSubs.length === 0 && (
-                                    <p className="text-sm text-gray-400">No default subcategories for this store type.</p>
-                                )}
-                            </div>
-                        </div>
-                    </div>
+                     {/* Default subcategories */}
+                     <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+                         <div className="px-6 py-4 bg-gray-50 border-b border-gray-200">
+                             <h2 className="text-sm font-bold text-gray-600 uppercase">
+                                 Default Subcategories — {storeTypeLabel}
+                             </h2>
+                             <p className="text-xs text-gray-400 mt-0.5">These are built-in and cannot be removed</p>
+                         </div>
+                         <div className="p-6">
+                             <div className="flex flex-wrap gap-2">
+                                 {staticSubs.map(name => {
+                                     const uploadType = getUploadType(name);
+                                     return (
+                                         <span key={name} className="px-3 py-1.5 bg-gray-100 text-gray-700 rounded-full text-sm font-medium inline-flex items-center gap-1.5">
+                                             {name}
+                                             {uploadType !== 'NONE' && (
+                                                 <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold ${
+                                                     uploadType === 'PHOTO_UPLOAD' ? 'bg-blue-200 text-blue-700' : 'bg-purple-200 text-purple-700'
+                                                 }`}>
+                                                     {uploadType === 'PHOTO_UPLOAD' ? 'Photo' : 'Design'}
+                                                 </span>
+                                             )}
+                                         </span>
+                                     );
+                                 })}
+                                 {staticSubs.length === 0 && (
+                                     <p className="text-sm text-gray-400">No default subcategories for this store type.</p>
+                                 )}
+                             </div>
+                         </div>
+                     </div>
 
-                    {/* Custom subcategories */}
-                    <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-                        <div className="px-6 py-4 bg-emerald-50 border-b border-emerald-100">
-                            <h2 className="text-sm font-bold text-emerald-700 uppercase">
-                                Custom Subcategories — {storeTypeLabel}
-                            </h2>
-                            <p className="text-xs text-emerald-500 mt-0.5">Added by store managers. These appear in product creation and customer browsing.</p>
-                        </div>
-                        <div className="p-6">
-                            {customList.length === 0 ? (
-                                <p className="text-sm text-gray-400">No custom subcategories yet. Add one above.</p>
-                            ) : (
-                                <div className="flex flex-wrap gap-2">
-                                    {customList.map(sub => {
-                                        const uploadType = getUploadType(sub.name);
-                                        return (
-                                            <span key={sub.id} className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-100 text-emerald-800 rounded-full text-sm font-medium group">
-                                                {sub.name}
-                                                {uploadType !== 'NONE' && (
-                                                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold ${
-                                                        uploadType === 'PHOTO_UPLOAD' ? 'bg-blue-200 text-blue-700' : 'bg-purple-200 text-purple-700'
-                                                    }`}>
-                                                        {uploadType === 'PHOTO_UPLOAD' ? 'Photo' : 'Design'}
-                                                    </span>
-                                                )}
-                                                <button
-                                                    onClick={() => handleDelete(sub.id, sub.name)}
-                                                    className="w-4 h-4 flex items-center justify-center rounded-full text-emerald-500 hover:bg-red-100 hover:text-red-600 transition-colors opacity-0 group-hover:opacity-100"
-                                                    title="Delete"
-                                                >
-                                                    &times;
-                                                </button>
-                                            </span>
-                                        );
-                                    })}
-                                </div>
-                            )}
-                        </div>
-                    </div>
+                     {/* Custom subcategories */}
+                     <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+                         <div className="px-6 py-4 bg-emerald-50 border-b border-emerald-100">
+                             <h2 className="text-sm font-bold text-emerald-700 uppercase">
+                                 Custom Subcategories — {storeTypeLabel}
+                             </h2>
+                             <p className="text-xs text-emerald-500 mt-0.5">Added by superadmins. These appear in product creation and customer browsing.</p>
+                         </div>
+                         <div className="p-6">
+                             {customList.length === 0 ? (
+                                 <p className="text-sm text-gray-400">No custom subcategories yet. Add one above.</p>
+                             ) : (
+                                 <div className="flex flex-wrap gap-2">
+                                     {customList.map(sub => {
+                                         const uploadType = getUploadType(sub.name);
+                                         return (
+                                             <span key={sub.id} className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-100 text-emerald-800 rounded-full text-sm font-medium group">
+                                                 {sub.name}
+                                                 {uploadType !== 'NONE' && (
+                                                     <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold ${
+                                                         uploadType === 'PHOTO_UPLOAD' ? 'bg-blue-200 text-blue-700' : 'bg-purple-200 text-purple-700'
+                                                     }`}>
+                                                         {uploadType === 'PHOTO_UPLOAD' ? 'Photo' : 'Design'}
+                                                     </span>
+                                                 )}
+                                                 {isAdmin && (
+                                                     <button
+                                                         onClick={() => handleDelete(sub.id, sub.name)}
+                                                         className="w-4 h-4 flex items-center justify-center rounded-full text-emerald-500 hover:bg-red-100 hover:text-red-600 transition-colors opacity-0 group-hover:opacity-100"
+                                                         title="Delete"
+                                                     >
+                                                         &times;
+                                                     </button>
+                                                 )}
+                                             </span>
+                                         );
+                                     })}
+                                 </div>
+                             )}
+                         </div>
+                     </div>
                 </div>
             )}
         </div>

@@ -1,6 +1,7 @@
 import { TextMarquee } from '../../components/ui/text-marquee';
 import { useCategory } from '../../context/CategoryContext';
-import { useLocation } from '../../context/LocationContext';
+import { useLocation as useDeviceLocation } from '../../context/LocationContext';
+import { useLocation as useRouterLocation, useNavigate } from 'react-router-dom';
 import { NAV_ITEMS } from '../../constants';
 
 import HeaderLogo from './header/HeaderLogo';
@@ -16,10 +17,29 @@ function getDeliveryTime(distanceKm) {
 }
 
 const Header = () => {
-    const { selectedCategory, setSelectedCategory, cart, setIsCartOpen, setActivePage } = useCategory();
-    const { nearestStore, serviceable, locationStatus, requestLocation } = useLocation();
+    const { selectedCategory, setSelectedCategory, cart, setIsCartOpen, setActivePage, setSelectedProduct } = useCategory();
+    const { nearestStore, serviceable, locationStatus, requestLocation } = useDeviceLocation();
+    const routerLocation = useRouterLocation();
+    const navigate = useNavigate();
 
     const deliveryMins = nearestStore ? getDeliveryTime(nearestStore.distance) : null;
+
+    const handleCategorySelect = (cat) => {
+        setSelectedCategory(cat);
+        setSelectedProduct(null);
+        // If we are not on the home page, navigate back to home to show the category
+        if (routerLocation.pathname !== '/') {
+            navigate('/');
+        }
+    };
+
+    const handleLogoClick = () => {
+        setSelectedCategory('All');
+        setSelectedProduct(null);
+        if (routerLocation.pathname !== '/') {
+            navigate('/');
+        }
+    };
 
     return (
         <div className="bg-white shadow-sm sticky top-0 z-50">
@@ -59,7 +79,7 @@ const Header = () => {
 
             {/* 1. Main Header Row: Logo and Icons */}
             <div className="container mx-auto px-4 py-3 flex items-center justify-between">
-                <HeaderLogo onReset={() => setSelectedCategory('All')} />
+                <HeaderLogo onReset={handleLogoClick} />
                 <HeaderActions
                     cartCount={cart.length}
                     onOpenCart={() => setIsCartOpen(true)}
@@ -74,7 +94,7 @@ const Header = () => {
             <HeaderNav
                 navItems={NAV_ITEMS}
                 selectedCategory={selectedCategory}
-                onSelectCategory={setSelectedCategory}
+                onSelectCategory={handleCategorySelect}
             />
         </div>
     );

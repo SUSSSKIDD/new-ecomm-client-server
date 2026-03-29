@@ -77,7 +77,7 @@ export class SubcategoryService {
   }
 
   /**
-   * Delete a custom subcategory by ID.
+   * Delete a custom subcategory by ID and all its related products & configs.
    */
   async remove(id: string) {
     const subcategory = await this.prisma.customSubcategory.findUnique({
@@ -87,9 +87,29 @@ export class SubcategoryService {
       throw new NotFoundException(`Subcategory ${id} not found`);
     }
 
-    await this.prisma.customSubcategory.delete({ where: { id } });
-    this.logger.log(`Custom subcategory deleted: "${subcategory.name}" from ${subcategory.storeType}`);
-    return { message: `Subcategory "${subcategory.name}" deleted`, id };
+    const { name, storeType } = subcategory;
+
+    // Cascade delete products and configs in a transaction
+    await this.prisma.$transaction([
+      this.prisma.product.deleteMany({
+        where: {
+          category: storeType,
+          subCategory: name,
+        },
+      }),
+      this.prisma.categoryConfig.deleteMany({
+        where: {
+          storeType,
+          subcategory: name,
+        },
+      }),
+      this.prisma.customSubcategory.delete({
+        where: { id },
+      }),
+    ]);
+
+    this.logger.log(`Custom subcategory and related products deleted: "${name}" from ${storeType}`);
+    return { message: `Subcategory "${name}" and its products deleted`, id };
   }
 
   /**

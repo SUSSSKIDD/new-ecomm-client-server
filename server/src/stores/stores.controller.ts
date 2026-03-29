@@ -205,13 +205,15 @@ export class StoresController {
   @Post('subcategories/custom')
   @ApiBearerAuth()
   @UseGuards(AuthGuard('jwt'), RolesGuard)
-  @Roles('STORE_MANAGER')
+  @Roles('ADMIN')
   @ApiOperation({ summary: 'Create custom subcategory for my store type' })
   async createCustomSubcategory(
     @Req() req: AuthenticatedRequest,
     @Body() dto: CreateCustomSubcategoryDto,
   ) {
-    const store = await this.storesService.findOne(req.user.storeId!);
+    const storeId = req.user.storeId;
+    if (!storeId) throw new BadRequestException('Store ID required');
+    const store = await this.storesService.findOne(storeId);
     return this.subcategoryService.create(store.storeType, dto.name);
   }
 
@@ -227,8 +229,8 @@ export class StoresController {
   @Delete('subcategories/custom/:id')
   @ApiBearerAuth()
   @UseGuards(AuthGuard('jwt'), RolesGuard)
-  @Roles('ADMIN', 'STORE_MANAGER')
-  @ApiOperation({ summary: 'Delete a custom subcategory' })
+  @Roles('ADMIN')
+  @ApiOperation({ summary: 'Delete a custom subcategory and all related products' })
   deleteCustomSubcategory(@Param('id', ParseUUIDPipe) id: string) {
     return this.subcategoryService.remove(id);
   }

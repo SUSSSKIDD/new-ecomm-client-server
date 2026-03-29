@@ -404,18 +404,12 @@ const ProductDetails = () => {
                                 </div>
                             )}
 
-                            {/* Additional Info */}
+                            {/* Additional Info (Aisle and Count hidden from users) */}
                             <div className="border-t border-gray-100 pt-6 space-y-3 text-sm text-gray-600">
-                                {product.storeLocation && (
-                                    <div className="flex justify-between">
-                                        <span>Aisle Location:</span>
-                                        <span className="font-medium text-gray-900">{product.storeLocation}</span>
-                                    </div>
-                                )}
                                 <div className="flex justify-between">
                                     <span>Stock Status:</span>
                                     <span className={`font-medium ${product.stock > 0 ? 'text-green-600' : 'text-red-600'}`}>
-                                        {product.stock > 0 ? 'In Stock' : 'Out of Stock'} ({product.stock} items)
+                                        {product.stock > 0 ? 'In Stock' : 'Out of Stock'}
                                     </span>
                                 </div>
                             </div>
