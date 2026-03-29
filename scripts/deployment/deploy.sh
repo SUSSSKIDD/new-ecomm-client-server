@@ -66,9 +66,9 @@ echo "✅ $NEW_COLOR is healthy!"
 
 # 4. Reload Nginx to perform the Zero-Downtime Swap
 echo "[4/6] Swapping Nginx upstream to port $NEW_PORT (Server) and $NEW_CLIENT (Client)..."
-# Correctly matches proxy_pass http://127.0.0.1:CURRENT in the Nginx config
-sudo sed -i "s/127.0.0.1:$OLD_PORT/127.0.0.1:$NEW_PORT/g" /etc/nginx/sites-available/neyokart
-sudo sed -i "s/127.0.0.1:$OLD_CLIENT/127.0.0.1:$NEW_CLIENT/g" /etc/nginx/sites-available/neyokart
+# More robust regex that matches either 127.0.0.1 or localhost
+sudo sed -i "s/\(127\.0\.0\.1\|localhost\):$OLD_PORT/\1:$NEW_PORT/g" /etc/nginx/sites-available/neyokart
+sudo sed -i "s/\(127\.0\.0\.1\|localhost\):$OLD_CLIENT/\1:$NEW_CLIENT/g" /etc/nginx/sites-available/neyokart
 
 # Safety check: Test Nginx configuration before reloading
 if ! sudo nginx -t; then

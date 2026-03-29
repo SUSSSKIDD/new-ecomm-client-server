@@ -15,7 +15,7 @@ const SubCategoryPage = () => {
     const navigate = useNavigate();
     const { selectedProduct, setSelectedProduct, setActiveSubCategory } = useCategory();
     const [allSubCategories, setAllSubCategories] = useState([]);
-    
+
     // Derived values from URL
     const mainCategory = decodeURIComponent(mainCat || '');
     const subCategory = decodeURIComponent(subCat || '');
@@ -30,7 +30,7 @@ const SubCategoryPage = () => {
             .then(r => r.json())
             .then(data => {
                 if (!data?.subcategories) return;
-                
+
                 // Map titles to store types (copied logic from HomeCategoryList)
                 const TITLE_TO_STORE_TYPE = {
                     'Grocery': 'GROCERY',
@@ -39,13 +39,13 @@ const SubCategoryPage = () => {
                     'Print Factory': 'DROP_IN_FACTORY',
                     'Auto Parts Shop': 'AUTO_PARTS_SHOP',
                 };
-                
+
                 const storeType = TITLE_TO_STORE_TYPE[mainCategory];
                 if (storeType && data.subcategories[storeType]) {
                     setAllSubCategories(data.subcategories[storeType]);
                 }
             })
-            .catch(() => {});
+            .catch(() => { });
     }, [mainCategory]);
 
     const handleBack = () => {
@@ -66,7 +66,7 @@ const SubCategoryPage = () => {
             <Header />
             <CartSidebar />
             <ProfileSidebar />
-            
+
             <div className="flex-1 w-full overflow-y-auto overscroll-none scroll-smooth flex flex-col">
                 {selectedProduct ? (
                     <ProductDetailView />
@@ -76,7 +76,7 @@ const SubCategoryPage = () => {
                         <div className="sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b border-gray-100 flex items-center px-4 md:px-6">
                             <div className="container mx-auto max-w-7xl flex items-center gap-4 py-3">
                                 {/* Back Button */}
-                                <button 
+                                <button
                                     onClick={handleBack}
                                     className="flex-shrink-0 flex items-center gap-2 text-ud-primary font-bold hover:text-ud-dark transition-all group border-r border-gray-200 pr-4 mr-2"
                                 >
@@ -94,11 +94,10 @@ const SubCategoryPage = () => {
                                         <button
                                             key={i}
                                             onClick={() => handleSubSwitch(sub)}
-                                            className={`flex-shrink-0 px-4 py-1.5 rounded-full text-[11px] font-black uppercase tracking-widest transition-all ${
-                                                sub === subCategory
+                                            className={`flex-shrink-0 px-4 py-1.5 rounded-full text-[11px] font-black uppercase tracking-widest transition-all ${sub === subCategory
                                                 ? 'bg-ud-primary text-white shadow-md shadow-blue-500/20 scale-105'
                                                 : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
-                                            }`}
+                                                }`}
                                         >
                                             {sub}
                                         </button>
@@ -124,7 +123,7 @@ const SubCategoryPage = () => {
                                         </p>
                                     </div>
                                 </div>
-                                
+
                                 {/* Product List Section */}
                                 <div className="p-6 md:p-10">
                                     <ProductGrid mainCategory={mainCategory} subCategory={subCategory} />
@@ -133,7 +132,7 @@ const SubCategoryPage = () => {
                         </div>
                     </div>
                 )}
-                
+
                 {/* Full Footer */}
                 {!selectedProduct && <Footer />}
             </div>

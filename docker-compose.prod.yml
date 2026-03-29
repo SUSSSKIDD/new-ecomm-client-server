@@ -33,6 +33,7 @@ services:
     env_file:
       - .env # Loads VPS Production Secrets
     environment:
+      - PORT=3000
       - REDIS_URL=redis://redis:6379
       - RIDER_REDIS_URL=redis://redis:6379
       - BULL_REDIS_HOST=redis
@@ -68,6 +69,7 @@ services:
     env_file:
       - .env # Loads VPS Production Secrets
     environment:
+      - PORT=3000
       - REDIS_URL=redis://redis:6379
       - RIDER_REDIS_URL=redis://redis:6379
       - BULL_REDIS_HOST=redis
