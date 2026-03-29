@@ -3,17 +3,18 @@ import PropTypes from 'prop-types';
 import { useCategory } from '../../context/CategoryContext';
 import { useProductList } from '../../hooks/useProductList';
 
-const ProductGrid = ({ mainCategory }) => {
+const ProductGrid = ({ mainCategory, subCategory }) => {
     const { activeSubCategory, addToCart, setSelectedProduct } = useCategory();
+    const effectiveSubCategory = subCategory || activeSubCategory;
 
     // Fetch products from API based on category/subcategory
     const { products, loading, error, hasMore, loadMore } = useProductList({
         category: mainCategory,
-        subCategory: activeSubCategory,
+        subCategory: effectiveSubCategory,
         limit: 8 // Load 8 at a time for better grid layout (2 rows of 4)
     });
 
-    if (!activeSubCategory) return null;
+    if (!effectiveSubCategory) return null;
 
     if (loading && products.length === 0) {
         return (
@@ -33,24 +34,24 @@ const ProductGrid = ({ mainCategory }) => {
 
     return (
         <div className="w-full py-2">
-            <h2 className="text-xl font-bold text-gray-900 mb-4">{activeSubCategory}</h2>
+            <h2 className="text-xl font-bold text-gray-900 mb-4">{effectiveSubCategory}</h2>
 
             {products.length === 0 ? (
                 <p className="text-gray-500 italic mt-4 text-center">No products found in this category.</p>
             ) : (
                 <>
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                         {products.map((product) => (
                             <div
                                 key={product.id}
-                                className="bg-white rounded-lg shadow-sm border border-gray-100 p-3 flex flex-col hover:shadow-md transition-shadow cursor-pointer"
-                                onClick={() => setSelectedProduct({ ...product, category: mainCategory })} // Ensure category context is passed
+                                className="bg-white rounded-lg shadow-sm border border-gray-100 p-4 flex gap-4 hover:shadow-md transition-all cursor-pointer relative"
+                                onClick={() => setSelectedProduct({ ...product, category: mainCategory })}
                             >
-                                <div className="h-28 w-full flex items-center justify-center mb-3 bg-gray-50 rounded-md overflow-hidden relative">
+                                <div className="h-24 w-24 shrink-0 flex items-center justify-center bg-gray-50 rounded-md overflow-hidden relative">
                                     {product.images?.[0] ? (
                                         <img src={product.images[0]} alt={product.name} className="h-full object-contain mix-blend-multiply" loading="lazy" />
                                     ) : (
-                                        <span className="text-gray-300 text-xs">No Image</span>
+                                        <span className="text-gray-300 text-[10px]">No Image</span>
                                     )}
                                     {/* Badge for stock */}
                                     {product.stock <= 0 && (
@@ -59,29 +60,36 @@ const ProductGrid = ({ mainCategory }) => {
                                         </div>
                                     )}
                                 </div>
-                                <h3 className="text-sm font-medium text-gray-900 line-clamp-2 mb-1 min-h-[40px]">{product.name}</h3>
-                                <div className="flex items-center justify-between mt-auto">
-                                    <div className="flex flex-col">
-                                        <span className="text-sm font-bold text-gray-900">₹{product.price}</span>
-                                        {product.mrp && product.mrp > product.price && (
-                                            <span className="text-[10px] text-gray-400 line-through">₹{product.mrp}</span>
-                                        )}
+
+                                <div className="flex-1 flex flex-col justify-between py-1 min-w-0">
+                                    <div>
+                                        <h3 className="text-sm font-bold text-gray-900 line-clamp-1 mb-1">{product.name}</h3>
+                                        <p className="text-xs text-gray-500 line-clamp-2 leading-tight">Authentic {product.name} from {mainCategory}</p>
                                     </div>
-                                    <RippleButton
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            if (product.stock > 0) {
-                                                addToCart(product, mainCategory);
-                                            }
-                                        }}
-                                        disabled={product.stock <= 0}
-                                        className={`px-3 py-1 text-xs font-bold rounded-full transition-colors ${product.stock > 0
-                                                ? 'bg-yellow-400 text-gray-900 hover:bg-yellow-500'
-                                                : 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                                            }`}
-                                    >
-                                        ADD
-                                    </RippleButton>
+                                    
+                                    <div className="flex items-center justify-between mt-auto">
+                                        <div className="flex flex-col">
+                                            <span className="text-base font-black text-gray-900">₹{product.price}</span>
+                                            {product.mrp && product.mrp > product.price && (
+                                                <span className="text-xs text-gray-400 line-through">₹{product.mrp}</span>
+                                            )}
+                                        </div>
+                                        <RippleButton
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                if (product.stock > 0) {
+                                                    addToCart(product, mainCategory);
+                                                }
+                                            }}
+                                            disabled={product.stock <= 0}
+                                            className={`px-5 py-2 text-xs font-bold rounded-lg transition-colors ${product.stock > 0
+                                                    ? 'bg-yellow-400 text-gray-900 hover:bg-yellow-500 shadow-sm'
+                                                    : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                                                }`}
+                                        >
+                                            ADD
+                                        </RippleButton>
+                                    </div>
                                 </div>
                             </div>
                         ))}
@@ -108,6 +116,7 @@ const ProductGrid = ({ mainCategory }) => {
 
 ProductGrid.propTypes = {
     mainCategory: PropTypes.string,
+    subCategory: PropTypes.string,
 };
 
 export default ProductGrid;

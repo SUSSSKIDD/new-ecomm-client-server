@@ -26,6 +26,7 @@ const AdminSubcategories = lazy(() => import('./components/admin/AdminSubcategor
 const AdminSubcategoryPhoto = lazy(() => import('./components/admin/AdminSubcategoryPhoto'));
 const AdminPrintProducts = lazy(() => import('./components/admin/AdminPrintProducts'));
 const LegalPage = lazy(() => import('./views/LegalPage'));
+const SubCategoryPage = lazy(() => import('./views/SubCategoryPage'));
 
 function App() {
   return (
@@ -48,6 +49,7 @@ function App() {
                       <Route path="/" element={<UnitedDealsHome />} />
                     )}
                     <Route path="/product/:id" element={<ProductDetails />} />
+                    <Route path="/category/:mainCat/:subCat" element={<SubCategoryPage />} />
                     <Route path="/legal" element={<LegalPage />} />
                     <Route path="/delivery/login" element={<DeliveryLogin />} />
                     <Route path="/delivery/dashboard" element={<DeliveryDashboard />} />

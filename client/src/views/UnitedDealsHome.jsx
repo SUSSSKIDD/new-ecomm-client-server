@@ -10,6 +10,7 @@ import CartSidebar from '../components/united/CartSidebar';
 import ProductDetailView from '../components/united/ProductDetailView';
 import ProfileSidebar from '../components/united/ProfilePage';
 import ParcelBooking from './ParcelBooking';
+import Footer from '../components/united/Footer';
 
 const UnitedDealsHome = () => {
     const { toastMessage, selectedProduct, selectedCategory } = useCategory();
@@ -30,12 +31,13 @@ const UnitedDealsHome = () => {
             <CartSidebar />
             <ProfileSidebar />
 
-            <div className="flex-1 min-h-0 bg-gray-50">
+            <div className="flex-1 min-h-0 bg-gray-50 uppercase tracking-tight">
                 {selectedProduct ? (
                     <ProductDetailView />
                 ) : selectedCategory === 'Pickup and drop' ? (
                     <div className="h-full w-full overflow-y-auto overscroll-none flex flex-col">
                         <ParcelBooking />
+                        <Footer />
                     </div>
                 ) : (
                     <div className="h-full w-full overflow-y-auto overscroll-none flex flex-col">
@@ -47,27 +49,7 @@ const UnitedDealsHome = () => {
                             <HomeCategoryList />
                         </div>
 
-                        {/* Footer */}
-                        <div className="bg-ud-dark text-white py-8 px-6 mt-auto shrink-0">
-                            <div className="max-w-xl mx-auto flex flex-col items-center gap-3">
-                                <p className="text-xs font-semibold text-green-400 tracking-widest uppercase">NEYOKART</p>
-                                <p className="text-xs text-gray-400 text-center">
-                                    Your neighborhood delivery partner — Groceries, Prints &amp; Parcels.
-                                </p>
-                                <div className="flex flex-wrap justify-center gap-x-4 gap-y-1 mt-1">
-                                    <Link to="/legal#terms" className="text-xs text-gray-400 hover:text-white transition-colors">Terms &amp; Conditions</Link>
-                                    <span className="text-gray-600 text-xs">·</span>
-                                    <Link to="/legal#privacy" className="text-xs text-gray-400 hover:text-white transition-colors">Privacy Policy</Link>
-                                    <span className="text-gray-600 text-xs">·</span>
-                                    <Link to="/legal#shipping" className="text-xs text-gray-400 hover:text-white transition-colors">Shipping Policy</Link>
-                                    <span className="text-gray-600 text-xs">·</span>
-                                    <Link to="/legal#refunds" className="text-xs text-gray-400 hover:text-white transition-colors">Cancellations &amp; Refunds</Link>
-                                    <span className="text-gray-600 text-xs">·</span>
-                                    <Link to="/legal#contact" className="text-xs text-gray-400 hover:text-white transition-colors">Contact Us</Link>
-                                </div>
-                                <p className="text-xs text-gray-600 mt-2">© 2026 NEYOKART. All rights reserved.</p>
-                            </div>
-                        </div>
+                        <Footer />
                     </div>
                 )}
             </div>

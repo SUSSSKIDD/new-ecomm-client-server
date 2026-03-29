@@ -1,0 +1,83 @@
+import { useParams, useNavigate } from 'react-router-dom';
+import Header from '../components/united/Header';
+import ProductGrid from '../components/united/ProductGrid';
+import CartSidebar from '../components/united/CartSidebar';
+import ProfileSidebar from '../components/united/ProfilePage';
+import ProductDetailView from '../components/united/ProductDetailView';
+import { useCategory } from '../context/CategoryContext';
+import Footer from '../components/united/Footer';
+
+const SubCategoryPage = () => {
+    const { mainCat, subCat } = useParams();
+    const navigate = useNavigate();
+    const { selectedProduct, setSelectedProduct } = useCategory();
+    
+    // Derived values from URL
+    const mainCategory = decodeURIComponent(mainCat || '');
+    const subCategory = decodeURIComponent(subCat || '');
+
+    const handleBack = () => {
+        if (selectedProduct) {
+            setSelectedProduct(null);
+        } else {
+            navigate(-1);
+        }
+    };
+
+    return (
+        <div className="h-[100dvh] w-full flex flex-col overflow-hidden overscroll-none bg-gray-50 font-sans text-gray-900">
+            <Header />
+            <CartSidebar />
+            <ProfileSidebar />
+            
+            <div className="flex-1 w-full overflow-y-auto overscroll-none scroll-smooth flex flex-col">
+                {selectedProduct ? (
+                    <ProductDetailView />
+                ) : (
+                    <div className="flex-1">
+                        <div className="container mx-auto px-4 py-6 max-w-7xl animate-fade-in">
+                            {/* Custom Back Button */}
+                            <button 
+                                onClick={handleBack}
+                                className="mb-6 flex items-center gap-3 text-ud-primary font-bold hover:text-ud-dark transition-all group"
+                            >
+                                <div className="w-10 h-10 rounded-full bg-ud-primary/10 flex items-center justify-center group-hover:bg-ud-primary group-hover:text-white transition-all shadow-sm">
+                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                                    </svg>
+                                </div>
+                                <span className="text-xs uppercase tracking-widest font-black">Back to Home</span>
+                            </button>
+
+                            {/* Page Content Card */}
+                            <div className="bg-white rounded-[2.5rem] shadow-sm border border-gray-100 overflow-hidden">
+                                {/* Stylish Header */}
+                                <div className="bg-gradient-to-br from-ud-primary/10 via-white to-transparent p-8 md:p-12 border-b border-gray-50">
+                                    <span className="inline-block px-3 py-1 bg-yellow-400 text-black text-[10px] font-black rounded-full uppercase tracking-[0.2em] mb-4 shadow-sm">
+                                        {mainCategory}
+                                    </span>
+                                    <h1 className="text-4xl md:text-6xl font-black text-gray-900 leading-[1.1] tracking-tight uppercase">
+                                        {subCategory}
+                                    </h1>
+                                    <p className="mt-4 text-gray-500 font-medium max-w-md">
+                                        Discover our curated selection of top-quality products in {subCategory.toLowerCase()}.
+                                    </p>
+                                </div>
+                                
+                                {/* Product List Section */}
+                                <div className="p-6 md:p-10">
+                                    <ProductGrid mainCategory={mainCategory} subCategory={subCategory} />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
+                
+                {/* Full Footer */}
+                {!selectedProduct && <Footer />}
+            </div>
+        </div>
+    );
+};
+
+export default SubCategoryPage;
