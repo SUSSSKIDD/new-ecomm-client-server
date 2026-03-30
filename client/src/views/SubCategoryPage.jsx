@@ -128,7 +128,7 @@ const SubCategoryPage = () => {
 
                                     {/* Product List Section */}
                                     <div className="p-6 md:p-10">
-                                        <ProductGrid mainCategory={storeType} subCategory={subCategory} />
+                                        <ProductGrid mainCategory={mainCategory} subCategory={subCategory} />
                                     </div>
                                 </div>
                             </div>
