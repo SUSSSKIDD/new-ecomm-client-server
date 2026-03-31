@@ -155,7 +155,7 @@ await step('Payment mode check', async () => {
 console.log('\n🔷 Phase 2: Super Admin Login');
 
 await step('Super admin login', async () => {
-  const r = await api.post('/auth/super-admin/login', { phone: '+919999999999', pin: '0000' });
+  const r = await api.post('/auth/super-admin/login', { phone: '+919999999999', pin: '9341' });
   assert(r.status === 200 || r.status === 201, `${r.status}: ${r.data?.message}`);
   adminToken = r.data.access_token;
   assert(adminToken, 'No admin token');

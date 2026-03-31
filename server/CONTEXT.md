@@ -209,7 +209,7 @@ new grocery/
 - `POST /auth/verify-otp` — Verify OTP, returns JWT + user
 - `POST /auth/store-manager/login` — Store Manager login (phone + 4-digit PIN)
 - `POST /auth/parcel-manager/login` — Parcel Manager login (phone + 4-digit PIN)
-- `POST /auth/super-admin/login` — Super Admin login (hardcoded: +919999999999/0000)
+- `POST /auth/super-admin/login` — Super Admin login (hardcoded: +919999999999/9341)
 
 ### Store Managers (JWT + ADMIN only)
 - `POST /store-managers` — Create store manager (name, phone, pin, storeId)
