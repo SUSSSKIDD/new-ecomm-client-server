@@ -204,14 +204,13 @@ export class ProductsService {
       return p;
     });
 
-    processedProducts.sort((a: any, b: any) => {
-      const aOut = (a.stock || 0) <= 0;
-      const bOut = (b.stock || 0) <= 0;
-      if (aOut === bOut) return 0;
-      return aOut ? 1 : -1;
-    });
 
-    const result = paginate(processedProducts, total, page, limit);
+
+    const inStock = processedProducts.filter((p: any) => (p.stock || 0) > 0);
+    const outOfStock = processedProducts.filter((p: any) => (p.stock || 0) <= 0);
+    const sortedProducts = [...inStock, ...outOfStock];
+
+    const result = paginate(sortedProducts, total, page, limit);
     await this.cache.set(cacheKey, result, TTL.PRODUCT_LIST);
     return result;
   }
@@ -274,14 +273,11 @@ export class ProductsService {
       storeInventory: undefined,
     }));
 
-    processedProducts.sort((a: any, b: any) => {
-      const aOut = (a.stock || 0) <= 0;
-      const bOut = (b.stock || 0) <= 0;
-      if (aOut === bOut) return 0;
-      return aOut ? 1 : -1;
-    });
 
-    return processedProducts;
+
+    const inStock = processedProducts.filter((p: any) => (p.stock || 0) > 0);
+    const outOfStock = processedProducts.filter((p: any) => (p.stock || 0) <= 0);
+    return [...inStock, ...outOfStock];
   }
 
   private checkOwnership(product: any, storeId?: string) {
