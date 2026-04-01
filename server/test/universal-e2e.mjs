@@ -752,7 +752,7 @@ await step('Rider accepts parcel', async () => {
 
 await step('Rider completes parcel delivery', async () => {
   const pRes = await api.get(`/parcels/${parcelId.value}`, auth(userToken));
-  const parcelPin = pRes?.data?.deliveryPin || '0000'; 
+  const parcelPin = pRes?.data?.deliveryPin || '0000';
   const r = await api.post(`/delivery/parcels/${parcelId.value}/complete`, { result: 'DELIVERED', deliveryPin: parcelPin }, auth(dpTokens[parcelRiderIdx]));
   if (r.status === 400 || r.status === 404) {
     for (let i = 0; i < DP_COUNT; i++) {
