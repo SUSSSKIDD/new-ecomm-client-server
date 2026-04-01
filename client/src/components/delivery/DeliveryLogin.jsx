@@ -7,7 +7,7 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
 const DeliveryLogin = () => {
     const navigate = useNavigate();
-    const [phone, setPhone] = useState('');
+    const [phone, setPhone] = useState('+91');
     const [pin, setPin] = useState('');
     const [error, setError] = useState('');
     const [loading, setLoading] = useState(false);

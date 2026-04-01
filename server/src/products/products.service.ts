@@ -204,6 +204,13 @@ export class ProductsService {
       return p;
     });
 
+    processedProducts.sort((a: any, b: any) => {
+      const aOut = (a.stock || 0) <= 0;
+      const bOut = (b.stock || 0) <= 0;
+      if (aOut === bOut) return 0;
+      return aOut ? 1 : -1;
+    });
+
     const result = paginate(processedProducts, total, page, limit);
     await this.cache.set(cacheKey, result, TTL.PRODUCT_LIST);
     return result;
@@ -261,11 +268,20 @@ export class ProductsService {
     });
 
     // Replace product.stock with store-specific inventory stock
-    return products.map((p) => ({
+    const processedProducts = products.map((p) => ({
       ...p,
       stock: p.storeInventory?.[0]?.stock ?? p.stock,
       storeInventory: undefined,
     }));
+
+    processedProducts.sort((a: any, b: any) => {
+      const aOut = (a.stock || 0) <= 0;
+      const bOut = (b.stock || 0) <= 0;
+      if (aOut === bOut) return 0;
+      return aOut ? 1 : -1;
+    });
+
+    return processedProducts;
   }
 
   private checkOwnership(product: any, storeId?: string) {

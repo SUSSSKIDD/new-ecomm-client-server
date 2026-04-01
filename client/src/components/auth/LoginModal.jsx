@@ -9,7 +9,7 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 const LoginModal = ({ isOpen, onClose }) => {
     const { sendOtp, verifyOtp, token, updateUser } = useAuth();
     const [step, setStep] = useState('phone'); // 'phone' | 'otp' | 'name'
-    const [phone, setPhone] = useState('');
+    const [phone, setPhone] = useState('+91');
     const [otp, setOtp] = useState('');
     const [nameInput, setNameInput] = useState('');
     const [loading, setLoading] = useState(false);
