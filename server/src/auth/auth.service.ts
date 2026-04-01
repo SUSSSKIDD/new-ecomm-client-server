@@ -27,10 +27,13 @@ export class AuthService {
     private config: ConfigService,
     private cache: RedisCacheService,
   ) {
-    this.superAdminPhone = this.config.get<string>('SUPER_ADMIN_PHONE', '');
-    const pin = this.config.get<string>('SUPER_ADMIN_PIN', '');
+    let phoneParam = this.config.get<string>('SUPER_ADMIN_PHONE', '');
+    this.superAdminPhone = phoneParam.replace(/^["']|["']$/g, '');
+    
+    let pinParam = this.config.get<string>('SUPER_ADMIN_PIN', '');
+    const cleanPin = pinParam.replace(/^["']|["']$/g, '');
     // Pre-hash the pin synchronously at startup for comparison later
-    this.superAdminPinHash = pin ? bcrypt.hashSync(pin, 10) : '';
+    this.superAdminPinHash = cleanPin ? bcrypt.hashSync(cleanPin, 10) : '';
   }
 
   async sendOtp(dto: SendOtpDto) {
