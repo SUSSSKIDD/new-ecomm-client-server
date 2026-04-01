@@ -71,7 +71,7 @@ jobs:
           BULL_REDIS_PORT: 6379
           JWT_SECRET: "ci-cd-test-secret-key-12345"
           SUPER_ADMIN_PHONE: "+919999999999"
-          SUPER_ADMIN_PIN: "0000"
+          SUPER_ADMIN_PIN: "9341"
           PORT: 3000
           RAZORPAY_KEY_ID: ${{ secrets.RAZORPAY_TEST_KEY_ID }}
           RAZORPAY_KEY_SECRET: ${{ secrets.RAZORPAY_TEST_KEY_SECRET }}
