@@ -67,7 +67,7 @@ const sections = [
       },
       {
         heading: 'Delivery Charges',
-        body: 'A flat delivery charge of ₹30 applies to standard orders. Enjoy Free Delivery on 1st order and all orders with a total value of ₹500 or more.',
+        body: 'A flat delivery charge of ₹30 applies to standard orders. Enjoy Free Delivery on all orders with a total value of ₹199 or more.',
       },
       {
         heading: 'Delivery Timeframes',

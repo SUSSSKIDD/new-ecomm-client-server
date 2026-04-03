@@ -151,7 +151,7 @@ export const BRAND_NAMES = ['Amul', 'Nestlé', 'Britannia', 'Tata', 'Dabur', 'Ha
 
 // Features
 export const FEATURE_ITEMS = [
-    { icon: '📦', title: 'Free Delivery', sub: 'For all orders over ₹299' },
+    { icon: '📦', title: 'Free Delivery', sub: 'For all orders over ₹199' },
     { icon: '🥦', title: 'Fresh Guarantee', sub: '100% fresh vegetables' },
     { icon: '💬', title: '24/7 Support', sub: 'Dedicated support' },
     { icon: '↩️', title: 'Easy Return', sub: 'No questions asked' },

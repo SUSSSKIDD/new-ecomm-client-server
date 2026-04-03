@@ -55,7 +55,7 @@ export class OrdersService {
     this.deliveryFee = Number(this.config.get('DELIVERY_FEE', '30'));
 
     this.freeDeliveryThreshold = Number(
-      this.config.get('FREE_DELIVERY_THRESHOLD', '299'),
+      this.config.get('FREE_DELIVERY_THRESHOLD', '199'),
     );
   }
 
@@ -155,7 +155,6 @@ export class OrdersService {
    */
   private calculateTotals(
     items: (PreviewItem & { taxRate?: number })[],
-    isFirstOrder = false,
   ): {
     subtotal: number;
     deliveryFee: number;
@@ -166,8 +165,8 @@ export class OrdersService {
     const subtotal = items.reduce((sum, item) => sum + item.total, 0);
     const freeDeliveryEligible = subtotal >= this.freeDeliveryThreshold;
     
-    // First time user delivery is free. Subsequent orders use threshold-based fee.
-    const deliveryFee = (isFirstOrder || freeDeliveryEligible) ? 0 : this.deliveryFee;
+    // Threshold-based fee.
+    const deliveryFee = freeDeliveryEligible ? 0 : this.deliveryFee;
 
     // Per-item tax: price × qty × (taxRate / 100), rounded to 2dp
     const tax = items.reduce((taxSum, item) => {
@@ -242,10 +241,7 @@ export class OrdersService {
       };
     });
 
-    const orderCount = await this.prisma.order.count({ where: { userId } });
-    const isFirstOrder = orderCount === 0;
-
-    const totals = this.calculateTotals(items, isFirstOrder);
+    const totals = this.calculateTotals(items);
 
     // If no addressId, return basic preview (backward compatible)
     if (!addressId) {
@@ -289,7 +285,7 @@ export class OrdersService {
       }),
     );
 
-    const adjustedTotals = this.calculateTotals(availablePreviewItems, isFirstOrder);
+    const adjustedTotals = this.calculateTotals(availablePreviewItems);
 
     return {
       items,
@@ -455,20 +451,17 @@ export class OrdersService {
     // 7. Branch: single-store vs multi-store
     let order: any;
 
-    const orderCount = await this.prisma.order.count({ where: { userId } });
-    const isFirstOrder = orderCount === 0;
-
     if (!allocationResult || allocationResult.type === 'SINGLE_STORE') {
       // Single-store path (or no fulfillment data)
       order = await this.createSingleStoreOrder(
         userId, dto, idempotencyKey, address, itemsToOrder, productMap,
-        allocationResult, orderStatus, paymentStatus, confirmedAt, isFirstOrder,
+        allocationResult, orderStatus, paymentStatus, confirmedAt,
       );
     } else {
       // Multi-store path
       order = await this.createMultiStoreOrder(
         userId, dto, idempotencyKey, address, itemsToOrder, productMap,
-        allocationResult, orderStatus, paymentStatus, confirmedAt, isFirstOrder,
+        allocationResult, orderStatus, paymentStatus, confirmedAt,
       );
     }
 
@@ -511,7 +504,6 @@ export class OrdersService {
     orderStatus: OrderStatus,
     paymentStatus: PaymentStatus,
     confirmedAt: Date | null,
-    isFirstOrder = false,
   ) {
     // Build store assignments from single-store allocation
     let storeAssignments: Map<string, string> | null = null;
@@ -542,7 +534,7 @@ export class OrdersService {
 
     const subtotal = orderItems.reduce((sum, item) => sum + item.total, 0);
     const freeDelivery = subtotal >= this.freeDeliveryThreshold;
-    const deliveryFee = (isFirstOrder || freeDelivery) ? 0 : this.deliveryFee;
+    const deliveryFee = freeDelivery ? 0 : this.deliveryFee;
     // Per-item tax: sum of (itemTotal × itemTaxRate / 100), rounded to 2dp each
     const tax = orderItems.reduce((acc, oi) => {
       return acc + Math.round(oi.total * ((oi.taxRate ?? 0) / 100) * 100) / 100;
@@ -605,7 +597,6 @@ export class OrdersService {
     orderStatus: OrderStatus,
     paymentStatus: PaymentStatus,
     confirmedAt: Date | null,
-    isFirstOrder = false,
   ) {
     // Build a lookup for cart item custom fields
     const cartItemLookup = new Map(itemsToOrder.map((ci) => [ci.productId, ci]));
@@ -636,7 +627,7 @@ export class OrdersService {
     const allItems = storeOrderItems.flatMap((s) => s.items);
     const subtotal = allItems.reduce((sum, item) => sum + item.total, 0);
     const freeDelivery = subtotal >= this.freeDeliveryThreshold;
-    const deliveryFee = (isFirstOrder || freeDelivery) ? 0 : this.deliveryFee;
+    const deliveryFee = freeDelivery ? 0 : this.deliveryFee;
     // Per-item tax across all stores
     const tax = allItems.reduce((acc, oi) => {
       return acc + Math.round(oi.total * ((oi.taxRate ?? 0) / 100) * 100) / 100;

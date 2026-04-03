@@ -76,7 +76,7 @@ const HeaderSearch = () => {
                 {/* Free Delivery Text */}
                 <div className="text-center mt-1">
                     <span className="text-[10px] font-medium text-green-600 uppercase tracking-wide bg-green-50 px-2 py-0.5 rounded-full inline-block">
-                        Free delivery for orders above ₹299
+                        Free delivery for orders above ₹199
                     </span>
                 </div>
             </div>
