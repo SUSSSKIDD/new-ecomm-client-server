@@ -16,6 +16,20 @@ function getDeliveryTime(distanceKm) {
     return Math.ceil((distanceKm / DELIVERY_SPEED_KMPH) * 60 + BUFFER_MINUTES);
 }
 
+const isNonOperational = () => {
+    try {
+        const istTime = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+        const hours = istTime.getHours();
+        const minutes = istTime.getMinutes();
+        return hours >= 22 || hours < 5 || (hours === 5 && minutes < 30);
+    } catch (e) {
+        const now = new Date();
+        const hours = now.getHours();
+        const minutes = now.getMinutes();
+        return hours >= 22 || hours < 5 || (hours === 5 && minutes < 30);
+    }
+};
+
 const Header = () => {
     const { selectedCategory, setSelectedCategory, cart, setIsCartOpen, setActivePage, setSelectedProduct } = useCategory();
     const { nearestStore, serviceable, locationStatus, requestLocation } = useDeviceLocation();
@@ -58,7 +72,10 @@ const Header = () => {
                                     delay={300}
                                     className="text-xs font-bold tracking-tight text-emerald-700"
                                 >
-                                    {`Neyokart in ${deliveryMins} mins  ·  Free delivery above ₹199  ·  `}
+                                    {isNonOperational() 
+                                        ? `We are not accepting orders right now. Our operational hours are 6:00 AM to 10:00 PM. You can place your order for tomorrow, and it will be delivered.  ·  Free delivery above ₹199  ·  `
+                                        : `Neyokart in ${deliveryMins} mins  ·  Free delivery above ₹199  ·  `
+                                    }
                                 </TextMarquee>
                             </div>
                         ) : locationStatus === 'requesting' ? (
