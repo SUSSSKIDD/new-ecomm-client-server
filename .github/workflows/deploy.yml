@@ -108,6 +108,20 @@ jobs:
           target: "/opt/neyokart"
 
       - name: Execute Deployment Script via SSH
+        id: ssh_deploy
+        continue-on-error: true
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_IP }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            chmod +x /opt/neyokart/scripts/deployment/deploy.sh
+            cd /opt/neyokart
+            bash ./scripts/deployment/deploy.sh
+
+      - name: Retry Execute Deployment Script via SSH
+        if: steps.ssh_deploy.outcome == 'failure'
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.VPS_IP }}
