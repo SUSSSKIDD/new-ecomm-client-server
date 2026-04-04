@@ -52,6 +52,8 @@
     "razorpay": "^2.9.6",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
+    "sharp": "^0.33.5",
+    "@nestjs/serve-static": "^5.0.1",
     "swagger-ui-express": "^5.0.1"
   },
   "devDependencies": {

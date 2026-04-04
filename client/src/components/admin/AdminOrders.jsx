@@ -114,6 +114,7 @@ const AdminOrders = () => {
     };
 
     const formatDate = (d) => new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' });
+    const formatTime = (d) => new Date(d).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' });
 
     const getOrderItems = (o) => o.items || o.orderItems || [];
 
@@ -159,7 +160,7 @@ const AdminOrders = () => {
                         <thead className="bg-gray-50">
                             <tr>
                                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Order #</th>
-                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date / Time</th>
                                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer</th>
                                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Items</th>
                                 <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total</th>
@@ -199,7 +200,15 @@ const AdminOrders = () => {
                                                 </div>
                                             </td>
                                             <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
-                                                {formatDate(o.createdAt)}
+                                                <div className="font-medium text-gray-700">{formatDate(o.createdAt)}</div>
+                                                <div className="text-[11px] text-gray-400">{formatTime(o.createdAt)}</div>
+                                                {o.deliveredAt && (
+                                                    <div className="mt-2 pt-1.5 border-t border-gray-100">
+                                                        <p className="text-[9px] font-bold text-emerald-600 uppercase tracking-tighter mb-0.5">Delivered At</p>
+                                                        <p className="text-[11px] font-semibold text-emerald-700 leading-none">{formatDate(o.deliveredAt)}</p>
+                                                        <p className="text-[10px] text-emerald-500/80 mt-1">{formatTime(o.deliveredAt)}</p>
+                                                    </div>
+                                                )}
                                             </td>
                                             <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
                                                 <div className="font-medium text-gray-900">{o.user?.name || '—'}</div>
@@ -324,7 +333,14 @@ const AdminOrders = () => {
                                                                             </div>
                                                                             <div>
                                                                                 <div className="text-sm font-semibold text-gray-900">{child.items[0]?.storeName || `Store ${child.id.substring(0, 4)}`}</div>
-                                                                                <div className="text-[11px] text-gray-500">{child.items.length} items</div>
+                                                                                <div className="text-[11px] text-gray-500 flex items-center gap-2">
+                                                                                    {child.items.length} items
+                                                                                    {child.deliveredAt && (
+                                                                                        <span className="text-[10px] bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded font-bold">
+                                                                                            Delivered: {formatTime(child.deliveredAt)}
+                                                                                        </span>
+                                                                                    )}
+                                                                                </div>
                                                                             </div>
                                                                         </div>
                                                                         <div>

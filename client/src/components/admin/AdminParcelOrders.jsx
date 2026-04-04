@@ -232,7 +232,7 @@ const AdminParcelOrders = () => {
                             <thead className="bg-gray-50">
                                 <tr>
                                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Parcel #</th>
-                                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date</th>
+                                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date / Time</th>
                                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Customer</th>
                                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Category</th>
                                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Weight</th>
@@ -268,7 +268,15 @@ const AdminParcelOrders = () => {
                                                     </div>
                                                 </td>
                                                 <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
-                                                    {formatDate(p.createdAt)}
+                                                    <div className="font-medium text-gray-700">{formatDate(p.createdAt)}</div>
+                                                    <div className="text-[11px] text-gray-400">{formatTime(p.createdAt)}</div>
+                                                    {p.deliveredAt && (
+                                                        <div className="mt-2 pt-1.5 border-t border-gray-100">
+                                                            <p className="text-[9px] font-bold text-emerald-600 uppercase tracking-tighter mb-0.5">Delivered At</p>
+                                                            <p className="text-[11px] font-semibold text-emerald-700 leading-none">{formatDate(p.deliveredAt)}</p>
+                                                            <p className="text-[10px] text-emerald-500/80 mt-1">{formatTime(p.deliveredAt)}</p>
+                                                        </div>
+                                                    )}
                                                 </td>
                                                 <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-500">
                                                     {p.user?.name || p.user?.phone || '—'}
