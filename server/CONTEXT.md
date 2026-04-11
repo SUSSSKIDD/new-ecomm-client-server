@@ -796,3 +796,15 @@ To properly route custom domains (`neyokart.com`, `neyokart.in`) into the isolat
 - **Strict HTTP Health Check**: Uses `curl -sf` to verify that the new container is returning a valid `200 OK` (not just "running") before swapping traffic.
 - **Zero-Downtime Swap**: Maintains the Blue/Green strategy using dormant port swapping (3001/3002 and 8001/8002) with graceful Nginx reloads.
 
+## User-Centric Location & Product Variants (2026-04-11)
+
+### Product Variants
+- **Nested Variants:** Support for multiple variants per product (e.g. 500g, 1kg) with independent pricing, MRP, and stock management.
+- **Data Integrity:** Cart and Order items natively snapshot both `variantId` and `variantLabel` upon checkout to guarantee transaction accuracy over time.
+- **Admin UI:** Fully integrated variant management modal for store managers with inline updates without refreshing.
+
+### Dynamic User-Centric Location System
+- **Location Context:** Application shifted from evaluating delivery viability purely on strict "store-centric" basis to "user-centric" location detection.
+- **Search Integration:** Complete Nominatim API integration allowing manual text search to dynamically reset global coordinates natively via `LocationPickerModal`.
+- **Location-Aware Filtering:** Passing `lat` and `lng` filters product grid catalogs based directly on 10km radius proximity to user's custom pin, persisting across state reliably.
+- **Back-Button Patch:** Popstate history listeners injected natively directly into context routes so closing modals naturally pops context state via back buttons accurately.

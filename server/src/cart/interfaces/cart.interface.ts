@@ -9,6 +9,8 @@ export interface CartItem {
   selectedSize?: string;
   userUploadUrls?: string[];
   printProductId?: string;
+  variantId?: string;
+  variantLabel?: string;
 }
 
 export interface Cart {

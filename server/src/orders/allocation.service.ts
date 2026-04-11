@@ -8,6 +8,8 @@ export interface AllocatedItem {
   price: number;
   quantity: number;
   image: string | null;
+  variantId?: string;
+  variantLabel?: string;
 }
 
 export interface StoreAllocation {
@@ -29,6 +31,8 @@ export interface CartItemInput {
   price: number;
   quantity: number;
   image: string | null;
+  variantId?: string;
+  variantLabel?: string;
 }
 
 @Injectable()
@@ -119,6 +123,8 @@ export class AllocationService {
                 price: item.price,
                 quantity: item.quantity,
                 image: item.image,
+                variantId: item.variantId,
+                variantLabel: item.variantLabel,
               })),
             },
           ],
@@ -202,6 +208,8 @@ export class AllocationService {
           price: item.price,
           quantity: assigned.quantity,
           image: item.image,
+          variantId: item.variantId,
+          variantLabel: item.variantLabel,
         });
 
         // Reduce remaining

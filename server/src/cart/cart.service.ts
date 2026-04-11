@@ -76,7 +76,23 @@ export class CartService {
     const maxStoreStock = maxStoreResult._max.stock ?? 0;
     // Optimistic stock check: uses max of global and best store stock.
     // Exact store-level validation happens at fulfillment/order creation time.
-    const availableStock = Math.max(product.stock, maxStoreStock);
+    let availableStock = Math.max(product.stock, maxStoreStock);
+    let overridePrice = product.price;
+    let variantLabel = undefined;
+    let variantId = undefined;
+
+    if (dto.variantId) {
+      const variant = await (this.prisma as any).productVariant.findUnique({
+        where: { id: dto.variantId }
+      });
+      if (!variant || variant.productId !== dto.productId) {
+        throw new BadRequestException('Invalid variant');
+      }
+      availableStock = variant.stock;
+      overridePrice = variant.price;
+      variantLabel = variant.label;
+      variantId = variant.id;
+    }
 
     if (availableStock < dto.quantity) {
       throw new BadRequestException(
@@ -105,7 +121,7 @@ export class CartService {
       }
     }
     const existingIndex = cart.items.findIndex(
-      (item) => item.productId === dto.productId,
+      (item) => item.productId === dto.productId && item.variantId === variantId,
     );
 
     if (existingIndex >= 0) {
@@ -118,10 +134,14 @@ export class CartService {
       }
       cart.items[existingIndex].quantity = newQty;
       // Refresh price snapshot
-      cart.items[existingIndex].price = product.price;
+      cart.items[existingIndex].price = overridePrice;
       cart.items[existingIndex].name = product.name;
       cart.items[existingIndex].image = product.images?.[0] ?? null;
       cart.items[existingIndex].taxRate = product.taxRate ?? 0;
+      if (variantId) {
+        cart.items[existingIndex].variantId = variantId;
+        cart.items[existingIndex].variantLabel = variantLabel;
+      }
       // Update custom fields if provided
       if (dto.selectedSize !== undefined) cart.items[existingIndex].selectedSize = dto.selectedSize;
       if (dto.userUploadUrls !== undefined) cart.items[existingIndex].userUploadUrls = dto.userUploadUrls;
@@ -131,10 +151,11 @@ export class CartService {
       const newItem: CartItem = {
         productId: dto.productId,
         quantity: dto.quantity,
-        price: product.price,
+        price: overridePrice,
         name: product.name,
         image: product.images?.[0] ?? null,
         taxRate: product.taxRate ?? 0,
+        ...(variantId ? { variantId, variantLabel } : {}),
         ...(dto.selectedSize && { selectedSize: dto.selectedSize }),
         ...(dto.userUploadUrls?.length && { userUploadUrls: dto.userUploadUrls }),
         ...(dto.printProductId && { printProductId: dto.printProductId }),
@@ -158,10 +179,11 @@ export class CartService {
     userId: string,
     productId: string,
     dto: UpdateCartItemDto,
+    variantId?: string,
   ): Promise<Cart> {
     const cart = await this.getCart(userId);
     const itemIndex = cart.items.findIndex(
-      (item) => item.productId === productId,
+      (item) => item.productId === productId && item.variantId === variantId,
     );
     if (itemIndex < 0) {
       throw new NotFoundException(`Item ${productId} not in cart`);
@@ -182,7 +204,20 @@ export class CartService {
       throw new NotFoundException(`Product ${productId} no longer exists`);
     }
     const maxStoreStock = maxStoreResult._max.stock ?? 0;
-    const availableStock = Math.max(product.stock, maxStoreStock);
+    let availableStock = Math.max(product.stock, maxStoreStock);
+    let overridePrice = product.price;
+    let variantLabel = cart.items[itemIndex].variantLabel;
+
+    if (variantId) {
+      const variant = await this.prisma.productVariant.findUnique({
+        where: { id: variantId }
+      });
+      if (variant) {
+        availableStock = variant.stock;
+        overridePrice = variant.price;
+        variantLabel = variant.label;
+      }
+    }
 
     if (dto.quantity > availableStock) {
       throw new BadRequestException(
@@ -192,10 +227,13 @@ export class CartService {
 
     // Refresh snapshot
     cart.items[itemIndex].quantity = dto.quantity;
-    cart.items[itemIndex].price = product.price;
+    cart.items[itemIndex].price = overridePrice;
     cart.items[itemIndex].name = product.name;
     cart.items[itemIndex].image = product.images?.[0] ?? null;
     cart.items[itemIndex].taxRate = product.taxRate ?? 0;
+    if (variantId) {
+      cart.items[itemIndex].variantLabel = variantLabel;
+    }
 
     cart.updatedAt = new Date().toISOString();
     await this.cache.set(this.cartKey(userId), cart, CartService.CART_TTL);
@@ -205,10 +243,10 @@ export class CartService {
   /**
    * Remove a specific item from the cart.
    */
-  async removeItem(userId: string, productId: string): Promise<Cart> {
+  async removeItem(userId: string, productId: string, variantId?: string): Promise<Cart> {
     const cart = await this.getCart(userId);
     const initialLength = cart.items.length;
-    cart.items = cart.items.filter((item) => item.productId !== productId);
+    cart.items = cart.items.filter((item) => !(item.productId === productId && item.variantId === variantId));
 
     if (cart.items.length === initialLength) {
       throw new NotFoundException(`Item ${productId} not in cart`);

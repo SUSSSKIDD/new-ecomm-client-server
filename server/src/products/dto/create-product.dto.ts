@@ -8,9 +8,17 @@ import {
   IsArray,
   Min,
   Max,
+  ValidateNested,
 } from 'class-validator';
 import { Type, Transform } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+
+export class CreateVariantDto {
+  @IsString() label: string;
+  @Type(() => Number) @IsNumber() price: number;
+  @IsOptional() @Type(() => Number) @IsNumber() mrp?: number;
+  @Type(() => Number) @IsNumber() stock: number;
+}
 
 export class CreateProductDto {
   @ApiProperty({ description: 'Product name' })
@@ -82,4 +90,10 @@ export class CreateProductDto {
   @IsString({ each: true })
   @IsOptional()
   images?: string[];
+
+  @ApiPropertyOptional({ description: 'Product variants' })
+  @IsOptional()
+  @ValidateNested({ each: true })
+  @Type(() => CreateVariantDto)
+  variants?: CreateVariantDto[];
 }

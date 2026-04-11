@@ -11,6 +11,7 @@ export const LocationProvider = ({ children }) => {
     const [locationStatus, setLocationStatus] = useState('idle'); // idle | requesting | granted | denied
     const [serviceable, setServiceable] = useState(null); // true | false | null
     const [nearestStore, setNearestStore] = useState(null); // { id, name, distance, pincode }
+    const [userAddress, setUserAddress] = useState('');
     const [loading, setLoading] = useState(false);
 
     // Removed sessionStorage cache block to always refetch on load
@@ -50,6 +51,19 @@ export const LocationProvider = ({ children }) => {
                 const { latitude: lat, longitude: lng } = position.coords;
                 setLocation({ lat, lng });
                 setLocationStatus('granted');
+                
+                try {
+                    const addrRes = await axios.get(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`);
+                    if (addrRes.data && addrRes.data.display_name) {
+                        const parts = addrRes.data.display_name.split(',');
+                        setUserAddress(parts.slice(0, 3).join(', '));
+                    } else {
+                        setUserAddress('Current Location');
+                    }
+                } catch (e) {
+                    setUserAddress('Current Location');
+                }
+
                 await checkServiceability(lat, lng);
             },
             (error) => {
@@ -62,13 +76,22 @@ export const LocationProvider = ({ children }) => {
         );
     }, [checkServiceability]);
 
+    const setManualLocation = useCallback(async (lat, lng, address) => {
+        setLocation({ lat, lng });
+        setUserAddress(address);
+        setLocationStatus('granted');
+        await checkServiceability(lat, lng);
+    }, [checkServiceability]);
+
     const value = {
         location,
         locationStatus,
         serviceable,
         nearestStore,
+        userAddress,
         loading,
         requestLocation,
+        setManualLocation,
     };
 
     return (

@@ -41,7 +41,14 @@ const ProductGrid = ({ mainCategory, subCategory }) => {
             ) : (
                 <>
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                        {products.map((product) => (
+                        {products.map((product) => {
+                            const hasVariants = product.variants && product.variants.length > 0;
+                            const defaultVariant = hasVariants ? product.variants[0] : null;
+                            const displayPrice = defaultVariant ? defaultVariant.price : product.price;
+                            const displayMrp = defaultVariant ? (defaultVariant.mrp || product.mrp) : product.mrp;
+                            const stock = defaultVariant ? defaultVariant.stock : product.stock;
+
+                            return (
                             <div
                                 key={product.id}
                                 className="bg-white rounded-lg shadow-sm border border-gray-100 p-4 flex gap-4 hover:shadow-md transition-all cursor-pointer relative"
@@ -54,7 +61,7 @@ const ProductGrid = ({ mainCategory, subCategory }) => {
                                         <span className="text-gray-300 text-[10px]">No Image</span>
                                     )}
                                     {/* Badge for stock */}
-                                    {product.stock <= 0 && (
+                                    {stock <= 0 && !hasVariants && (
                                         <div className="absolute inset-0 bg-white/60 flex items-center justify-center">
                                             <span className="bg-red-500 text-white text-[10px] font-bold px-2 py-1 rounded">OUT OF STOCK</span>
                                         </div>
@@ -64,35 +71,42 @@ const ProductGrid = ({ mainCategory, subCategory }) => {
                                 <div className="flex-1 flex flex-col justify-between py-1 min-w-0">
                                     <div>
                                         <h3 className="text-sm font-bold text-gray-900 line-clamp-1 mb-1">{product.name}</h3>
-                                        <p className="text-xs text-gray-500 line-clamp-2 leading-tight">Authentic {product.name} from {mainCategory}</p>
+                                        {hasVariants ? (
+                                            <p className="text-xs text-emerald-600 font-bold leading-tight">{product.variants.length} Variants Available</p>
+                                        ) : (
+                                            <p className="text-xs text-gray-500 line-clamp-2 leading-tight">Authentic {product.name} from {mainCategory}</p>
+                                        )}
                                     </div>
                                     
                                     <div className="flex items-center justify-between mt-auto">
                                         <div className="flex flex-col">
-                                            <span className="text-base font-black text-gray-900">₹{product.price}</span>
-                                            {product.mrp && product.mrp > product.price && (
-                                                <span className="text-xs text-gray-400 line-through">₹{product.mrp}</span>
+                                            <span className="text-base font-black text-gray-900">₹{displayPrice}</span>
+                                            {displayMrp && displayMrp > displayPrice && (
+                                                <span className="text-xs text-gray-400 line-through">₹{displayMrp}</span>
                                             )}
                                         </div>
                                         <RippleButton
                                             onClick={(e) => {
                                                 e.stopPropagation();
-                                                if (product.stock > 0) {
+                                                if (hasVariants) {
+                                                    setSelectedProduct({ ...product, category: mainCategory });
+                                                } else if (stock > 0) {
                                                     addToCart(product, mainCategory);
                                                 }
                                             }}
-                                            disabled={product.stock <= 0}
-                                            className={`px-5 py-2 text-xs font-bold rounded-lg transition-colors ${product.stock > 0
+                                            disabled={!hasVariants && stock <= 0}
+                                            className={`px-5 py-2 text-xs font-bold rounded-lg transition-colors ${(hasVariants || stock > 0)
                                                     ? 'bg-yellow-400 text-gray-900 hover:bg-yellow-500 shadow-sm'
                                                     : 'bg-gray-200 text-gray-400 cursor-not-allowed'
                                                 }`}
                                         >
-                                            ADD
+                                            {hasVariants ? 'OPTIONS' : 'ADD'}
                                         </RippleButton>
                                     </div>
                                 </div>
                             </div>
-                        ))}
+                            );
+                        })}
                     </div>
 
                     {/* Load More Button */}

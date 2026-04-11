@@ -9,6 +9,7 @@ import {
   UseGuards,
   Req,
   ParseUUIDPipe,
+  Query,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
@@ -46,8 +47,9 @@ export class CartController {
     @Req() req: AuthenticatedRequest,
     @Param('productId', ParseUUIDPipe) productId: string,
     @Body() dto: UpdateCartItemDto,
+    @Query('variantId') variantId?: string,
   ) {
-    return this.cartService.updateItem(req.user.sub, productId, dto);
+    return this.cartService.updateItem(req.user.sub, productId, dto, variantId);
   }
 
   @Delete('items/:productId')
@@ -55,8 +57,9 @@ export class CartController {
   async removeItem(
     @Req() req: AuthenticatedRequest,
     @Param('productId', ParseUUIDPipe) productId: string,
+    @Query('variantId') variantId?: string,
   ) {
-    return this.cartService.removeItem(req.user.sub, productId);
+    return this.cartService.removeItem(req.user.sub, productId, variantId);
   }
 
   @Delete()

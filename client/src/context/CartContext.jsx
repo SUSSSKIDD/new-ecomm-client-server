@@ -57,6 +57,7 @@ export const CartProvider = ({ children }) => {
                     ...(item.selectedSize && { selectedSize: item.selectedSize }),
                     ...(item.userUploadUrls?.length && { userUploadUrls: item.userUploadUrls }),
                     ...(item.printProductId && { printProductId: item.printProductId }),
+                    ...(item.variantId && { variantId: item.variantId, variantLabel: item.variantLabel }),
                 }));
 
                 let currentLocalCart = [];
@@ -73,6 +74,7 @@ export const CartProvider = ({ children }) => {
                             if (item.selectedSize) payload.selectedSize = item.selectedSize;
                             if (item.userUploadUrls?.length) payload.userUploadUrls = item.userUploadUrls;
                             if (item.printProductId) payload.printProductId = item.printProductId;
+                            if (item.variantId) payload.variantId = item.variantId;
                             await clientApi().post('/cart/items', payload);
                         } catch (err) {
                             console.error('Failed to sync item', item.id, err);
@@ -98,15 +100,17 @@ export const CartProvider = ({ children }) => {
                 }
             }
 
-            const existingItem = prevCart.find(item => item.id === product.id);
+            const itemVariantId = customFields?.variantId || undefined;
+            const existingItem = prevCart.find(item => item.id === product.id && item.variantId === itemVariantId);
             if (existingItem) {
                 const newQty = existingItem.quantity + 1;
                 showToast(`${product.name} Quantity Updated!`);
                 if (token) {
-                    clientApi().patch(`/cart/items/${product.id}`, { quantity: newQty }).catch(() => { });
+                    const query = itemVariantId ? `?variantId=${itemVariantId}` : '';
+                    clientApi().patch(`/cart/items/${product.id}${query}`, { quantity: newQty }).catch(() => { });
                 }
                 return prevCart.map(item =>
-                    item.id === product.id ? { ...item, quantity: newQty, ...(customFields || {}) } : item
+                    item.id === product.id && item.variantId === itemVariantId ? { ...item, quantity: newQty, ...(customFields || {}) } : item
                 );
             }
 
@@ -115,6 +119,7 @@ export const CartProvider = ({ children }) => {
             if (customFields?.selectedSize) apiPayload.selectedSize = customFields.selectedSize;
             if (customFields?.userUploadUrls?.length) apiPayload.userUploadUrls = customFields.userUploadUrls;
             if (customFields?.printProductId) apiPayload.printProductId = customFields.printProductId;
+            if (customFields?.variantId) apiPayload.variantId = customFields.variantId;
             if (token) {
                 clientApi().post('/cart/items', apiPayload).catch(() => { });
             }
@@ -122,12 +127,13 @@ export const CartProvider = ({ children }) => {
         });
     };
 
-    const updateQuantity = (productId, delta) => {
+    const updateQuantity = (productId, delta, variantId = undefined) => {
         setCart(prevCart => prevCart.map(item => {
-            if (item.id === productId) {
+            if (item.id === productId && item.variantId === variantId) {
                 const newQuantity = Math.max(1, item.quantity + delta);
                 if (token) {
-                    clientApi().patch(`/cart/items/${productId}`, { quantity: newQuantity }).catch(() => { });
+                    const query = variantId ? `?variantId=${variantId}` : '';
+                    clientApi().patch(`/cart/items/${productId}${query}`, { quantity: newQuantity }).catch(() => { });
                 }
                 return { ...item, quantity: newQuantity };
             }
@@ -135,11 +141,12 @@ export const CartProvider = ({ children }) => {
         }));
     };
 
-    const removeFromCart = (productId) => {
-        setCart(prevCart => prevCart.filter(item => item.id !== productId));
+    const removeFromCart = (productId, variantId = undefined) => {
+        setCart(prevCart => prevCart.filter(item => !(item.id === productId && item.variantId === variantId)));
         showToast("Item Removed");
         if (token) {
-            clientApi().delete(`/cart/items/${productId}`).catch(() => { });
+            const query = variantId ? `?variantId=${variantId}` : '';
+            clientApi().delete(`/cart/items/${productId}${query}`).catch(() => { });
         }
     };
 

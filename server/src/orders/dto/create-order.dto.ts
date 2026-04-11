@@ -23,6 +23,11 @@ export class ConfirmedItemDto {
   @IsInt()
   @Min(1)
   quantity: number;
+
+  @ApiPropertyOptional()
+  @IsString()
+  @IsOptional()
+  variantId?: string;
 }
 
 export class CreateOrderDto {

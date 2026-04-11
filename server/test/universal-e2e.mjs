@@ -1306,6 +1306,67 @@ await step('Buy Now: Preview with quantity update updates total', async () => {
 });
 
 // ══════════════════════════════════════════════════════════════════════
+//  Phase 13.4: Remote Order with Product Variants
+// ══════════════════════════════════════════════════════════════════════
+
+console.log('\n🔷 Phase 13.4: Remote Order with Product Variants');
+
+let variantProduct;
+let remoteAddressId;
+let remoteOrderId;
+
+await step('Create product with a variant for remote order', async () => {
+  const fd = new FormData();
+  fd.append('name', `E2E Variant Gift ${RUN_ID}`);
+  fd.append('price', '200');
+  fd.append('category', 'Atta, Rice & Dal');
+  fd.append('stock', '50');
+  const r = await api.post('/products', fd, auth(stores['GROCERY'].managerToken));
+  assert(r.status === 201 || r.status === 200, `${r.status}: ${JSON.stringify(r.data?.message)}`);
+  variantProduct = r.data;
+  stores['GROCERY'].productIds.push(variantProduct.id);
+
+  const vr = await api.post(`/products/${variantProduct.id}/variants`, {
+     label: 'Gift Wrapped', price: 250, stock: 50
+  }, auth(stores['GROCERY'].managerToken));
+  assert(vr.status === 201 || vr.status === 200, `${vr.status}: ${JSON.stringify(vr.data?.message)}`);
+  variantProduct.variantId = vr.data.id;
+});
+
+await step('Create remote address for another person', async () => {
+  const r = await api.post('/users/addresses', {
+    type: 'OTHER',
+    houseNo: '99', street: 'Gift Ave', city: 'Bangalore', state: 'Karnataka', zipCode: '560002',
+    recipientName: 'Gift User', recipientPhone: '+919999911111',
+    lat: 12.9790, lng: 77.6000,
+  }, auth(userToken));
+  assert(r.status === 201 || r.status === 200, `${r.status}`);
+  remoteAddressId = r.data.id;
+});
+
+await step('Clear cart and add variant', async () => {
+  await api.delete('/cart', auth(userToken));
+  
+  const r = await api.post('/cart/items', { 
+     productId: variantProduct.id, 
+     variantId: variantProduct.variantId, 
+     quantity: 1 
+  }, auth(userToken));
+  assert(r.status === 200 || r.status === 201, `${r.status}`);
+});
+
+await step('Place remote order with variant', async () => {
+  const r = await api.post('/orders', {
+    addressId: remoteAddressId, paymentMethod: 'COD', lat: 12.9790, lng: 77.6000,
+  }, authWithIdempotency(userToken, `e2e-remote-variant-${RUN_ID}`));
+  assert(r.status === 201 || r.status === 200, `${r.status}: ${r.data?.message}`);
+  remoteOrderId = r.data.id;
+  assert(r.data.items.length === 1, 'Expected 1 variant item');
+  console.log('>>> GOT ORDER ITEMS:', JSON.stringify(r.data.items, null, 2));
+  assert(r.data.items[0].variantId === variantProduct.variantId, 'Variant ID mismatch');
+});
+
+// ══════════════════════════════════════════════════════════════════════
 //  Phase 13.5: Store Deactivation & Deletion Consistency
 // ══════════════════════════════════════════════════════════════════════
 
@@ -1398,6 +1459,7 @@ const allOrderIds = [
   raceOrderId,
   raceOrder2Id,
   buyNowOrderId,
+  remoteOrderId,
 ].filter(Boolean);
 
 console.log(`  Cleaning up ${allOrderIds.length} orders...`);
@@ -1568,6 +1630,13 @@ for (let i = 0; i < dpIds.length; i++) {
 if (addressId) {
   await step('Delete user address', async () => {
     const r = await api.delete(`/users/addresses/${addressId}`, auth(userToken));
+    assert(r.status === 200 || r.status === 204, `${r.status}`);
+  });
+}
+
+if (remoteAddressId) {
+  await step('Delete remote address', async () => {
+    const r = await api.delete(`/users/addresses/${remoteAddressId}`, auth(userToken));
     assert(r.status === 200 || r.status === 204, `${r.status}`);
   });
 }

@@ -47,9 +47,9 @@ const CartSidebar = () => {
                 try {
                     const body = { addressId: defaultAddr.id };
                     if (buyNowProduct) {
-                        body.items = [{ productId: buyNowProduct.id, quantity: buyNowProduct.quantity || 1 }];
+                        body.items = [{ productId: buyNowProduct.id, quantity: buyNowProduct.quantity || 1, variantId: buyNowProduct.variantId }];
                     } else if (cart.length > 0) {
-                        body.items = cart.map((item) => ({ productId: item.id, quantity: item.quantity }));
+                        body.items = cart.map((item) => ({ productId: item.id, quantity: item.quantity, variantId: item.variantId }));
                     }
                     const pRes = await api(token).post('/orders/preview', body);
                     setPreview(pRes.data);
@@ -70,9 +70,9 @@ const CartSidebar = () => {
         try {
             const body = {};
             if (buyNowProduct) {
-                body.items = [{ productId: buyNowProduct.id, quantity: buyNowProduct.quantity || 1 }];
+                body.items = [{ productId: buyNowProduct.id, quantity: buyNowProduct.quantity || 1, variantId: buyNowProduct.variantId }];
             } else if (cart.length > 0) {
-                body.items = cart.map((item) => ({ productId: item.id, quantity: item.quantity }));
+                body.items = cart.map((item) => ({ productId: item.id, quantity: item.quantity, variantId: item.variantId }));
             }
             const pRes = await api(token).post('/orders/preview', body);
             setPreview(pRes.data);
@@ -168,9 +168,9 @@ const CartSidebar = () => {
             if (overrideItems) {
                 body.items = overrideItems;
             } else if (buyNowProduct) {
-                body.items = [{ productId: buyNowProduct.id, quantity: buyNowProduct.quantity || 1 }];
+                body.items = [{ productId: buyNowProduct.id, quantity: buyNowProduct.quantity || 1, variantId: buyNowProduct.variantId }];
             } else if (cart.length > 0) {
-                body.items = cart.map((item) => ({ productId: item.id, quantity: item.quantity }));
+                body.items = cart.map((item) => ({ productId: item.id, quantity: item.quantity, variantId: item.variantId }));
             }
             const res = await http.post('/orders/preview', body);
             setPreview(res.data);
@@ -198,11 +198,12 @@ const CartSidebar = () => {
             };
 
             if (buyNowProduct) {
-                body.items = [{ productId: buyNowProduct.id, quantity: buyNowProduct.quantity || 1 }];
+                body.items = [{ productId: buyNowProduct.id, quantity: buyNowProduct.quantity || 1, variantId: buyNowProduct.variantId }];
             } else if (preview?.fulfillment?.unavailableItems?.length > 0) {
                 body.confirmedItems = preview.fulfillment.availableItems.map((item) => ({
                     productId: item.productId,
                     quantity: item.quantity,
+                    variantId: item.variantId,
                 }));
             }
 
@@ -862,11 +863,16 @@ const CartSidebar = () => {
                                 <h4 className="text-sm font-medium text-gray-900 truncate">{item.name}</h4>
                                 <p className="text-xs text-gray-500 mt-1">₹{parsePrice(item.price)}</p>
                                 {/* Custom fields badges */}
-                                {(item.selectedSize || item.userUploadUrls?.length > 0) && (
+                                {(item.selectedSize || item.variantLabel || item.userUploadUrls?.length > 0) && (
                                     <div className="flex flex-wrap gap-1 mt-1">
                                         {item.selectedSize && (
                                             <span className="text-[10px] px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded font-medium">
                                                 Size: {item.selectedSize}
+                                            </span>
+                                        )}
+                                        {item.variantLabel && (
+                                            <span className="text-[10px] px-1.5 py-0.5 bg-emerald-100 text-emerald-700 rounded font-medium">
+                                                Variant: {item.variantLabel}
                                             </span>
                                         )}
                                         {item.userUploadUrls?.length > 0 && (
@@ -880,17 +886,17 @@ const CartSidebar = () => {
                                     <div className="flex items-center border border-gray-200 rounded">
                                         <RippleButton
                                             className="px-2 py-0.5 text-gray-500 hover:bg-gray-100"
-                                            onClick={() => updateQuantity(item.id, -1)}
+                                            onClick={() => updateQuantity(item.id, -1, item.variantId)}
                                         >-</RippleButton>
                                         <span className="px-2 text-xs font-medium">{item.quantity}</span>
                                         <RippleButton
                                             className="px-2 py-0.5 text-gray-500 hover:bg-gray-100"
-                                            onClick={() => updateQuantity(item.id, 1)}
+                                            onClick={() => updateQuantity(item.id, 1, item.variantId)}
                                         >+</RippleButton>
                                     </div>
                                     <RippleButton
                                         className="text-xs text-red-500 font-medium hover:underline"
-                                        onClick={() => removeFromCart(item.id)}
+                                        onClick={() => removeFromCart(item.id, item.variantId)}
                                     >Remove</RippleButton>
                                 </div>
                             </div>

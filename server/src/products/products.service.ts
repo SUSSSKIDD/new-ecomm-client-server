@@ -58,8 +58,8 @@ export class ProductsService {
       imageUrls = [...imageUrls, ...uploadedUrls];
     }
 
-    // Remove images from dto since we handle it separately
-    const { images: _ignored, ...productData } = dto;
+    // Remove images and variants from dto since we handle it separately
+    const { images: _ignored, variants, ...productData } = dto;
 
     if (storeId) {
       const store = await this.prisma.store.findUnique({ where: { id: storeId } });
@@ -88,6 +88,9 @@ export class ProductsService {
               storeId,
               stock: productData.stock || 0
             }
+          } : undefined,
+          variants: variants?.length ? {
+            create: variants
           } : undefined,
         },
       });
@@ -182,12 +185,15 @@ export class ProductsService {
         take: Number(limit),
         where,
         orderBy: { [sortBy]: sortOrder },
-        include: storeIds.length > 0 ? {
-          storeInventory: {
-            where: { storeId: { in: storeIds } },
-            select: { stock: true }
-          }
-        } : undefined,
+        include: {
+          variants: { where: { isActive: true }, orderBy: { price: 'asc' } },
+          ...(storeIds.length > 0 ? {
+            storeInventory: {
+              where: { storeId: { in: storeIds } },
+              select: { stock: true }
+            }
+          } : {})
+        },
       }),
       this.prisma.product.count({ where }),
     ]);
@@ -227,12 +233,15 @@ export class ProductsService {
 
     const product = await this.prisma.product.findUnique({
       where: { id },
-      include: storeIds.length > 0 ? {
-        storeInventory: {
-          where: { storeId: { in: storeIds } },
-          select: { stock: true }
-        }
-      } : undefined,
+      include: {
+        variants: { where: { isActive: true }, orderBy: { price: 'asc' } },
+        ...(storeIds.length > 0 ? {
+          storeInventory: {
+            where: { storeId: { in: storeIds } },
+            select: { stock: true }
+          }
+        } : {})
+      },
     });
 
     if (!product) {
@@ -259,6 +268,7 @@ export class ProductsService {
       where: { storeId },
       orderBy: { createdAt: 'desc' },
       include: {
+        variants: { where: { isActive: true }, orderBy: { price: 'asc' } },
         storeInventory: {
           where: { storeId },
           select: { stock: true },
@@ -269,7 +279,7 @@ export class ProductsService {
     // Replace product.stock with store-specific inventory stock
     const processedProducts = products.map((p) => ({
       ...p,
-      stock: p.storeInventory?.[0]?.stock ?? p.stock,
+      stock: (p as any).storeInventory?.[0]?.stock ?? p.stock,
       storeInventory: undefined,
     }));
 
@@ -478,5 +488,29 @@ export class ProductsService {
     this.logger.log(`Removed image from product ${product.name} (${id})`);
     await this.cache.bumpVersion('products');
     return updated;
+  }
+
+  async addVariant(productId: string, dto: any) {
+    const product = await this.findOne(productId);
+    const variant = await (this.prisma as any).productVariant.create({
+      data: { ...dto, productId }
+    });
+    await this.cache.bumpVersion('products');
+    return variant;
+  }
+
+  async updateVariant(variantId: string, dto: any) {
+    const variant = await (this.prisma as any).productVariant.update({
+      where: { id: variantId },
+      data: dto
+    });
+    await this.cache.bumpVersion('products');
+    return variant;
+  }
+
+  async deleteVariant(variantId: string) {
+    await (this.prisma as any).productVariant.delete({ where: { id: variantId } });
+    await this.cache.bumpVersion('products');
+    return { success: true };
   }
 }

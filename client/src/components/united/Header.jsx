@@ -2,8 +2,10 @@ import { TextMarquee } from '../../components/ui/text-marquee';
 import { useCategory } from '../../context/CategoryContext';
 import { useLocation as useDeviceLocation } from '../../context/LocationContext';
 import { useLocation as useRouterLocation, useNavigate } from 'react-router-dom';
+import { useState } from 'react';
 import { NAV_ITEMS } from '../../constants';
 
+import LocationPickerModal from './LocationPickerModal';
 import HeaderLogo from './header/HeaderLogo';
 import HeaderActions from './header/HeaderActions';
 import HeaderSearch from './header/HeaderSearch';
@@ -35,6 +37,7 @@ const Header = () => {
     const { nearestStore, serviceable, locationStatus, requestLocation } = useDeviceLocation();
     const routerLocation = useRouterLocation();
     const navigate = useNavigate();
+    const [isLocationModalOpen, setIsLocationModalOpen] = useState(false);
 
     const deliveryMins = nearestStore ? getDeliveryTime(nearestStore.distance) : null;
 
@@ -101,6 +104,7 @@ const Header = () => {
                     cartCount={cart.length}
                     onOpenCart={() => setIsCartOpen(true)}
                     onOpenProfile={() => setActivePage('profile')}
+                    onOpenLocation={() => setIsLocationModalOpen(true)}
                 />
             </div>
 
@@ -113,6 +117,7 @@ const Header = () => {
                 selectedCategory={selectedCategory}
                 onSelectCategory={handleCategorySelect}
             />
+            <LocationPickerModal isOpen={isLocationModalOpen} onClose={() => setIsLocationModalOpen(false)} />
         </div>
     );
 };

@@ -197,4 +197,38 @@ export class ProductsController {
   ) {
     return this.productsService.removeImage(id, dto.imageUrl, req.user?.storeId);
   }
+
+  @Post(':id/variants')
+  @ApiBearerAuth()
+  @UseGuards(AuthGuard('jwt'), RolesGuard, StoreGuard)
+  @Roles('ADMIN', 'STORE_MANAGER')
+  @ApiOperation({ summary: 'Add a variant to a product' })
+  addVariant(@Param('id', ParseUUIDPipe) id: string, @Body() dto: any) {
+    return this.productsService.addVariant(id, dto);
+  }
+
+  @Patch(':id/variants/:variantId')
+  @ApiBearerAuth()
+  @UseGuards(AuthGuard('jwt'), RolesGuard, StoreGuard)
+  @Roles('ADMIN', 'STORE_MANAGER')
+  @ApiOperation({ summary: 'Update a variant' })
+  updateVariant(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('variantId', ParseUUIDPipe) variantId: string,
+    @Body() dto: any,
+  ) {
+    return this.productsService.updateVariant(variantId, dto);
+  }
+
+  @Delete(':id/variants/:variantId')
+  @ApiBearerAuth()
+  @UseGuards(AuthGuard('jwt'), RolesGuard, StoreGuard)
+  @Roles('ADMIN', 'STORE_MANAGER')
+  @ApiOperation({ summary: 'Delete a variant' })
+  deleteVariant(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Param('variantId', ParseUUIDPipe) variantId: string,
+  ) {
+    return this.productsService.deleteVariant(variantId);
+  }
 }

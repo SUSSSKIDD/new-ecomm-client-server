@@ -1,8 +1,19 @@
 import PropTypes from 'prop-types';
+import { useLocation } from '../../../context/LocationContext';
 
-const HeaderActions = ({ cartCount, onOpenCart, onOpenProfile }) => {
+const HeaderActions = ({ cartCount, onOpenCart, onOpenProfile, onOpenLocation }) => {
+    const { userAddress, locationStatus } = useLocation();
+    
+    const locationText = locationStatus === 'granted' 
+        ? (userAddress || 'Current Location') 
+        : (locationStatus === 'requesting' ? 'Locating...' : 'Set Location');
     return (
         <div className="flex items-center gap-4 text-gray-600">
+            <div className="flex flex-col items-start cursor-pointer hover:text-ud-primary transition-colors group" onClick={onOpenLocation}>
+                <span className="text-[10px] uppercase font-bold text-gray-400">Location</span>
+                <span className="text-sm font-bold truncate max-w-[100px] sm:max-w-[150px]">{locationText}</span>
+            </div>
+
             <div
                 className="flex flex-col items-center cursor-pointer hover:text-ud-primary transition-colors group"
                 onClick={onOpenProfile}
@@ -28,6 +39,7 @@ HeaderActions.propTypes = {
     cartCount: PropTypes.number.isRequired,
     onOpenCart: PropTypes.func.isRequired,
     onOpenProfile: PropTypes.func.isRequired,
+    onOpenLocation: PropTypes.func.isRequired,
 };
 
 export default HeaderActions;

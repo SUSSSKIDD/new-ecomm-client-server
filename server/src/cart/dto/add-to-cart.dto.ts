@@ -28,4 +28,9 @@ export class AddToCartDto {
   @IsUUID()
   @IsOptional()
   printProductId?: string;
+
+  @ApiPropertyOptional({ description: 'Variant ID' })
+  @IsString()
+  @IsOptional()
+  variantId?: string;
 }

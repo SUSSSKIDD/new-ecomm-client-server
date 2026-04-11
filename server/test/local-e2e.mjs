@@ -53,6 +53,17 @@ async function setup() {
     console.log('🏗️  Starting isolated containers...');
     execSync(`docker-compose -f "${COMPOSE_FILE}" up -d --remove-orphans`, { stdio: 'inherit' });
 
+    console.log('⏳ Waiting for PostgreSQL to be ready...');
+    for (let i = 0; i < 20; i++) {
+      try {
+        const out = execSync(`docker-compose -f "${COMPOSE_FILE}" exec -T test-db pg_isready -U postgres`, { stdio: 'pipe' }).toString();
+        if (out.includes('accepting connections')) break;
+      } catch (e) {}
+      execSync('sleep 1');
+    }
+    // Give it a tiny bit more time purely for socket init
+    execSync('sleep 2');
+
     // 3. Synchronize Schema
     console.log('🚀 Synchronizing database schema (prisma db push)...');
     execSync('npx prisma db push --accept-data-loss', { 

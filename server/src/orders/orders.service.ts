@@ -227,6 +227,8 @@ export class OrdersService {
           image: rawItem.image || null,
           inStock: false,
           taxRate: 0,
+          variantId: rawItem.variantId,
+          variantLabel: rawItem.variantLabel,
         };
       }
       return {
@@ -238,6 +240,8 @@ export class OrdersService {
         image: product.images?.[0] ?? null,
         inStock: product.stock >= rawItem.quantity,
         taxRate: (product as any).taxRate ?? 0,
+        variantId: rawItem.variantId,
+        variantLabel: rawItem.variantLabel,
       };
     });
 
@@ -529,6 +533,8 @@ export class OrdersService {
         selectedSize: cartItem.selectedSize ?? null,
         userUploadUrls: cartItem.userUploadUrls ?? [],
         printProductId: cartItem.printProductId ?? null,
+        variantId: cartItem.variantId ?? null,
+        variantLabel: cartItem.variantLabel ?? null,
       };
     });
 
@@ -574,6 +580,8 @@ export class OrdersService {
               selectedSize: oi.selectedSize,
               userUploadUrls: oi.userUploadUrls,
               printProductId: oi.printProductId,
+              variantId: oi.variantId,
+              variantLabel: oi.variantLabel,
             })),
           },
         } as any,
@@ -619,6 +627,8 @@ export class OrdersService {
           selectedSize: cartItem?.selectedSize ?? null,
           userUploadUrls: cartItem?.userUploadUrls ?? [],
           printProductId: cartItem?.printProductId ?? null,
+          variantId: cartItem?.variantId ?? null,
+          variantLabel: cartItem?.variantLabel ?? null,
         };
       }),
     }));
@@ -709,6 +719,8 @@ export class OrdersService {
                 selectedSize: oi.selectedSize,
                 userUploadUrls: oi.userUploadUrls,
                 printProductId: oi.printProductId,
+                variantId: oi.variantId,
+                variantLabel: oi.variantLabel,
               })),
             },
           },

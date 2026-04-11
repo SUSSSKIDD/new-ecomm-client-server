@@ -12,6 +12,8 @@ export interface FulfillmentItem {
   storeId?: string;
   storeName?: string;
   reason?: string; // 'out_of_range' | 'out_of_stock'
+  variantId?: string;
+  variantLabel?: string;
 }
 
 export interface FulfillmentResult {
@@ -26,6 +28,8 @@ export interface CartItemInput {
   price: number;
   quantity: number;
   image: string | null;
+  variantId?: string;
+  variantLabel?: string;
 }
 
 @Injectable()

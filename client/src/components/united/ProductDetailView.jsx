@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { RippleButton } from '../../components/ui/ripple-button';
 import { useCategory } from '../../context/CategoryContext';
 import ImageCarousel from './ImageCarousel';
@@ -5,16 +6,41 @@ import ImageCarousel from './ImageCarousel';
 const ProductDetailView = () => {
     const { selectedProduct, setSelectedProduct, addToCart, setBuyNowProduct, setIsCartOpen } = useCategory();
 
+    const [selectedVariant, setSelectedVariant] = useState(null);
+
+    useEffect(() => {
+        if (selectedProduct && selectedProduct.variants && selectedProduct.variants.length > 0) {
+            setSelectedVariant(selectedProduct.variants[0]);
+        } else {
+            setSelectedVariant(null);
+        }
+    }, [selectedProduct]);
+
     if (!selectedProduct) return null;
 
-    const price = typeof selectedProduct.price === 'number' ? selectedProduct.price : parseFloat(String(selectedProduct.price).replace('₹', ''));
-    const mrp = selectedProduct.mrp ? (typeof selectedProduct.mrp === 'number' ? selectedProduct.mrp : parseFloat(String(selectedProduct.mrp).replace('₹', ''))) : null;
+    const basePrice = selectedVariant ? selectedVariant.price : selectedProduct.price;
+    const baseMrp = selectedVariant ? (selectedVariant.mrp || null) : (selectedProduct.mrp || null);
+    
+    const price = typeof basePrice === 'number' ? basePrice : parseFloat(String(basePrice).replace('₹', ''));
+    const mrp = baseMrp ? (typeof baseMrp === 'number' ? baseMrp : parseFloat(String(baseMrp).replace('₹', ''))) : null;
     const discount = mrp && mrp > price ? Math.round(((mrp - price) / mrp) * 100) : 0;
+    
+    const stock = selectedVariant ? selectedVariant.stock : selectedProduct.stock;
 
     const handleBuyNow = () => {
-        setBuyNowProduct({ ...selectedProduct, quantity: 1 });
+        const payload = { ...selectedProduct, quantity: 1, price, mrp };
+        if (selectedVariant) {
+            payload.variantId = selectedVariant.id;
+            payload.variantLabel = selectedVariant.label;
+        }
+        setBuyNowProduct(payload);
         setIsCartOpen(true);
-        setSelectedProduct(null); // Close the detail view
+        setSelectedProduct(null);
+    };
+
+    const handleAddToCart = () => {
+        const customFields = selectedVariant ? { variantId: selectedVariant.id, variantLabel: selectedVariant.label } : {};
+        addToCart({ ...selectedProduct, price, mrp }, undefined, customFields);
     };
 
     return (
@@ -58,6 +84,28 @@ const ProductDetailView = () => {
                         )}
                     </div>
 
+                    {selectedProduct.variants && selectedProduct.variants.length > 0 && (
+                        <div className="border-t border-gray-100 pt-4">
+                            <h3 className="font-bold text-gray-900 mb-2">Select Variant</h3>
+                            <div className="flex flex-wrap gap-2">
+                                {selectedProduct.variants.map((v) => (
+                                    <button
+                                        key={v.id}
+                                        type="button"
+                                        onClick={() => setSelectedVariant(v)}
+                                        className={`px-3 py-1.5 rounded-full text-sm font-medium border transition-colors ${
+                                            selectedVariant?.id === v.id
+                                                ? 'bg-ud-primary text-white border-ud-primary'
+                                                : 'bg-white text-gray-700 border-gray-200 hover:border-ud-primary'
+                                        }`}
+                                    >
+                                        {v.label}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
                     {selectedProduct.description && (
                         <div className="border-t border-gray-100 pt-4">
                             <h3 className="font-bold text-gray-900 mb-2">Product Details</h3>
@@ -72,15 +120,15 @@ const ProductDetailView = () => {
             {/* Always-visible CTA bar */}
             <div className="border-t border-gray-100 p-4 flex gap-4 bg-white shrink-0">
                 <RippleButton
-                    onClick={() => addToCart(selectedProduct)}
-                    disabled={selectedProduct.stock <= 0}
+                    onClick={handleAddToCart}
+                    disabled={stock <= 0}
                     className="flex-1 py-3 bg-yellow-400 text-black font-bold rounded-lg hover:bg-yellow-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                    {selectedProduct.stock > 0 ? 'Add to Cart' : 'Out of Stock'}
+                    {stock > 0 ? 'Add to Cart' : 'Out of Stock'}
                 </RippleButton>
                 <RippleButton
                     onClick={handleBuyNow}
-                    disabled={selectedProduct.stock <= 0}
+                    disabled={stock <= 0}
                     className="flex-1 py-3 bg-ud-primary text-white font-bold rounded-lg hover:bg-opacity-90 transition-colors shadow-lg shadow-blue-500/30 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                     Buy Now

@@ -8,6 +8,8 @@ export interface PreviewItem {
   total: number;
   image: string | null;
   inStock: boolean;
+  variantId?: string;
+  variantLabel?: string;
 }
 
 export interface OrderPreview {

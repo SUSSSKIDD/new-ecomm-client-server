@@ -160,11 +160,79 @@ const ProductModal = ({ product, onClose, onSaved, admin }) => {
     );
 };
 
+const VariantsModal = ({ product, onClose, onRefresh }) => {
+    const [variants, setVariants] = useState(product.variants || []);
+    const [newVar, setNewVar] = useState({ label: '', price: '', mrp: '', stock: '' });
+
+    const handleAdd = async () => {
+        try {
+            const res = await adminApi().post(`/products/${product.id}/variants`, {
+                label: newVar.label, price: Number(newVar.price), mrp: newVar.mrp ? Number(newVar.mrp) : undefined, stock: Number(newVar.stock)
+            });
+            setVariants([...variants, res.data]);
+            setNewVar({ label: '', price: '', mrp: '', stock: '' });
+            onRefresh();
+        } catch (err) {
+            alert(err.response?.data?.message || 'Failed to add variant');
+        }
+    };
+
+    const handleDelete = async (id) => {
+        if (!window.confirm('Delete variant?')) return;
+        try {
+            await adminApi().delete(`/products/${product.id}/variants/${id}`);
+            setVariants(variants.filter(v => v.id !== id));
+            onRefresh();
+        } catch (err) {
+            alert(err.response?.data?.message || 'Failed to delete variant');
+        }
+    };
+
+    return (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-lg shadow-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+                <div className="flex justify-between items-center p-6 border-b border-gray-200">
+                    <h2 className="text-lg font-bold text-gray-800">Variants for {product.name}</h2>
+                    <RippleButton onClick={onClose} className="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</RippleButton>
+                </div>
+                <div className="p-6 space-y-4">
+                    {variants.length === 0 ? (
+                        <p className="text-gray-500 text-sm">No variants yet.</p>
+                    ) : (
+                        <div className="space-y-2">
+                            {variants.map(v => (
+                                <div key={v.id} className="flex justify-between items-center bg-gray-50 p-3 rounded border border-gray-100">
+                                    <div>
+                                        <p className="font-bold text-sm text-gray-800">{v.label}</p>
+                                        <p className="text-xs text-gray-500">₹{v.price} {v.mrp ? `(MRP: ₹${v.mrp})` : ''} • {v.stock} in stock</p>
+                                    </div>
+                                    <RippleButton onClick={() => handleDelete(v.id)} className="text-red-500 text-xs hover:underline">Delete</RippleButton>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                    <div className="bg-gray-50 p-4 rounded mt-4 border border-gray-200">
+                        <h3 className="text-sm font-bold text-gray-800 mb-2">Add New Variant</h3>
+                        <div className="grid grid-cols-2 gap-2 mb-2">
+                            <input type="text" placeholder="Label (e.g. 500g)" value={newVar.label} onChange={e => setNewVar(v => ({ ...v, label: e.target.value }))} className="px-2 py-1 text-sm border rounded text-gray-900" />
+                            <input type="number" placeholder="Price" value={newVar.price} onChange={e => setNewVar(v => ({ ...v, price: e.target.value }))} className="px-2 py-1 text-sm border rounded text-gray-900" />
+                            <input type="number" placeholder="MRP (Optional)" value={newVar.mrp} onChange={e => setNewVar(v => ({ ...v, mrp: e.target.value }))} className="px-2 py-1 text-sm border rounded text-gray-900" />
+                            <input type="number" placeholder="Stock" value={newVar.stock} onChange={e => setNewVar(v => ({ ...v, stock: e.target.value }))} className="px-2 py-1 text-sm border rounded text-gray-900" />
+                        </div>
+                        <RippleButton onClick={handleAdd} disabled={!newVar.label || !newVar.price || !newVar.stock} className="w-full bg-ud-primary text-white py-2 text-sm rounded disabled:opacity-50">Add Variant</RippleButton>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 const AdminProducts = () => {
     const [products, setProducts] = useState([]);
     const [loading, setLoading] = useState(true);
     const [showModal, setShowModal] = useState(false);
     const [editingProduct, setEditingProduct] = useState(null);
+    const [variantsProduct, setVariantsProduct] = useState(null);
     const { admin } = useAdminAuth();
 
     const fetchProducts = async (signal) => {
@@ -199,6 +267,8 @@ const AdminProducts = () => {
     const openCreate = () => { setEditingProduct(null); setShowModal(true); };
     const openEdit = (p) => { setEditingProduct(p); setShowModal(true); };
     const closeModal = () => { setShowModal(false); setEditingProduct(null); };
+    const openVariants = (p) => setVariantsProduct(p);
+    const closeVariants = () => setVariantsProduct(null);
     const onSaved = () => { closeModal(); fetchProducts(); };
 
     return (
@@ -258,6 +328,7 @@ const AdminProducts = () => {
                                         </div>
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                        <RippleButton onClick={() => openVariants(p)} className="text-emerald-600 hover:text-emerald-900 mr-4 font-semibold">Variants ({p.variants?.length || 0})</RippleButton>
                                         <RippleButton onClick={() => openEdit(p)} className="text-indigo-600 hover:text-indigo-900 mr-4 font-semibold">Edit</RippleButton>
                                         <RippleButton onClick={() => handleDelete(p)} className="text-red-600 hover:text-red-900 font-semibold">Delete</RippleButton>
                                     </td>
@@ -270,6 +341,9 @@ const AdminProducts = () => {
 
             {showModal && (
                 <ProductModal product={editingProduct} onClose={closeModal} onSaved={onSaved} admin={admin} />
+            )}
+            {variantsProduct && (
+                <VariantsModal product={variantsProduct} onClose={closeVariants} onRefresh={() => fetchProducts()} />
             )}
         </div>
     );
