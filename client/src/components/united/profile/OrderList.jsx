@@ -366,7 +366,9 @@ const OrderList = ({ onBack }) => {
                                                     return (
                                                         <div key={child.id} className="bg-gray-50 rounded-lg p-3 border border-gray-100">
                                                             <div className="flex justify-between items-center mb-2">
-                                                                <span className="text-xs font-medium text-gray-600">#{child.orderNumber}</span>
+                                                                <span className="text-xs font-bold text-gray-800">
+                                                                    {child.storeTypeName || 'Store'} <span className="text-gray-500 font-medium ml-1">#{child.orderNumber}</span>
+                                                                </span>
                                                                 <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${childCfg.color}`}>
                                                                     {childCfg.label}
                                                                 </span>
@@ -377,15 +379,22 @@ const OrderList = ({ onBack }) => {
                                                                     <div key={item.id || idx} className="text-xs">
                                                                         <div className="flex justify-between items-start">
                                                                             <div className="flex-1 min-w-0 pr-2">
-                                                                                <span className="text-gray-800">{item.name}</span>
-                                                                                <span className="text-gray-400 ml-1">{item.quantity}x</span>
+                                                                                <div className="flex items-center gap-1.5 flex-wrap">
+                                                                                    <span className="text-gray-800">{item.name}</span>
+                                                                                    {item.variantLabel && (
+                                                                                        <span className="text-[9px] px-1 py-0.5 bg-emerald-50 text-emerald-600 rounded font-bold uppercase ring-1 ring-emerald-100">
+                                                                                            {item.variantLabel}
+                                                                                        </span>
+                                                                                    )}
+                                                                                </div>
+                                                                                <span className="text-gray-400 text-[10px]">{item.quantity}x</span>
                                                                             </div>
                                                                             <span className="font-medium text-gray-700">₹{item.total || (item.price * item.quantity)}</span>
                                                                         </div>
-                                                                        {(item.selectedSize || item.userUploadUrls?.length > 0) && (
+                                                                        {(item.variantLabel || item.selectedSize || item.userUploadUrls?.length > 0) && (
                                                                             <div className="flex flex-wrap gap-1 mt-0.5 ml-0.5">
                                                                                 {item.selectedSize && (
-                                                                                    <span className="text-[10px] px-1 py-0.5 bg-blue-50 text-blue-600 rounded">Size: {item.selectedSize}</span>
+                                                                                    <span className="text-[10px] px-1 py-0.5 bg-blue-50 text-blue-600 rounded font-medium">Size: {item.selectedSize}</span>
                                                                                 )}
                                                                                 {item.userUploadUrls?.map((url, ui) => (
                                                                                     <a key={ui} href={url} target="_blank" rel="noopener noreferrer" className="w-6 h-6 rounded overflow-hidden border border-gray-200 inline-block">
@@ -419,12 +428,19 @@ const OrderList = ({ onBack }) => {
                                                         <div key={item.id || idx}>
                                                             <div className="flex justify-between items-start">
                                                                 <div className="flex-1 min-w-0 pr-3">
-                                                                    <p className="text-sm text-gray-900 leading-tight">{item.name}</p>
+                                                                    <div className="flex items-center gap-1.5 flex-wrap">
+                                                                        <p className="text-sm text-gray-900 leading-tight">{item.name}</p>
+                                                                        {item.variantLabel && (
+                                                                            <span className="text-[9px] px-1 py-0.5 bg-emerald-50 text-emerald-600 rounded font-bold uppercase ring-1 ring-emerald-100">
+                                                                                {item.variantLabel}
+                                                                            </span>
+                                                                        )}
+                                                                    </div>
                                                                     <p className="text-[11px] text-gray-400">{item.quantity} x ₹{item.price}</p>
                                                                 </div>
                                                                 <span className="text-sm font-semibold text-gray-800">₹{item.total || (item.price * item.quantity)}</span>
                                                             </div>
-                                                            {(item.selectedSize || item.userUploadUrls?.length > 0) && (
+                                                            {(item.variantLabel || item.selectedSize || item.userUploadUrls?.length > 0) && (
                                                                 <div className="flex flex-wrap gap-1 mt-1">
                                                                     {item.selectedSize && (
                                                                         <span className="text-[10px] px-1.5 py-0.5 bg-blue-50 text-blue-600 rounded font-medium">Size: {item.selectedSize}</span>

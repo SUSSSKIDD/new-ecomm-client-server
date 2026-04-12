@@ -16,3 +16,8 @@ GEMINI.md
 .gitignore
 .cursor/mcp.json
 server/test/POSTGRES-MIGRATION-PLAN.md
+server/MULTI-CATEGORY-PLAN.md
+.gitignore
+# Added by code-review-graph
+.code-review-graph/
+server/VARIANT-CREATION-PLAN.md

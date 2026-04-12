@@ -11,6 +11,8 @@ export interface CartItem {
   printProductId?: string;
   variantId?: string;
   variantLabel?: string;
+  storeType?: string;
+  storeTypeName?: string;
 }
 
 export interface Cart {

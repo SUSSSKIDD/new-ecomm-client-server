@@ -63,6 +63,8 @@ export class OrderFulfillmentService {
           available: true,
           storeId: storeAlloc.storeId,
           storeName: storeAlloc.storeName,
+          variantId: item.variantId,
+          variantLabel: item.variantLabel,
         });
       }
     }
@@ -77,6 +79,8 @@ export class OrderFulfillmentService {
         image: item.image,
         available: false,
         reason: 'out_of_stock',
+        variantId: item.variantId,
+        variantLabel: item.variantLabel,
       }),
     );
 
@@ -117,6 +121,8 @@ export class OrderFulfillmentService {
           available: true,
           storeId: storeAlloc.storeId,
           storeName: storeAlloc.storeName,
+          variantId: item.variantId,
+          variantLabel: item.variantLabel,
         });
       }
     }
@@ -131,6 +137,8 @@ export class OrderFulfillmentService {
         image: item.image,
         available: false,
         reason: 'out_of_stock',
+        variantId: item.variantId,
+        variantLabel: item.variantLabel,
       }),
     );
 

@@ -38,6 +38,7 @@ export class ProductsService {
     dto: CreateProductDto,
     files?: Express.Multer.File[],
     storeId?: string,
+    variantImageMap?: Record<number, Express.Multer.File[]>,
   ) {
     const dtoImageCount = dto.images?.length || 0;
     const fileCount = files?.length || 0;
@@ -59,7 +60,7 @@ export class ProductsService {
     }
 
     // Remove images and variants from dto since we handle it separately
-    const { images: _ignored, variants, ...productData } = dto;
+    const { images: _ignored, variants, variantsJson: _ignoredJson, ...productData } = dto as any;
 
     if (storeId) {
       const store = await this.prisma.store.findUnique({ where: { id: storeId } });
@@ -76,6 +77,27 @@ export class ProductsService {
       productData.isGrocery = store.storeType === 'GROCERY';
     }
 
+    // Upload variant images before DB write
+    const variantUploadedUrls: Record<number, string[]> = {};
+    const allUploadedUrls: string[] = [...uploadedUrls]; // track for rollback
+
+    if (variantImageMap) {
+      for (const [idx, filesList] of Object.entries(variantImageMap)) {
+        if (filesList.length > ProductsService.MAX_IMAGES) {
+          throw new BadRequestException(`Maximum ${ProductsService.MAX_IMAGES} images allowed per variant`);
+        }
+        const urls = await this.storage.uploadMany(filesList); // uploads to products folder by default on service
+        variantUploadedUrls[Number(idx)] = urls;
+        allUploadedUrls.push(...urls);
+      }
+    }
+
+    // Attach uploaded URLs to the matching variant slot
+    const variantsWithImages = variants?.map((v, i) => ({
+      ...v,
+      images: variantUploadedUrls[i] || [],
+    }));
+
     // Fix #4: Clean up uploaded images if DB insert fails
     try {
       const product = await this.prisma.product.create({
@@ -86,11 +108,11 @@ export class ProductsService {
           storeInventory: storeId ? {
             create: {
               storeId,
-              stock: productData.stock || 0
+              stock: (variantsWithImages && variantsWithImages.length > 0) ? 0 : (productData.stock || 0)
             }
           } : undefined,
-          variants: variants?.length ? {
-            create: variants
+          variants: variantsWithImages?.length ? {
+            create: variantsWithImages
           } : undefined,
         },
       });
@@ -101,9 +123,9 @@ export class ProductsService {
       await this.cache.bumpVersion('products');
       return product;
     } catch (error) {
-      if (uploadedUrls.length > 0) {
+      if (allUploadedUrls.length > 0) {
         this.logger.warn('DB insert failed, cleaning up uploaded images');
-        await this.storage.deleteMany(uploadedUrls).catch(() => { });
+        await this.storage.deleteMany(allUploadedUrls).catch(() => { });
       }
       throw error;
     }
@@ -356,7 +378,7 @@ export class ProductsService {
     }
 
     try {
-      const updateData: any = { ...dto };
+      const { variants, variantsJson, images: _ignored, ...updateData } = dto as any;
       if (newImageUrls.length > 0) {
         updateData.images = [...(product.images || []), ...newImageUrls];
       }

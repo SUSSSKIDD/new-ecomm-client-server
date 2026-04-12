@@ -2,7 +2,7 @@ import { RippleButton } from '../../components/ui/ripple-button';
 import { InteractiveHoverButton } from '../../components/ui/interactive-hover-button';
 import { useCategory } from '../../context/CategoryContext';
 import { useAuth } from '../../context/AuthContext';
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { api } from '../../lib/api';
 import AddressForm from './profile/AddressForm';
 import { useAddresses } from '../../hooks/useAddresses';
@@ -400,6 +400,16 @@ const CartSidebar = () => {
         }
     }, [orderResult, modifyItems, token]);
 
+    // ── Group cart items by storeType ──
+    const groupedCart = useMemo(() => {
+        return cart.reduce((acc, item) => {
+            const storeName = item.storeTypeName || 'Store';
+            if (!acc[storeName]) acc[storeName] = [];
+            acc[storeName].push(item);
+            return acc;
+        }, {});
+    }, [cart]);
+
     // ── RENDER ──
 
     const renderContent = () => {
@@ -670,22 +680,38 @@ const CartSidebar = () => {
                                         </div>
                                     </div>
                                 ) : (
-                                    cart.map((item) => (
-                                        <div key={item.id} className="flex items-center gap-3 bg-gray-50 rounded-lg p-2">
-                                            <div className="w-10 h-10 bg-white rounded flex items-center justify-center flex-shrink-0">
-                                                <img src={item.image || item.images?.[0]} alt={item.name} className="w-8 h-8 object-contain" />
+                                    (preview?.items || cart).map((item, idx) => {
+                                        const isUnavailable = preview?.fulfillment?.unavailableItems?.some(
+                                            u => u.productId === item.productId && (!u.variantId || u.variantId === item.variantId)
+                                        );
+                                        return (
+                                            <div key={item.id || idx} className={`flex items-center gap-3 bg-gray-50 rounded-lg p-2 ${isUnavailable ? 'opacity-50 grayscale' : ''}`}>
+                                                <div className="w-10 h-10 bg-white rounded flex items-center justify-center flex-shrink-0 relative">
+                                                    <img src={item.image || item.images?.[0]} alt={item.name} className="w-8 h-8 object-contain" />
+                                                    {isUnavailable && (
+                                                        <div className="absolute inset-0 flex items-center justify-center">
+                                                            <div className="bg-red-500 w-1.5 h-1.5 rounded-full" />
+                                                        </div>
+                                                    )}
+                                                </div>
+                                                <div className="flex-1 min-w-0">
+                                                    <p className="text-xs font-medium text-gray-900 truncate">{item.name}</p>
+                                                    {item.variantLabel && (
+                                                        <p className="text-[10px] text-emerald-600 font-medium">{item.variantLabel}</p>
+                                                    )}
+                                                    <p className="text-[10px] text-gray-500">
+                                                        {item.quantity} × ₹{parsePrice(item.price)}
+                                                    </p>
+                                                </div>
+                                                <div className="text-right">
+                                                    <span className={`text-xs font-bold ${isUnavailable ? 'text-gray-400 line-through' : 'text-gray-900'}`}>
+                                                        ₹{(parsePrice(item.price) * item.quantity).toFixed(0)}
+                                                    </span>
+                                                    {isUnavailable && <p className="text-[9px] text-red-500 font-bold uppercase">Out of Stock</p>}
+                                                </div>
                                             </div>
-                                            <div className="flex-1 min-w-0">
-                                                <p className="text-xs font-medium text-gray-900 truncate">{item.name}</p>
-                                                <p className="text-[10px] text-gray-500">
-                                                    {item.quantity} × ₹{parsePrice(item.price)}
-                                                </p>
-                                            </div>
-                                            <span className="text-xs font-bold text-gray-900">
-                                                ₹{(parsePrice(item.price) * item.quantity).toFixed(0)}
-                                            </span>
-                                        </div>
-                                    ))
+                                        );
+                                    })
                                 )}
                             </div>
                         </div>
@@ -715,25 +741,7 @@ const CartSidebar = () => {
                             </div>
                         )}
 
-                        {/* ─ Multi-Store Allocation Info ─ */}
-                        {preview?.allocation?.type === 'MULTI_STORE' && preview.allocation?.stores?.length > 1 && (
-                            <div className="bg-blue-50 rounded-xl p-3 border border-blue-200">
-                                <p className="text-xs font-bold text-blue-700 uppercase mb-1.5">
-                                    Fulfilled from {preview.allocation.storeCount} stores
-                                </p>
-                                <p className="text-[11px] text-blue-600 mb-2">
-                                    Each store shipment will be tracked independently
-                                </p>
-                                {preview.allocation.stores.map((store, i) => (
-                                    <div key={i} className="flex justify-between text-xs text-blue-800 py-0.5">
-                                        <span className="font-medium">{store.storeName}</span>
-                                        <span className="text-blue-500">
-                                            {store.itemCount} {store.itemCount === 1 ? 'item' : 'items'} · ₹{store.subtotal.toFixed(0)}
-                                        </span>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
+
 
                         {/* ─ Price Breakdown (always use server preview when available) ─ */}
                         <div className="bg-gray-50 rounded-xl p-3 space-y-1.5">
@@ -854,51 +862,58 @@ const CartSidebar = () => {
                         </RippleButton>
                     </div>
                 ) : (
-                    cart.map((item) => (
-                        <div key={item.id} className="flex gap-3 bg-white border border-gray-100 rounded-lg p-2 shadow-sm">
-                            <div className="w-16 h-16 bg-gray-50 rounded-md flex items-center justify-center flex-shrink-0">
-                                <img src={item.image || item.images?.[0]} alt={item.name} className="w-12 h-12 object-contain" />
-                            </div>
-                            <div className="flex-1 min-w-0">
-                                <h4 className="text-sm font-medium text-gray-900 truncate">{item.name}</h4>
-                                <p className="text-xs text-gray-500 mt-1">₹{parsePrice(item.price)}</p>
-                                {/* Custom fields badges */}
-                                {(item.selectedSize || item.variantLabel || item.userUploadUrls?.length > 0) && (
-                                    <div className="flex flex-wrap gap-1 mt-1">
-                                        {item.selectedSize && (
-                                            <span className="text-[10px] px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded font-medium">
-                                                Size: {item.selectedSize}
-                                            </span>
-                                        )}
-                                        {item.variantLabel && (
-                                            <span className="text-[10px] px-1.5 py-0.5 bg-emerald-100 text-emerald-700 rounded font-medium">
-                                                Variant: {item.variantLabel}
-                                            </span>
-                                        )}
-                                        {item.userUploadUrls?.length > 0 && (
-                                            <span className="text-[10px] px-1.5 py-0.5 bg-purple-100 text-purple-700 rounded font-medium">
-                                                {item.userUploadUrls.length} upload{item.userUploadUrls.length > 1 ? 's' : ''}
-                                            </span>
-                                        )}
+                    Object.entries(groupedCart).map(([storeName, items]) => (
+                        <div key={storeName} className="mb-4">
+                            <h4 className="text-xs font-bold uppercase text-gray-500 mb-2 px-1">{storeName}</h4>
+                            <div className="space-y-2">
+                                {items.map((item) => (
+                                    <div key={item.id} className="flex gap-3 bg-white border border-gray-100 rounded-lg p-2 shadow-sm">
+                                        <div className="w-16 h-16 bg-gray-50 rounded-md flex items-center justify-center flex-shrink-0">
+                                            <img src={item.image || item.images?.[0]} alt={item.name} className="w-12 h-12 object-contain" />
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <h4 className="text-sm font-medium text-gray-900 truncate">{item.name}</h4>
+                                            <p className="text-xs text-gray-500 mt-1">₹{parsePrice(item.price)}</p>
+                                            {/* Custom fields badges */}
+                                            {(item.selectedSize || item.variantLabel || item.userUploadUrls?.length > 0) && (
+                                                <div className="flex flex-wrap gap-1 mt-1">
+                                                    {item.selectedSize && (
+                                                        <span className="text-[10px] px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded font-medium">
+                                                            Size: {item.selectedSize}
+                                                        </span>
+                                                    )}
+                                                    {item.variantLabel && (
+                                                        <span className="text-[10px] px-1.5 py-0.5 bg-emerald-100 text-emerald-700 rounded font-medium">
+                                                            Variant: {item.variantLabel}
+                                                        </span>
+                                                    )}
+                                                    {item.userUploadUrls?.length > 0 && (
+                                                        <span className="text-[10px] px-1.5 py-0.5 bg-purple-100 text-purple-700 rounded font-medium">
+                                                            {item.userUploadUrls.length} upload{item.userUploadUrls.length > 1 ? 's' : ''}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            )}
+                                            <div className="flex items-center justify-between mt-2">
+                                                <div className="flex items-center border border-gray-200 rounded">
+                                                    <RippleButton
+                                                        className="px-2 py-0.5 text-gray-500 hover:bg-gray-100"
+                                                        onClick={() => updateQuantity(item.id, -1, item.variantId)}
+                                                    >-</RippleButton>
+                                                    <span className="px-2 text-xs font-medium">{item.quantity}</span>
+                                                    <RippleButton
+                                                        className="px-2 py-0.5 text-gray-500 hover:bg-gray-100"
+                                                        onClick={() => updateQuantity(item.id, 1, item.variantId)}
+                                                    >+</RippleButton>
+                                                </div>
+                                                <RippleButton
+                                                    className="text-xs text-red-500 font-medium hover:underline"
+                                                    onClick={() => removeFromCart(item.id, item.variantId)}
+                                                >Remove</RippleButton>
+                                            </div>
+                                        </div>
                                     </div>
-                                )}
-                                <div className="flex items-center justify-between mt-2">
-                                    <div className="flex items-center border border-gray-200 rounded">
-                                        <RippleButton
-                                            className="px-2 py-0.5 text-gray-500 hover:bg-gray-100"
-                                            onClick={() => updateQuantity(item.id, -1, item.variantId)}
-                                        >-</RippleButton>
-                                        <span className="px-2 text-xs font-medium">{item.quantity}</span>
-                                        <RippleButton
-                                            className="px-2 py-0.5 text-gray-500 hover:bg-gray-100"
-                                            onClick={() => updateQuantity(item.id, 1, item.variantId)}
-                                        >+</RippleButton>
-                                    </div>
-                                    <RippleButton
-                                        className="text-xs text-red-500 font-medium hover:underline"
-                                        onClick={() => removeFromCart(item.id, item.variantId)}
-                                    >Remove</RippleButton>
-                                </div>
+                                ))}
                             </div>
                         </div>
                     ))

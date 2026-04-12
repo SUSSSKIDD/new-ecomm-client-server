@@ -20,7 +20,7 @@ export const useProductList = ({ category, subCategory, limit = 10 }) => {
     }, [category, subCategory]);
 
     useEffect(() => {
-        if (!category && !subCategory) return;
+        // Allow fetching all products without category/subCategory filter
 
         const fetchProducts = async () => {
             if (abortControllerRef.current) {

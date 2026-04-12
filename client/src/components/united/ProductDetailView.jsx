@@ -60,7 +60,7 @@ const ProductDetailView = () => {
 
                 {/* Hero Image Carousel */}
                 <ImageCarousel
-                    images={selectedProduct.images || []}
+                    images={(selectedVariant?.images?.length ? selectedVariant.images : selectedProduct.images) || []}
                     altText={selectedProduct.name}
                     className="h-52 md:h-80"
                 />

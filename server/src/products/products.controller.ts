@@ -14,7 +14,7 @@ import {
   Req,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
-import { FilesInterceptor } from '@nestjs/platform-express';
+import { FilesInterceptor, AnyFilesInterceptor } from '@nestjs/platform-express';
 import {
   ApiTags,
   ApiOperation,
@@ -103,7 +103,7 @@ export class ProductsController {
   @ApiBearerAuth()
   @UseGuards(AuthGuard('jwt'), RolesGuard, StoreGuard)
   @Roles('ADMIN', 'STORE_MANAGER')
-  @UseInterceptors(FilesInterceptor('images', 3, MULTER_IMAGE_OPTIONS))
+  @UseInterceptors(AnyFilesInterceptor(MULTER_IMAGE_OPTIONS))
   @ApiConsumes('multipart/form-data')
   @ApiOperation({ summary: 'Create a product with image uploads (Admin only)' })
   @ApiResponse({ status: 201, description: 'Product created' })
@@ -121,16 +121,31 @@ export class ProductsController {
         isGrocery: { type: 'boolean' },
         storeLocation: { type: 'string' },
         images: { type: 'array', items: { type: 'string', format: 'binary' } },
+        variantsJson: { type: 'string', description: 'JSON string of variants' },
       },
       required: ['name', 'price', 'category', 'stock'],
     },
   })
   create(
     @Body() dto: CreateProductDto,
-    @UploadedFiles() files: Express.Multer.File[],
+    @UploadedFiles() allFiles: Express.Multer.File[],
     @Req() req: any,
   ) {
-    return this.productsService.createWithImages(dto, files, req.user?.storeId);
+    const productImages = allFiles.filter(f => f.fieldname === 'images');
+    const variantImageMap: Record<number, Express.Multer.File[]> = {};
+    allFiles
+      .filter(f => f.fieldname.startsWith('variantImage_'))
+      .forEach(f => {
+        const idx = parseInt(f.fieldname.split('_')[1], 10);
+        if (!variantImageMap[idx]) variantImageMap[idx] = [];
+        variantImageMap[idx].push(f);
+      });
+
+    if (dto['variantsJson']) {
+      dto.variants = JSON.parse(dto['variantsJson']);
+    }
+
+    return this.productsService.createWithImages(dto, productImages, req.user?.storeId, variantImageMap);
   }
 
   @Patch(':id')

@@ -18,6 +18,7 @@ export class CreateVariantDto {
   @Type(() => Number) @IsNumber() price: number;
   @IsOptional() @Type(() => Number) @IsNumber() mrp?: number;
   @Type(() => Number) @IsNumber() stock: number;
+  @IsOptional() @IsArray() @IsString({ each: true }) images?: string[];
 }
 
 export class CreateProductDto {
@@ -91,9 +92,14 @@ export class CreateProductDto {
   @IsOptional()
   images?: string[];
 
-  @ApiPropertyOptional({ description: 'Product variants' })
+  @ApiPropertyOptional({ description: 'Product variants as objects' })
   @IsOptional()
   @ValidateNested({ each: true })
   @Type(() => CreateVariantDto)
   variants?: CreateVariantDto[];
+
+  @ApiPropertyOptional({ description: 'Product variants as JSON string (for multipart/form-data)' })
+  @IsString()
+  @IsOptional()
+  variantsJson?: string;
 }

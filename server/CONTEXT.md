@@ -396,8 +396,9 @@ CANCELLED  CANCELLED     CANCELLED       CANCELLED   CANCELLED   CANCELLED
 - `Order.parentOrderId` (nullable self-ref FK) + `Order.isParent` (boolean) enable parent/child hierarchy.
 - **Single-store order:** `parentOrderId=null`, `isParent=false` (unchanged from legacy).
 - **Multi-store parent:** `parentOrderId=null`, `isParent=true`, holds aggregate totals, NO items.
-- **Multi-store child:** `parentOrderId=<parent.id>`, `isParent=false`, holds items for ONE store.
+- **Multi-store child:** `parentOrderId=<parent.id>`, `isParent=false`, holds items for ONE store and includes `storeTypeName`.
 - All created atomically in one `$transaction` with batch stock decrement.
+- **Cross-Category Carts**: Carts can contain items across any storeType (GROCERY, PIZZA_TOWN, etc.). The multi-store logic will automatically separate the order into multiple child orders based on each product's store.
 
 ### Flow
 1. Customer places order with `addressId` (includes lat/lng)
@@ -797,6 +798,16 @@ To properly route custom domains (`neyokart.com`, `neyokart.in`) into the isolat
 - **Zero-Downtime Swap**: Maintains the Blue/Green strategy using dormant port swapping (3001/3002 and 8001/8002) with graceful Nginx reloads.
 
 ## User-Centric Location & Product Variants (2026-04-11)
+- **Product Variants**: Support for multiple variants per product (e.g. "Gift Wrapped", "Pack of 2") with per-variant stock, price, and labels. Variants are persisted in `OrderItem` to maintain historical accuracy.
+- **Admin UI**: Granular inventory control with low-stock warnings and variant-specific management.
+
+## Multi-Category Ordering & Order Splitting (2026-04-12)
+- **Cross-Category Cart**: Users can now add items from different store types (e.g. Grocery + Pizza) to a single cart without restriction.
+- **Order Splitting**: Multi-category orders are automatically detected at checkout. The system creates a `parent` order (holding totals) and multiple `child` orders (one per store).
+- **Atomic Fulfillment**: Parent and children are created in a single transaction. Each child order is independently broadcasted to nearby riders based on its store location.
+- **Store-Specific UI**: Cart items are grouped by `storeTypeName` in the sidebar. Order history displays sub-orders with their respective store names and delivery status.
+- **Unified Status**: Parent order status is dynamically derived from all its children (e.g., Parent is DELIVERED only when all children are DELIVERED).
+- **Grace Period**: Cancellation and modification work across the entire order hierarchy within the 90s grace period.
 
 ### Product Variants
 - **Nested Variants:** Support for multiple variants per product (e.g. 500g, 1kg) with independent pricing, MRP, and stock management.

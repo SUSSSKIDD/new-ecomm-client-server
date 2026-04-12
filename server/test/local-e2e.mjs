@@ -3,6 +3,7 @@
  *
  * This script is a wrapper around 'universal-e2e.mjs'.
  * It automates the infrastructure setup for a local, isolated, and non-conflicting test run.
+ * It now also covers testing multi-category carts and split orders.
  */
 
 import axios from 'axios';
@@ -44,19 +45,17 @@ async function setup() {
     }
 
     // 1. Ensure build exists
-    if (!fs.existsSync(path.join(SERVER_ROOT, 'dist'))) {
-      console.log('🔨 Building server...');
-      execSync('npm run build', { cwd: SERVER_ROOT, stdio: 'inherit' });
-    }
+    console.log('🔨 Building server...');
+    execSync('npm run build', { cwd: SERVER_ROOT, stdio: 'inherit' });
 
     // 2. Start Containers
     console.log('🏗️  Starting isolated containers...');
-    execSync(`docker-compose -f "${COMPOSE_FILE}" up -d --remove-orphans`, { stdio: 'inherit' });
+    execSync(`docker compose -f "${COMPOSE_FILE}" up -d --remove-orphans`, { stdio: 'inherit' });
 
     console.log('⏳ Waiting for PostgreSQL to be ready...');
     for (let i = 0; i < 20; i++) {
       try {
-        const out = execSync(`docker-compose -f "${COMPOSE_FILE}" exec -T test-db pg_isready -U postgres`, { stdio: 'pipe' }).toString();
+        const out = execSync(`docker compose -f "${COMPOSE_FILE}" exec -T test-db pg_isready -U postgres`, { stdio: 'pipe' }).toString();
         if (out.includes('accepting connections')) break;
       } catch (e) {}
       execSync('sleep 1');
@@ -80,7 +79,7 @@ async function setup() {
             VALUES ('e2e-otp-template-id', 'OTP Verification', 'otp_verification', 'Your OTP is ##OTP##', '{OTP}', 'TRANSACTIONAL', true, 'dummy_flow_id', NOW(), NOW())
             ON CONFLICT (key) DO UPDATE SET "msg91FlowId" = 'dummy_flow_id', "isActive" = true;
         `;
-        const containerId = execSync(`docker-compose -f "${COMPOSE_FILE}" ps -q test-db`).toString().trim();
+        const containerId = execSync(`docker compose -f "${COMPOSE_FILE}" ps -q test-db`).toString().trim();
         if (!containerId) throw new Error('DB container not found');
         
         execSync(`docker exec -i ${containerId} psql -U postgres -d local_test_db`, {
@@ -157,7 +156,7 @@ async function teardown() {
 
   try {
     console.log('📉 Destroying isolated containers...');
-    execSync(`docker-compose -f "${COMPOSE_FILE}" down`, { stdio: 'inherit' });
+    execSync(`docker compose -f "${COMPOSE_FILE}" down`, { stdio: 'inherit' });
   } catch (e) { }
 
   if (fs.existsSync(ENV_BAK)) {

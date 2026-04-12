@@ -435,12 +435,19 @@ const AdminOrders = () => {
                                                                         <div key={item.id || idx} className="bg-white rounded-lg px-4 py-2 border border-gray-100">
                                                                             <div className="flex items-center justify-between">
                                                                                 <div className="flex-1 min-w-0">
-                                                                                    <p className="text-sm font-medium text-gray-900 truncate">{item.name}</p>
+                                                                                    <div className="flex items-center gap-2">
+                                                                                        <p className="text-sm font-medium text-gray-900 truncate">{item.name}</p>
+                                                                                        {item.variantLabel && (
+                                                                                            <span className="px-1.5 py-0.5 bg-emerald-50 text-emerald-700 rounded text-[10px] font-bold uppercase ring-1 ring-emerald-100">
+                                                                                                {item.variantLabel}
+                                                                                            </span>
+                                                                                        )}
+                                                                                    </div>
                                                                                     <p className="text-xs text-gray-400">Qty: {item.quantity} × ₹{item.price}</p>
                                                                                 </div>
                                                                                 <span className="text-sm font-bold text-gray-800 ml-4">₹{item.total || (item.price * item.quantity)}</span>
                                                                             </div>
-                                                                            {(item.selectedSize || item.userUploadUrls?.length > 0 || item.printProductId) && (
+                                                                            {(item.variantLabel || item.selectedSize || item.userUploadUrls?.length > 0 || item.printProductId) && (
                                                                                 <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
                                                                                     {item.printProductId && (
                                                                                         <span className="px-2 py-0.5 bg-purple-50 text-purple-700 rounded text-xs font-medium">Custom Print</span>

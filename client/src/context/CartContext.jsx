@@ -58,6 +58,8 @@ export const CartProvider = ({ children }) => {
                     ...(item.userUploadUrls?.length && { userUploadUrls: item.userUploadUrls }),
                     ...(item.printProductId && { printProductId: item.printProductId }),
                     ...(item.variantId && { variantId: item.variantId, variantLabel: item.variantLabel }),
+                    ...(item.storeType && { storeType: item.storeType }),
+                    ...(item.storeTypeName && { storeTypeName: item.storeTypeName }),
                 }));
 
                 let currentLocalCart = [];
@@ -92,13 +94,6 @@ export const CartProvider = ({ children }) => {
         const itemCategory = category || product.category;
 
         setCart((prevCart) => {
-            if (prevCart.length > 0 && itemCategory) {
-                const existingCategory = prevCart[0].category;
-                if (existingCategory && existingCategory !== itemCategory) {
-                    showToast(`Cannot mix ${existingCategory} with ${itemCategory}! Clear cart first.`);
-                    return prevCart;
-                }
-            }
 
             const itemVariantId = customFields?.variantId || undefined;
             const existingItem = prevCart.find(item => item.id === product.id && item.variantId === itemVariantId);
@@ -123,7 +118,7 @@ export const CartProvider = ({ children }) => {
             if (token) {
                 clientApi().post('/cart/items', apiPayload).catch(() => { });
             }
-            return [...prevCart, { ...product, quantity: 1, category: itemCategory, ...customFields }];
+            return [...prevCart, { ...product, quantity: 1, category: itemCategory, ...customFields, storeType: product.store?.storeType, storeTypeName: product.store?.name }];
         });
     };
 

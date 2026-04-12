@@ -25,6 +25,17 @@ const ProductModal = ({ product, onClose, onSaved, admin }) => {
     const [images, setImages] = useState(null);
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState('');
+    const [hasVariants, setHasVariants] = useState(false);
+    const [variants, setVariants] = useState([{ label: '', price: '', mrp: '', stock: '', image: null }]);
+
+    const addVariant = () =>
+        setVariants(v => [...v, { label: '', price: '', mrp: '', stock: '', image: null }]);
+
+    const removeVariant = (i) =>
+        setVariants(v => v.filter((_, idx) => idx !== i));
+
+    const updateVariant = (i, field, value) =>
+        setVariants(v => v.map((item, idx) => idx === i ? { ...item, [field]: value } : item));
 
     useEffect(() => {
         let cancelled = false;
@@ -46,7 +57,21 @@ const ProductModal = ({ product, onClose, onSaved, admin }) => {
         fd.append('name', form.name);
         fd.append('price', Number(form.price));
         fd.append('category', form.category);
-        fd.append('stock', Number(form.stock));
+        if (!product && hasVariants && variants.length > 0) {
+            fd.append('stock', '0'); // variants hold the true stock
+            const variantMeta = variants.map(({ label, price, mrp, stock }) => ({
+                label,
+                price: Number(price),
+                mrp: mrp ? Number(mrp) : undefined,
+                stock: Number(stock),
+            }));
+            fd.append('variantsJson', JSON.stringify(variantMeta));
+            variants.forEach((v, i) => {
+                if (v.image) fd.append(`variantImage_${i}`, v.image);
+            });
+        } else {
+            fd.append('stock', Number(form.stock));
+        }
         fd.append('taxRate', Number(form.taxRate ?? 0));
         if (form.storeLocation) fd.append('storeLocation', form.storeLocation);
         if (form.description) fd.append('description', form.description);
@@ -93,18 +118,20 @@ const ProductModal = ({ product, onClose, onSaved, admin }) => {
                         <input type="text" required value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
                             className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ud-primary text-gray-900" />
                     </div>
-                    <div className="grid grid-cols-2 gap-4">
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Price *</label>
-                            <input type="number" required min="0" step="0.01" value={form.price} onChange={e => setForm(f => ({ ...f, price: e.target.value }))}
-                                className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ud-primary text-gray-900" />
+                    {!(!product && hasVariants) && (
+                        <div className="grid grid-cols-2 gap-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Price *</label>
+                                <input type="number" required min="0" step="0.01" value={form.price} onChange={e => setForm(f => ({ ...f, price: e.target.value }))}
+                                    className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ud-primary text-gray-900" />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">MRP</label>
+                                <input type="number" min="0" step="0.01" value={form.mrp} onChange={e => setForm(f => ({ ...f, mrp: e.target.value }))}
+                                    className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ud-primary text-gray-900" />
+                            </div>
                         </div>
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">MRP</label>
-                            <input type="number" min="0" step="0.01" value={form.mrp} onChange={e => setForm(f => ({ ...f, mrp: e.target.value }))}
-                                className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ud-primary text-gray-900" />
-                        </div>
-                    </div>
+                    )}
                     <div className="grid grid-cols-2 gap-4">
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">Category *</label>
@@ -114,12 +141,73 @@ const ProductModal = ({ product, onClose, onSaved, admin }) => {
                                 {allowedCategories.map(c => <option key={c} value={c}>{c}</option>)}
                             </select>
                         </div>
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Stock *</label>
-                            <input type="number" required min="0" value={form.stock} onChange={e => setForm(f => ({ ...f, stock: e.target.value }))}
-                                className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ud-primary text-gray-900" />
-                        </div>
+                        {!(!product && hasVariants) && (
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Stock *</label>
+                                <input type="number" required min="0" value={form.stock} onChange={e => setForm(f => ({ ...f, stock: e.target.value }))}
+                                    className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ud-primary text-gray-900" />
+                            </div>
+                        )}
                     </div>
+                    {!product && (
+                        <div className="space-y-4">
+                            <div className="flex items-center gap-2">
+                                <input
+                                    type="checkbox"
+                                    id="hasVariants"
+                                    checked={hasVariants}
+                                    onChange={e => setHasVariants(e.target.checked)}
+                                />
+                                <label htmlFor="hasVariants" className="text-sm font-medium text-gray-700">
+                                    This product has variants (e.g. sizes, weights)
+                                </label>
+                            </div>
+
+                            {hasVariants && (
+                                <div className="border border-gray-200 rounded-lg p-4 space-y-3 bg-gray-50">
+                                    <p className="text-xs text-gray-500">
+                                        When variants are enabled, product-level stock is ignored.
+                                        Each variant tracks its own stock and image.
+                                    </p>
+                                    {variants.map((v, i) => (
+                                        <div key={i} className="bg-white border border-gray-200 rounded p-3 space-y-2">
+                                            <div className="flex justify-between items-center">
+                                                <span className="text-xs font-semibold text-gray-600">Variant {i + 1}</span>
+                                                {variants.length > 1 && (
+                                                    <button type="button" onClick={() => removeVariant(i)}
+                                                        className="text-red-500 text-xs hover:underline">Remove</button>
+                                                )}
+                                            </div>
+                                            <div className="grid grid-cols-2 gap-2">
+                                                <input type="text" placeholder="Label (e.g. 500g, 1L)" value={v.label}
+                                                    onChange={e => updateVariant(i, 'label', e.target.value)}
+                                                    className="w-full border border-gray-300 rounded px-2 py-1 text-sm" required />
+                                                <input type="number" placeholder="Price *" min="0" step="0.01" value={v.price}
+                                                    onChange={e => updateVariant(i, 'price', e.target.value)}
+                                                    className="w-full border border-gray-300 rounded px-2 py-1 text-sm" required />
+                                                <input type="number" placeholder="MRP (optional)" min="0" step="0.01" value={v.mrp}
+                                                    onChange={e => updateVariant(i, 'mrp', e.target.value)}
+                                                    className="w-full border border-gray-300 rounded px-2 py-1 text-sm" />
+                                                <input type="number" placeholder="Stock *" min="0" value={v.stock}
+                                                    onChange={e => updateVariant(i, 'stock', e.target.value)}
+                                                    className="w-full border border-gray-300 rounded px-2 py-1 text-sm" required />
+                                            </div>
+                                            <div>
+                                                <label className="text-xs text-gray-500 block mb-1">Image (optional)</label>
+                                                <input type="file" accept="image/*"
+                                                    onChange={e => updateVariant(i, 'image', e.target.files[0])}
+                                                    className="text-xs w-full" />
+                                            </div>
+                                        </div>
+                                    ))}
+                                    <button type="button" onClick={addVariant}
+                                        className="w-full border border-dashed border-gray-300 text-gray-500 text-sm py-2 rounded hover:border-ud-primary hover:text-ud-primary">
+                                        + Add Another Variant
+                                    </button>
+                                </div>
+                            )}
+                        </div>
+                    )}
                     <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Tax Rate (%) <span className="text-gray-400 font-normal text-xs">GST — 0, 5, 12, 18 or 28</span></label>
                         <input
@@ -142,11 +230,13 @@ const ProductModal = ({ product, onClose, onSaved, admin }) => {
                         <input type="text" readOnly disabled value={form.storeLocation}
                             className="w-full border border-gray-300 rounded px-3 py-2 text-sm bg-gray-100 text-gray-500 cursor-not-allowed" />
                     </div>
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Images (max 3)</label>
-                        <input type="file" multiple accept="image/*" onChange={e => setImages(e.target.files)}
-                            className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-ud-primary/10 file:text-ud-primary hover:file:bg-ud-primary/20 text-gray-900" />
-                    </div>
+                    {!(!product && hasVariants) && (
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Images (max 3)</label>
+                            <input type="file" multiple accept="image/*" onChange={e => setImages(e.target.files)}
+                                className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-ud-primary/10 file:text-ud-primary hover:file:bg-ud-primary/20 text-gray-900" />
+                        </div>
+                    )}
                     <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
                         <RippleButton type="button" onClick={onClose} className="px-4 py-2 border border-gray-300 rounded text-sm text-gray-700 hover:bg-gray-50">Cancel</RippleButton>
                         <RippleButton type="submit" disabled={saving}
@@ -163,6 +253,8 @@ const ProductModal = ({ product, onClose, onSaved, admin }) => {
 const VariantsModal = ({ product, onClose, onRefresh }) => {
     const [variants, setVariants] = useState(product.variants || []);
     const [newVar, setNewVar] = useState({ label: '', price: '', mrp: '', stock: '' });
+    const [editingId, setEditingId] = useState(null);
+    const [editForm, setEditForm] = useState({ label: '', price: '', mrp: '', stock: '' });
 
     const handleAdd = async () => {
         try {
@@ -174,6 +266,27 @@ const VariantsModal = ({ product, onClose, onRefresh }) => {
             onRefresh();
         } catch (err) {
             alert(err.response?.data?.message || 'Failed to add variant');
+        }
+    };
+
+    const handleEditStart = (v) => {
+        setEditingId(v.id);
+        setEditForm({ label: v.label, price: v.price, mrp: v.mrp || '', stock: v.stock });
+    };
+
+    const handleSave = async (id) => {
+        try {
+            const res = await adminApi().patch(`/products/${product.id}/variants/${id}`, {
+                label: editForm.label,
+                price: Number(editForm.price),
+                mrp: editForm.mrp ? Number(editForm.mrp) : null,
+                stock: Number(editForm.stock)
+            });
+            setVariants(variants.map(v => v.id === id ? res.data : v));
+            setEditingId(null);
+            onRefresh();
+        } catch (err) {
+            alert(err.response?.data?.message || 'Failed to update variant');
         }
     };
 
@@ -199,14 +312,43 @@ const VariantsModal = ({ product, onClose, onRefresh }) => {
                     {variants.length === 0 ? (
                         <p className="text-gray-500 text-sm">No variants yet.</p>
                     ) : (
-                        <div className="space-y-2">
+                        <div className="space-y-3">
                             {variants.map(v => (
-                                <div key={v.id} className="flex justify-between items-center bg-gray-50 p-3 rounded border border-gray-100">
-                                    <div>
-                                        <p className="font-bold text-sm text-gray-800">{v.label}</p>
-                                        <p className="text-xs text-gray-500">₹{v.price} {v.mrp ? `(MRP: ₹${v.mrp})` : ''} • {v.stock} in stock</p>
-                                    </div>
-                                    <RippleButton onClick={() => handleDelete(v.id)} className="text-red-500 text-xs hover:underline">Delete</RippleButton>
+                                <div key={v.id} className="bg-gray-50 p-4 rounded border border-gray-100">
+                                    {editingId === v.id ? (
+                                        <div className="space-y-3">
+                                            <div className="grid grid-cols-2 gap-2">
+                                                <input type="text" value={editForm.label} onChange={e => setEditForm(f => ({ ...f, label: e.target.value }))} className="px-2 py-1 text-sm border rounded text-gray-900" placeholder="Label" />
+                                                <input type="number" value={editForm.price} onChange={e => setEditForm(f => ({ ...f, price: e.target.value }))} className="px-2 py-1 text-sm border rounded text-gray-900" placeholder="Price" />
+                                                <input type="number" value={editForm.mrp} onChange={e => setEditForm(f => ({ ...f, mrp: e.target.value }))} className="px-2 py-1 text-sm border rounded text-gray-900" placeholder="MRP" />
+                                                <input type="number" value={editForm.stock} onChange={e => setEditForm(f => ({ ...f, stock: e.target.value }))} className="px-2 py-1 text-sm border rounded text-gray-900" placeholder="Stock" />
+                                            </div>
+                                            <div className="flex gap-2">
+                                                <button onClick={() => handleSave(v.id)} className="bg-ud-primary text-white px-3 py-1 text-xs rounded">Save</button>
+                                                <button onClick={() => setEditingId(null)} className="bg-gray-200 text-gray-700 px-3 py-1 text-xs rounded">Cancel</button>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <div className="flex justify-between items-start">
+                                            <div className="flex gap-3">
+                                                <div className="w-12 h-12 bg-gray-200 rounded overflow-hidden flex-shrink-0">
+                                                    {v.images?.[0] ? (
+                                                        <img src={v.images[0]} className="w-full h-full object-cover" alt="" />
+                                                    ) : (
+                                                        <div className="w-full h-full flex items-center justify-center text-[10px] text-gray-400">No Image</div>
+                                                    )}
+                                                </div>
+                                                <div>
+                                                    <p className="font-bold text-sm text-gray-800">{v.label}</p>
+                                                    <p className="text-xs text-gray-500">₹{v.price} {v.mrp ? `(MRP: ₹${v.mrp})` : ''} • {v.stock} in stock</p>
+                                                </div>
+                                            </div>
+                                            <div className="flex gap-2">
+                                                <button onClick={() => handleEditStart(v)} className="text-ud-primary text-xs hover:underline">Edit</button>
+                                                <button onClick={() => handleDelete(v.id)} className="text-red-500 text-xs hover:underline">Delete</button>
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             ))}
                         </div>
@@ -306,9 +448,11 @@ const AdminProducts = () => {
                                             <div className="flex-shrink-0 h-10 w-10">
                                                 {p.images && p.images[0] ? (
                                                     <img className="h-10 w-10 rounded object-cover border border-gray-200" src={p.images[0]} alt="" />
+                                                ) : (p.variants?.[0]?.images?.[0] ? (
+                                                    <img className="h-10 w-10 rounded object-cover border border-gray-200" src={p.variants[0].images[0]} alt="" />
                                                 ) : (
                                                     <div className="h-10 w-10 rounded bg-gray-100 flex items-center justify-center text-xs text-gray-400">No Img</div>
-                                                )}
+                                                ))}
                                             </div>
                                             <div className="ml-4">
                                                 <div className="text-sm font-medium text-gray-900 truncate max-w-xs" title={p.name}>{p.name}</div>
@@ -322,10 +466,21 @@ const AdminProducts = () => {
                                         </span>
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                        <div className="font-bold text-gray-800">₹{p.price}</div>
-                                        <div className={`text-xs ${p.stock < 10 ? 'text-red-600 font-bold' : 'text-green-600'}`}>
-                                            {p.stock} in stock
+                                        <div className="font-bold text-gray-800">
+                                            {p.variants?.length > 0 ? (
+                                                `Starts at ₹${Math.min(...p.variants.map(v => v.price))}`
+                                            ) : `₹${p.price}`}
                                         </div>
+                                        {(() => {
+                                            const displayStock = p.variants?.length > 0 
+                                                ? p.variants.reduce((acc, v) => acc + (v.stock || 0), 0)
+                                                : (p.stock || 0);
+                                            return (
+                                                <div className={`text-xs ${displayStock < 10 ? 'text-red-600 font-bold' : 'text-green-600'}`}>
+                                                    {displayStock} in {p.variants?.length > 0 ? 'total ' : ''}stock
+                                                </div>
+                                            );
+                                        })()}
                                     </td>
                                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                                         <RippleButton onClick={() => openVariants(p)} className="text-emerald-600 hover:text-emerald-900 mr-4 font-semibold">Variants ({p.variants?.length || 0})</RippleButton>

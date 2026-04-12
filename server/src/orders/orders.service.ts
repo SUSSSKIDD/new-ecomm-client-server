@@ -212,6 +212,7 @@ export class OrdersService {
     const productIds = rawItems.map((i) => i.productId);
     const products = await this.prisma.product.findMany({
       where: { id: { in: productIds } },
+      include: { variants: true },
     });
     const productMap = new Map(products.map((p) => [p.id, p]));
 
@@ -231,14 +232,21 @@ export class OrdersService {
           variantLabel: rawItem.variantLabel,
         };
       }
+
+      // Check for variant-specific data
+      const variant = product.variants?.find(v => v.id === rawItem.variantId);
+      const displayPrice = variant ? variant.price : product.price;
+      const displayStock = variant ? variant.stock : product.stock;
+      const displayImage = (variant?.images && variant.images[0]) || product.images?.[0] || null;
+
       return {
         productId: product.id,
         name: product.name,
-        price: product.price,
+        price: displayPrice,
         quantity: rawItem.quantity,
-        total: product.price * rawItem.quantity,
-        image: product.images?.[0] ?? null,
-        inStock: product.stock >= rawItem.quantity,
+        total: displayPrice * rawItem.quantity,
+        image: displayImage,
+        inStock: displayStock >= rawItem.quantity,
         taxRate: (product as any).taxRate ?? 0,
         variantId: rawItem.variantId,
         variantLabel: rawItem.variantLabel,
@@ -267,6 +275,8 @@ export class OrdersService {
       price: i.price,
       quantity: i.quantity,
       image: i.image,
+      variantId: i.variantId,
+      variantLabel: i.variantLabel, // Added
     }));
 
     // Single allocation call — derives both fulfillment and allocation preview
@@ -286,6 +296,8 @@ export class OrdersService {
         image: fi.image,
         inStock: true,
         taxRate: (productMap.get(fi.productId) as any)?.taxRate ?? 0,
+        variantId: fi.variantId,
+        variantLabel: fi.variantLabel,
       }),
     );
 
@@ -400,6 +412,7 @@ export class OrdersService {
         price: ci.price,
         quantity: ci.quantity,
         image: ci.image ?? null,
+        variantId: (ci as any).variantId, // Added
       }))
       : null;
 
@@ -407,6 +420,7 @@ export class OrdersService {
     const [products, allocationResult] = await Promise.all([
       this.prisma.product.findMany({
         where: { id: { in: productIds } },
+        include: { variants: true },
       }),
       needsFulfillment
         ? this.fulfillmentService.resolveAllocation(
@@ -522,12 +536,15 @@ export class OrdersService {
 
     const orderItems = itemsToOrder.map((cartItem) => {
       const product = productMap.get(cartItem.productId)!;
+      const variant = (product.variants as any[])?.find(v => v.id === cartItem.variantId);
+      const finalPrice = variant ? variant.price : product.price;
+
       return {
         productId: product.id,
         name: product.name,
-        price: product.price,
+        price: finalPrice,
         quantity: cartItem.quantity,
-        total: product.price * cartItem.quantity,
+        total: finalPrice * cartItem.quantity,
         taxRate: product.taxRate ?? 0,
         storeId: storeAssignments?.get(product.id) ?? null,
         selectedSize: cartItem.selectedSize ?? null,
@@ -616,12 +633,15 @@ export class OrdersService {
       items: sa.items.map((item) => {
         const product = productMap.get(item.productId)!;
         const cartItem = cartItemLookup.get(item.productId);
+        const variant = (product.variants as any[])?.find(v => v.id === cartItem?.variantId);
+        const finalPrice = variant ? variant.price : product.price;
+
         return {
           productId: product.id,
           name: product.name,
-          price: product.price,
+          price: finalPrice,
           quantity: item.quantity,
-          total: product.price * item.quantity,
+          total: finalPrice * item.quantity,
           taxRate: (product as any).taxRate ?? 0,
           storeId: sa.storeId,
           selectedSize: cartItem?.selectedSize ?? null,
@@ -707,6 +727,7 @@ export class OrdersService {
             idempotencyKey: `${idempotencyKey}-child-${i + 1}`,
             confirmedAt,
             parentOrderId: parentOrder.id,
+            storeTypeName: storeGroup.storeName,
             items: {
               create: storeGroup.items.map((oi) => ({
                 productId: oi.productId,

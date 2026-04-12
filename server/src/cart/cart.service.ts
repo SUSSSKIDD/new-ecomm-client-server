@@ -102,24 +102,7 @@ export class CartService {
 
     const cart = await this.getCart(userId);
 
-    // Cross-Category Validation: All items in cart must share the same storeType
-    if (cart.items.length > 0) {
-      // Fetch storeType of one existing item (sample first item)
-      const firstItem = cart.items[0];
-      const existingProduct = await this.prisma.product.findUnique({
-        where: { id: firstItem.productId },
-        include: { store: true },
-      });
-      
-      const existingType = existingProduct?.store?.storeType || 'GROCERY';
-      const newType = product.store?.storeType || 'GROCERY';
-      
-      if (existingType !== newType) {
-        throw new BadRequestException(
-          `Cannot add ${newType} items to a cart containing ${existingType} items. Please clear your cart first.`,
-        );
-      }
-    }
+
     const existingIndex = cart.items.findIndex(
       (item) => item.productId === dto.productId && item.variantId === variantId,
     );
@@ -138,6 +121,8 @@ export class CartService {
       cart.items[existingIndex].name = product.name;
       cart.items[existingIndex].image = product.images?.[0] ?? null;
       cart.items[existingIndex].taxRate = product.taxRate ?? 0;
+      cart.items[existingIndex].storeType = product.store?.storeType || 'GROCERY';
+      cart.items[existingIndex].storeTypeName = product.store?.name || 'Store';
       if (variantId) {
         cart.items[existingIndex].variantId = variantId;
         cart.items[existingIndex].variantLabel = variantLabel;
@@ -155,6 +140,8 @@ export class CartService {
         name: product.name,
         image: product.images?.[0] ?? null,
         taxRate: product.taxRate ?? 0,
+        storeType: product.store?.storeType || 'GROCERY',
+        storeTypeName: product.store?.name || 'Store',
         ...(variantId ? { variantId, variantLabel } : {}),
         ...(dto.selectedSize && { selectedSize: dto.selectedSize }),
         ...(dto.userUploadUrls?.length && { userUploadUrls: dto.userUploadUrls }),
@@ -193,6 +180,7 @@ export class CartService {
     const [product, maxStoreResult] = await Promise.all([
       this.prisma.product.findUnique({
         where: { id: productId },
+        include: { store: true },
       }),
       this.prisma.storeInventory.aggregate({
         where: { productId },
@@ -231,6 +219,8 @@ export class CartService {
     cart.items[itemIndex].name = product.name;
     cart.items[itemIndex].image = product.images?.[0] ?? null;
     cart.items[itemIndex].taxRate = product.taxRate ?? 0;
+    cart.items[itemIndex].storeType = product.store?.storeType || 'GROCERY';
+    cart.items[itemIndex].storeTypeName = product.store?.name || 'Store';
     if (variantId) {
       cart.items[itemIndex].variantLabel = variantLabel;
     }

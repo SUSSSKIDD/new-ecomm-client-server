@@ -252,6 +252,7 @@ export class StoresService {
             price: true,
             category: true,
             images: true,
+            variants: true,
           },
         },
       },

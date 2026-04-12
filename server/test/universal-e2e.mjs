@@ -15,7 +15,8 @@
  * 11. Idempotency, IDOR, double-submit protection
  * 12. Print product CRUD (DROP_IN_FACTORY)
  * 13. Buy Now Isolation
- * 14. Cleanup
+ * 14. Multi-Category Cart and Split Orders
+ * 15. Cleanup
  *
  * Usage:  node test/universal-e2e.mjs [BASE_URL]
  * Default BASE_URL: http://localhost:3000
@@ -586,6 +587,49 @@ await step('Cancel order within grace period', async () => {
 await step('Double-cancel rejected', async () => {
   const r = await api.post(`/orders/${cancelOrderId}/cancel`, {}, auth(userToken));
   assert(r.status === 400, `Expected 400, got ${r.status}`);
+});
+
+// ══════════════════════════════════════════════════════════════════════
+//  Phase 8.5: Multi-Category Cart & Split Order
+// ══════════════════════════════════════════════════════════════════════
+
+console.log('\n🔷 Phase 8.5: Multi-Category Cart & Split Order');
+
+await step('Add cross-category items to cart', async () => {
+  const grocery = stores['GROCERY'];
+  const pizza = stores['PIZZA_TOWN'];
+  // We may skip if products not created
+  if (grocery.productIds.length > 0 && pizza.productIds.length > 0) {
+    await api.post('/cart/items', { productId: grocery.productIds[0], quantity: 1 }, auth(userToken));
+    const r = await api.post('/cart/items', { productId: pizza.productIds[0], quantity: 1 }, auth(userToken));
+    assert(r.status === 200 || r.status === 201, `Failed to add cross-category item: ${r.status}`);
+  }
+});
+
+let multiOrderParentId;
+await step('Place multi-category order', async () => {
+  const grocery = stores['GROCERY'];
+  const pizza = stores['PIZZA_TOWN'];
+  if (grocery.productIds.length > 0 && pizza.productIds.length > 0) {
+    const r = await api.post('/orders', {
+      addressId, paymentMethod: 'COD', lat: 12.9720, lng: 77.5950,
+    }, authWithIdempotency(userToken, `e2e-multi-cat-${RUN_ID}`));
+    assert(r.status === 201 || r.status === 200, `${r.status}: ${r.data?.message}`);
+    
+    assert(r.data.isParent === true, 'Expected isParent=true for cross-category split order');
+    assert(r.data.childOrders && r.data.childOrders.length === 2, `Expected 2 child orders, got ${r.data.childOrders?.length}`);
+    
+    multiOrderParentId = r.data.id;
+  }
+});
+
+await step('Verify storeTypeName on child orders (API fetch)', async () => {
+  if (multiOrderParentId) {
+    const r = await api.get(`/orders/${multiOrderParentId}`, auth(userToken));
+    assert(r.status === 200, `${r.status}`);
+    const childOrders = r.data.childOrders || [];
+    assert(childOrders.some(c => c.storeTypeName != null), 'Expected storeTypeName on child orders');
+  }
 });
 
 // ══════════════════════════════════════════════════════════════════════

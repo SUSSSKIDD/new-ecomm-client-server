@@ -66,7 +66,7 @@ export class AllocationService {
     }
 
     const storeIds = nearbyStores.map((s) => s.id);
-    const productIds = cartItems.map((i) => i.productId);
+    const productIds = Array.from(new Set(cartItems.map((i) => i.productId)));
 
     // Single batch query for all inventory
     const inventoryRows = await this.prisma.storeInventory.findMany({
@@ -77,13 +77,30 @@ export class AllocationService {
       select: { storeId: true, productId: true, stock: true },
     });
 
-    // Build lookup: Map<storeId, Map<productId, stock>>
+    // Build lookup: Map<storeId, Map<compositeKey, stock>>
     const inventoryMap = new Map<string, Map<string, number>>();
     for (const row of inventoryRows) {
       if (!inventoryMap.has(row.storeId)) {
         inventoryMap.set(row.storeId, new Map());
       }
       inventoryMap.get(row.storeId)!.set(row.productId, row.stock);
+    }
+
+    // ── Variant Stock Logic ──
+    const variantIds = cartItems.map(i => i.variantId).filter(Boolean) as string[];
+    if (variantIds.length > 0) {
+        const variants = await this.prisma.productVariant.findMany({
+            where: { id: { in: variantIds } },
+            select: { id: true, productId: true, stock: true }
+        });
+        
+        for (const v of variants) {
+            for (const [storeId, storeInv] of inventoryMap.entries()) {
+                if (storeInv.has(v.productId)) {
+                    storeInv.set(`${v.productId}_${v.id}`, v.stock);
+                }
+            }
+        }
     }
 
     const storeNameMap = new Map<string, string>(
@@ -93,23 +110,29 @@ export class AllocationService {
       nearbyStores.map((s) => [s.id, s.distance]),
     );
 
-    // ── Phase 1: Single-store check (nearest-first) ──
+    // Helper to get composite key for an item
+    const getCKey = (item: CartItemInput) => item.variantId ? `${item.productId}_${item.variantId}` : item.productId;
+
+    // ── Phase 0: Explicit Cross-Category Check ──
+    const storeTypes = new Set(cartItems.map(i => (i as any).storeType).filter(Boolean));
+    if (storeTypes.size > 1) {
+      return this.resolveMultiStoreAllocation(cartItems, nearbyStores, inventoryMap, storeNameMap, storeDistMap);
+    }
+
+    // ── Phase 1: Single-store check ──
     for (const store of nearbyStores) {
       const storeInv = inventoryMap.get(store.id);
       if (!storeInv) continue;
 
       let canFulfill = true;
       for (const item of cartItems) {
-        if ((storeInv.get(item.productId) ?? 0) < item.quantity) {
+        if ((storeInv.get(getCKey(item)) ?? 0) < item.quantity) {
           canFulfill = false;
           break;
         }
       }
 
       if (canFulfill) {
-        this.logger.log(
-          `Single-store fulfillment: ${store.name} (${store.distance}km)`,
-        );
         return {
           type: 'SINGLE_STORE',
           storeAllocations: [
@@ -117,15 +140,7 @@ export class AllocationService {
               storeId: store.id,
               storeName: store.name,
               distance: store.distance,
-              items: cartItems.map((item) => ({
-                productId: item.productId,
-                name: item.name,
-                price: item.price,
-                quantity: item.quantity,
-                image: item.image,
-                variantId: item.variantId,
-                variantLabel: item.variantLabel,
-              })),
+              items: cartItems.map((item) => ({ ...item, total: item.price * item.quantity })),
             },
           ],
           unfulfillableItems: [],
@@ -133,122 +148,106 @@ export class AllocationService {
       }
     }
 
-    // ── Phase 2: Greedy biggest-contributor multi-store ──
-    this.logger.log('No single store can fulfill — attempting multi-store split');
+    return this.resolveMultiStoreAllocation(cartItems, nearbyStores, inventoryMap, storeNameMap, storeDistMap);
+  }
 
-    // Deep copy remaining quantities
-    const remaining = new Map<string, number>(
-      cartItems.map((item) => [item.productId, item.quantity]),
+  private resolveMultiStoreAllocation(
+    cartItems: CartItemInput[],
+    nearbyStores: NearbyStore[],
+    inventoryMap: Map<string, Map<string, number>>,
+    storeNameMap: Map<string, string>,
+    storeDistMap: Map<string, number>,
+  ): AllocationResult {
+    const getCKey = (item: CartItemInput) => item.variantId ? `${item.productId}_${item.variantId}` : item.productId;
+
+    // Use a unique index for each individual cart item to avoid product ID collisions
+    // CartItemID -> RemainingQuantity
+    const remaining = new Map<number, number>(
+      cartItems.map((item, idx) => [idx, item.quantity]),
     );
-    const cartItemMap = new Map(cartItems.map((item) => [item.productId, item]));
+    
     const allocations = new Map<string, AllocatedItem[]>();
     const exhaustedStores = new Set<string>();
 
     while (remaining.size > 0) {
       let bestStoreId: string | null = null;
       let bestCoverScore = 0;
-      let bestItems: { productId: string; quantity: number }[] = [];
+      let bestItemAssignments: { cartItemIdx: number; quantity: number }[] = [];
 
       for (const store of nearbyStores) {
         if (exhaustedStores.has(store.id)) continue;
-
         const storeInv = inventoryMap.get(store.id);
-        if (!storeInv) {
-          exhaustedStores.add(store.id);
-          continue;
-        }
+        if (!storeInv) { exhaustedStores.add(store.id); continue; }
 
-        const coveredItems: { productId: string; quantity: number }[] = [];
-        let coverScore = 0;
+        const assignments: { cartItemIdx: number; quantity: number }[] = [];
+        let score = 0;
 
-        for (const [productId, neededQty] of remaining) {
-          const available = Math.min(
-            storeInv.get(productId) ?? 0,
-            neededQty,
-          );
+        for (const [idx, neededQty] of remaining) {
+          const item = cartItems[idx];
+          const key = getCKey(item);
+          const available = Math.min(storeInv.get(key) ?? 0, neededQty);
           if (available > 0) {
-            coveredItems.push({ productId, quantity: available });
-            coverScore += available;
+            assignments.push({ cartItemIdx: idx, quantity: available });
+            score += available;
           }
         }
 
-        if (coverScore > bestCoverScore) {
+        if (score > bestCoverScore) {
           bestStoreId = store.id;
-          bestCoverScore = coverScore;
-          bestItems = coveredItems;
+          bestCoverScore = score;
+          bestItemAssignments = assignments;
         }
       }
 
       if (!bestStoreId || bestCoverScore === 0) {
-        // No store can cover any remaining items — unfulfillable
-        const unfulfillable: CartItemInput[] = [];
-        for (const [productId, qty] of remaining) {
-          const item = cartItemMap.get(productId)!;
-          unfulfillable.push({ ...item, quantity: qty });
-        }
-        return {
-          type: 'MULTI_STORE',
-          storeAllocations: this.buildStoreAllocations(
-            allocations,
-            cartItemMap,
-            storeNameMap,
-            storeDistMap,
-          ),
-          unfulfillableItems: unfulfillable,
-        };
+         const unfulfillable: CartItemInput[] = [];
+         for (const [idx, qty] of remaining) {
+           unfulfillable.push({ ...cartItems[idx], quantity: qty });
+         }
+         return {
+           type: 'MULTI_STORE',
+           storeAllocations: this.buildStoreAllocations(allocations, storeNameMap, storeDistMap),
+           unfulfillableItems: unfulfillable,
+         };
       }
 
-      // Assign items from best store
+      // Assign items
       const storeItems = allocations.get(bestStoreId) || [];
-      for (const assigned of bestItems) {
-        const item = cartItemMap.get(assigned.productId)!;
+      for (const assignment of bestItemAssignments) {
+        const item = cartItems[assignment.cartItemIdx];
+        const key = getCKey(item);
+        
         storeItems.push({
-          productId: assigned.productId,
+          productId: item.productId,
           name: item.name,
           price: item.price,
-          quantity: assigned.quantity,
+          quantity: assignment.quantity,
           image: item.image,
           variantId: item.variantId,
           variantLabel: item.variantLabel,
         });
 
-        // Reduce remaining
-        const newRemaining = remaining.get(assigned.productId)! - assigned.quantity;
-        if (newRemaining <= 0) {
-          remaining.delete(assigned.productId);
-        } else {
-          remaining.set(assigned.productId, newRemaining);
-        }
+        // Update remaining
+        const newRem = remaining.get(assignment.cartItemIdx)! - assignment.quantity;
+        if (newRem <= 0) remaining.delete(assignment.cartItemIdx);
+        else remaining.set(assignment.cartItemIdx, newRem);
 
-        // Reduce virtual inventory so this store isn't over-counted in next round
+        // Update virtual inventory
         const storeInv = inventoryMap.get(bestStoreId)!;
-        const currentStock = storeInv.get(assigned.productId) ?? 0;
-        storeInv.set(assigned.productId, currentStock - assigned.quantity);
+        storeInv.set(key, (storeInv.get(key) ?? 0) - assignment.quantity);
       }
       allocations.set(bestStoreId, storeItems);
     }
 
-    const storeAllocations = this.buildStoreAllocations(
-      allocations,
-      cartItemMap,
-      storeNameMap,
-      storeDistMap,
-    );
-
-    this.logger.log(
-      `Multi-store allocation: ${storeAllocations.length} stores — [${storeAllocations.map((s) => s.storeName).join(', ')}]`,
-    );
-
     return {
       type: 'MULTI_STORE',
-      storeAllocations,
+      storeAllocations: this.buildStoreAllocations(allocations, storeNameMap, storeDistMap),
       unfulfillableItems: [],
     };
   }
 
   private buildStoreAllocations(
     allocations: Map<string, AllocatedItem[]>,
-    _cartItemMap: Map<string, CartItemInput>,
     storeNameMap: Map<string, string>,
     storeDistMap: Map<string, number>,
   ): StoreAllocation[] {
