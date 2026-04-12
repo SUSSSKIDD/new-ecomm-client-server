@@ -209,7 +209,7 @@ new grocery/
 - `POST /auth/verify-otp` — Verify OTP, returns JWT + user
 - `POST /auth/store-manager/login` — Store Manager login (phone + 4-digit PIN)
 - `POST /auth/parcel-manager/login` — Parcel Manager login (phone + 4-digit PIN)
-- `POST /auth/super-admin/login` — Super Admin login (hardcoded: +919999999999/9341)
+- `POST /auth/super-admin/login` — Super Admin login (hardcoded: +917785945524/5015)
 
 ### Store Managers (JWT + ADMIN only)
 - `POST /store-managers` — Create store manager (name, phone, pin, storeId)
@@ -554,7 +554,7 @@ CANCELLED  CANCELLED     CANCELLED       CANCELLED   CANCELLED   CANCELLED
 | `BULL_REDIS_HOST` | `localhost` | BullMQ Redis host |
 | `BULL_REDIS_PORT` | `6379` | BullMQ Redis port |
 | `PORT` | 3000 | Server port |
-| `SUPER_ADMIN_PHONE` | — | Super admin phone number (e.g. `+919999999999`) |
+| `SUPER_ADMIN_PHONE` | — | Super admin phone number (e.g. `+917785945524`) |
 | `SUPER_ADMIN_PIN` | — | Super admin 4-digit PIN (hashed at startup with bcrypt) |
 | `DELIVERY_FEE` | 30 | Delivery fee in INR (waived for first-time orders) |
 | `TAX_RATE` | *(removed)* | Replaced by per-item `taxRate` on Product model (GST %) |
