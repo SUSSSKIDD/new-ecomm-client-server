@@ -34,6 +34,19 @@ jobs:
         image: redis:7-alpine
         ports:
           - 6379:6379
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: password123
+          POSTGRES_DB: neyokart_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
 
     steps:
       - name: Checkout Code
@@ -53,8 +66,8 @@ jobs:
 
       - name: Setup Prisma with Test DB
         env:
-          DATABASE_URL: ${{ secrets.TEST_DATABASE_URL }}
-          DIRECT_URL: ${{ secrets.TEST_DIRECT_URL }}
+          DATABASE_URL: postgresql://postgres:password123@localhost:5432/neyokart_test
+          DIRECT_URL: postgresql://postgres:password123@localhost:5432/neyokart_test
         run: |
           cd server
           npx prisma db push --accept-data-loss
@@ -63,8 +76,8 @@ jobs:
 
       - name: Run E2E Tests
         env:
-          DATABASE_URL: ${{ secrets.TEST_DATABASE_URL }}
-          DIRECT_URL: ${{ secrets.TEST_DIRECT_URL }}
+          DATABASE_URL: postgresql://postgres:password123@localhost:5432/neyokart_test
+          DIRECT_URL: postgresql://postgres:password123@localhost:5432/neyokart_test
           REDIS_URL: redis://localhost:6379
           RIDER_REDIS_URL: redis://localhost:6379
           BULL_REDIS_HOST: localhost
@@ -79,9 +92,10 @@ jobs:
           MSG91_AUTH_KEY: mock_key
         run: |
           cd server
-          npm run start:dev &
+          npm run build
+          node dist/src/main.js &
           echo "Waiting for backend to start..."
-          until curl -s http://localhost:3000/ > /dev/null; do
+          until curl -sf http://localhost:3000/api > /dev/null; do
             sleep 2
           done
           node test/universal-e2e.mjs http://localhost:3000

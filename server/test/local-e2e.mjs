@@ -111,6 +111,8 @@ async function setup() {
         MSG91_AUTH_KEY: "dummy_msg91_key",
         MSG91_SENDER_ID: "NEYOKT",
         FREE_DELIVERY_THRESHOLD: "199",
+        SUPABASE_URL: '',
+        SUPABASE_SERVICE_ROLE_KEY: '',
     };
 
     serverProcess = spawn('node', ['dist/src/main.js'], {
