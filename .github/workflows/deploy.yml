@@ -90,6 +90,7 @@ jobs:
           RAZORPAY_KEY_SECRET: ${{ secrets.RAZORPAY_TEST_KEY_SECRET }}
           RAZORPAY_TEST_KEY_ID: ${{ secrets.RAZORPAY_TEST_KEY_ID }}
           MSG91_AUTH_KEY: mock_key
+          MAX_DELIVERY_RADIUS_KM: 14
         run: |
           cd server
           npm run build
