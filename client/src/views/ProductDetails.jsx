@@ -13,7 +13,7 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 const ProductDetails = () => {
     const { id } = useParams();
     const navigate = useNavigate();
-    const { location } = useLocation();
+    const { location, userPincode } = useLocation();
     const { addToCart, setIsCartOpen } = useCategory();
     const { token } = useAuth();
     const [product, setProduct] = useState(null);
@@ -47,7 +47,8 @@ const ProductDetails = () => {
                 const response = await axios.get(`${API_URL}/products/${id}`, {
                     params: {
                         lat: location?.lat,
-                        lng: location?.lng
+                        lng: location?.lng,
+                        pincode: userPincode
                     }
                 });
                 setProduct(response.data);

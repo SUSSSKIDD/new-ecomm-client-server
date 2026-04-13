@@ -247,11 +247,11 @@ export class ProductsService {
   /**
    * Get a single product by ID.
    */
-  async findOne(id: string, lat?: number, lng?: number) {
+  async findOne(id: string, lat?: number, lng?: number, pincode?: string) {
     let storeIds: string[] = [];
-    if (lat !== undefined && lng !== undefined) {
-      const nearbyStores = await this.storesService.findNearbyStores(lat, lng);
-      storeIds = nearbyStores.filter(s => s.distance <= 10).map(s => s.id);
+    if ((lat !== undefined && lng !== undefined) || pincode) {
+      const nearbyStores = await this.storesService.findNearbyStores(lat ?? 0, lng ?? 0, pincode);
+      storeIds = nearbyStores.map(s => s.id);
     }
 
     const product = await this.prisma.product.findUnique({

@@ -110,6 +110,7 @@ async function setup() {
         MSG91_AUTH_KEY: "dummy_msg91_key",
         MSG91_SENDER_ID: "NEYOKT",
         FREE_DELIVERY_THRESHOLD: "199",
+        MAX_DELIVERY_RADIUS_KM: "14",
         SUPABASE_URL: '',
         SUPABASE_SERVICE_ROLE_KEY: '',
     };

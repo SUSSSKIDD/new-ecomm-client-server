@@ -255,7 +255,28 @@ await step('Products visible within 10km radius', async () => {
   assert(list.length > 0, 'Expected products to be populated near stores');
 });
 
-await step('Products hidden outside 10km radius', async () => {
+await step('Products hidden at 12km (outside 10km feed radius)', async () => {
+  // 13.08 lat is ~12km from 12.97
+  const r = await api.get(`/products?lat=13.0800&lng=77.5950`);
+  assert(r.status === 200, `${r.status}`);
+  const list = r.data.data;
+  assert(list.length === 0, `Expected 0 products at 12km, got ${list.length}`);
+});
+
+await step('Serviceable at 12km (within 14km delivery radius)', async () => {
+  const r = await api.get(`/stores/serviceability?lat=13.0800&lng=77.5950`);
+  assert(r.status === 200, `${r.status}`);
+  assert(r.data.serviceable === true, 'Expected serviceable=true at 12km');
+});
+
+await step('Not serviceable at 16km (outside 14km delivery radius)', async () => {
+  // 13.12 lat is ~16.5km from 12.97
+  const r = await api.get(`/stores/serviceability?lat=13.1200&lng=77.5950`);
+  assert(r.status === 200, `${r.status}`);
+  assert(r.data.serviceable === false, 'Expected serviceable=false at 16km');
+});
+
+await step('Products hidden far away', async () => {
   const r = await api.get(`/products?lat=13.5000&lng=78.5000`);
   assert(r.status === 200, `${r.status}`);
   const list = r.data.data;

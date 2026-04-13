@@ -72,12 +72,14 @@ export class ProductsController {
   findOne(
     @Param('id', ParseUUIDPipe) id: string,
     @Query('lat') lat?: string,
-    @Query('lng') lng?: string
+    @Query('lng') lng?: string,
+    @Query('pincode') pincode?: string
   ) {
     return this.productsService.findOne(
       id,
       lat ? parseFloat(lat) : undefined,
-      lng ? parseFloat(lng) : undefined
+      lng ? parseFloat(lng) : undefined,
+      pincode
     );
   }
 

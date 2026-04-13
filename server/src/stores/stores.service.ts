@@ -103,8 +103,10 @@ export class StoresService {
     };
   }
 
-  /** Get stores within delivery radius, sorted by distance. */
-  async findNearbyStores(lat: number, lng: number, pincode?: string): Promise<NearbyStore[]> {
+  /** Get stores within a specific radius, sorted by distance. 
+   * Used for product visibility (typically 10km) and serviceability checks.
+   */
+  async findNearbyStores(lat: number, lng: number, pincode?: string, radiusKm: number = 10): Promise<NearbyStore[]> {
     const stores = await this.getAllStoresFromCache();
 
     let nearby = stores
@@ -113,7 +115,7 @@ export class StoresService {
         distance:
           Math.round(haversineDistance(lat, lng, s.lat, s.lng) * 10) / 10,
       }))
-      .filter((s) => s.distance <= this.maxDeliveryRadiusKm)
+      .filter((s) => s.distance <= radiusKm)
       .sort((a, b) => a.distance - b.distance);
 
     if (nearby.length === 0 && pincode) {
