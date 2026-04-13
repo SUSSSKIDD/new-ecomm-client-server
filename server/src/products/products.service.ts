@@ -145,6 +145,7 @@ export class ProductsService {
       sortOrder = 'desc',
       lat,
       lng,
+      pincode,
     } = query;
     const skip = (page - 1) * limit;
 
@@ -173,14 +174,14 @@ export class ProductsService {
 
     let storeIdsHash = '';
     let storeIds: string[] = [];
-    if (lat !== undefined && lng !== undefined) {
-      const nearbyStores = await this.storesService.findNearbyStores(lat, lng);
-      storeIds = nearbyStores.filter(s => s.distance <= 10).map(s => s.id).sort();
+    if ((lat !== undefined && lng !== undefined) || pincode) {
+      const nearbyStores = await this.storesService.findNearbyStores(lat ?? 0, lng ?? 0, pincode);
+      storeIds = nearbyStores.map(s => s.id).sort();
       
       if (storeIds.length === 0) {
         return paginate([], 0, page, limit);
       }
-      storeIdsHash = storeIds.join(',');
+      storeIdsHash = storeIds.join(',') + `|p:${pincode ?? ''}`;
 
       const geoCondition = {
         OR: [

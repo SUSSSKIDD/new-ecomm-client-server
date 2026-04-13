@@ -51,4 +51,8 @@ export class ProductQueryDto {
   @Type(() => Number)
   @IsNumber()
   lng?: number;
+
+  @IsOptional()
+  @IsString()
+  pincode?: string;
 }

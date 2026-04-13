@@ -75,10 +75,10 @@ export class StoresService {
   // ── Serviceability ──────────────────────────────────────────────
 
   /** Check if user location is within delivery radius of any store. */
-  async checkServiceability(lat: number, lng: number) {
+  async checkServiceability(lat: number, lng: number, pincode?: string) {
     const stores = await this.getAllStoresFromCache();
 
-    const nearby: NearbyStore[] = stores
+    let nearby: NearbyStore[] = stores
       .map((s) => ({
         ...s,
         distance:
@@ -86,6 +86,14 @@ export class StoresService {
       }))
       .filter((s) => s.distance <= this.maxDeliveryRadiusKm)
       .sort((a, b) => a.distance - b.distance);
+
+    // Alternative matching if pincode is provided and no nearby stores found via GPS
+    if (nearby.length === 0 && pincode) {
+      const pinMatches = stores
+        .filter(s => s.pincode === pincode)
+        .map(s => ({ ...s, distance: 0 }));
+      if (pinMatches.length > 0) nearby = pinMatches;
+    }
 
     return {
       serviceable: nearby.length > 0,
@@ -96,10 +104,10 @@ export class StoresService {
   }
 
   /** Get stores within delivery radius, sorted by distance. */
-  async findNearbyStores(lat: number, lng: number): Promise<NearbyStore[]> {
+  async findNearbyStores(lat: number, lng: number, pincode?: string): Promise<NearbyStore[]> {
     const stores = await this.getAllStoresFromCache();
 
-    return stores
+    let nearby = stores
       .map((s) => ({
         ...s,
         distance:
@@ -107,6 +115,14 @@ export class StoresService {
       }))
       .filter((s) => s.distance <= this.maxDeliveryRadiusKm)
       .sort((a, b) => a.distance - b.distance);
+
+    if (nearby.length === 0 && pincode) {
+      nearby = stores
+        .filter(s => s.pincode === pincode)
+        .map(s => ({ ...s, distance: 0 }));
+    }
+
+    return nearby;
   }
 
   // ── CRUD ────────────────────────────────────────────────────────

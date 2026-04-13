@@ -5,7 +5,7 @@ import { useLocation } from '../context/LocationContext';
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
 export const useProductList = ({ category, subCategory, limit = 10 }) => {
-    const { location } = useLocation();
+    const { location, userPincode } = useLocation();
     const [products, setProducts] = useState([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
@@ -41,7 +41,8 @@ export const useProductList = ({ category, subCategory, limit = 10 }) => {
                         page: 1,
                         limit,
                         lat: location?.lat,
-                        lng: location?.lng
+                        lng: location?.lng,
+                        pincode: userPincode
                     },
                     signal: controller.signal
                 });
@@ -66,7 +67,7 @@ export const useProductList = ({ category, subCategory, limit = 10 }) => {
                 abortControllerRef.current.abort();
             }
         };
-    }, [category, subCategory, limit, location]);
+    }, [category, subCategory, limit, location, userPincode]);
 
     const loadMore = async () => {
         if (!hasMore || loading) return;
@@ -81,7 +82,8 @@ export const useProductList = ({ category, subCategory, limit = 10 }) => {
                     page: nextPage,
                     limit,
                     lat: location?.lat,
-                    lng: location?.lng
+                    lng: location?.lng,
+                    pincode: userPincode
                 }
             });
 

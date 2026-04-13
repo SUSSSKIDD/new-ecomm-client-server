@@ -111,7 +111,7 @@ export class StoresController {
   })
   @ApiResponse({ status: 200, description: 'Serviceability result' })
   checkServiceability(@Query() query: CheckServiceabilityDto) {
-    return this.storesService.checkServiceability(query.lat, query.lng);
+    return this.storesService.checkServiceability(query.lat, query.lng, query.pincode);
   }
 
   // ── Admin CRUD ──────────────────────────────────────────────────

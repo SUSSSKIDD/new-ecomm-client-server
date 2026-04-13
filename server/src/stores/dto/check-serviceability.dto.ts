@@ -1,4 +1,4 @@
-import { IsNumber } from 'class-validator';
+import { IsNumber, IsOptional, IsString } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty } from '@nestjs/swagger';
 
@@ -12,4 +12,9 @@ export class CheckServiceabilityDto {
   @Type(() => Number)
   @IsNumber()
   lng: number;
+
+  @ApiProperty({ description: 'Optional user pincode', example: '221104', required: false })
+  @IsOptional()
+  @IsString()
+  pincode?: string;
 }

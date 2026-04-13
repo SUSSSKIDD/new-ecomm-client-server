@@ -14,11 +14,13 @@ import Footer from '../components/united/Footer';
 
 const UnitedDealsHome = () => {
     const { toastMessage, selectedProduct, selectedCategory } = useCategory();
-    const { requestLocation } = useLocation();
+    const { requestLocation, locationStatus } = useLocation();
 
     useEffect(() => {
-        requestLocation();
-    }, [requestLocation]);
+        if (locationStatus === 'idle') {
+            requestLocation();
+        }
+    }, [requestLocation, locationStatus]);
 
     return (
         <div className="h-[100dvh] overflow-hidden bg-white font-sans text-gray-900 relative flex flex-col">
