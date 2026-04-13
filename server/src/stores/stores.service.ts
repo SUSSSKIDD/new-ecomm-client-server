@@ -42,8 +42,8 @@ export class StoresService {
     private readonly cache: RedisCacheService,
     config: ConfigService,
   ) {
-    this.maxDeliveryRadiusKm =
-      config.get<number>('MAX_DELIVERY_RADIUS_KM') ?? DEFAULT_MAX_DELIVERY_RADIUS_KM;
+    const radius = config.get('MAX_DELIVERY_RADIUS_KM');
+    this.maxDeliveryRadiusKm = radius ? Number(radius) : DEFAULT_MAX_DELIVERY_RADIUS_KM;
   }
 
   // ── Cache helpers ────────────────────────────────────────────────
