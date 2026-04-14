@@ -70,7 +70,7 @@ export class StoresController {
       this.subcategoryService.getAllCustomSubcategories(),
       this.subcategoryService.getAllCategoryConfigs(),
     ]);
-    const configMap = new Map(allConfigs.map((c: any) => [`${c.storeType}:${c.subcategory}`, c]));
+    const configMap = new Map<string, any>(allConfigs.map((c: any) => [`${c.storeType}:${c.subcategory}`, c]));
 
     const mergedSubcategories: Record<string, string[]> = {};
     const uploadTypes: Record<string, Record<string, string>> = {};
