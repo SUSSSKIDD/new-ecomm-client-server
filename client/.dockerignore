@@ -2,4 +2,7 @@ node_modules
 dist
 npm-debug.log
 .DS_Store
-.env
+.env*
+android
+ios
+*.md

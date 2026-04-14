@@ -7,11 +7,21 @@ services:
     volumes:
       - redis_data:/data
     restart: unless-stopped
+    # Limit Redis to 256 MB — it's a cache/queue, not a primary store
+    deploy:
+      resources:
+        limits:
+          memory: 256m
     healthcheck:
-      test: [ "CMD", "redis-cli", "ping" ]
+      test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 3s
       retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   server:
     build:
@@ -31,12 +41,21 @@ services:
       redis:
         condition: service_healthy
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512m
     healthcheck:
-      test: [ "CMD", "wget", "-qO-", "http://localhost:3000/" ]
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/health"]
       interval: 30s
       timeout: 5s
-      start_period: 10s
+      start_period: 20s
       retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
 
   client:
     build:
@@ -50,6 +69,15 @@ services:
       server:
         condition: service_healthy
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 64m
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "3"
 
 volumes:
   redis_data:

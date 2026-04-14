@@ -1,10 +1,7 @@
-version: '3.8'
-
 # This file runs strictly on the Hostinger VPS.
-# It defines two application environments (Blue and Green).
-# Redis is shared persistently. The App containers are ephemeral.
+# Blue/Green deployment: traffic is routed via nginx on the host.
+# Redis is shared and persistent across both slots.
 services:
-  # Shared Persistent Cache & Queue
   redis:
     image: redis:7-alpine
     container_name: neyokart-redis
@@ -14,15 +11,22 @@ services:
     volumes:
       - neyokart_redis_data:/data
     restart: always
+    deploy:
+      resources:
+        limits:
+          memory: 256m
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 3s
-      retries: 3 
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
 
-  # ==========================================
-  # ENVIRONMENT: BLUE (Routes to 3001)
-  # ==========================================
+  # ── BLUE ────────────────────────────────────────────────────────────────────
   server-blue:
     build:
       context: ./server
@@ -31,7 +35,7 @@ services:
     ports:
       - "3001:3000"
     env_file:
-      - .env # Loads VPS Production Secrets
+      - .env
     environment:
       - PORT=3000
       - REDIS_URL=redis://redis:6379
@@ -42,6 +46,21 @@ services:
       redis:
         condition: service_healthy
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
 
   client-blue:
     build:
@@ -55,10 +74,17 @@ services:
     depends_on:
       - server-blue
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 64m
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "3"
 
-  # ==========================================
-  # ENVIRONMENT: GREEN (Routes to 3002)
-  # ==========================================
+  # ── GREEN ───────────────────────────────────────────────────────────────────
   server-green:
     build:
       context: ./server
@@ -67,7 +93,7 @@ services:
     ports:
       - "3002:3000"
     env_file:
-      - .env # Loads VPS Production Secrets
+      - .env
     environment:
       - PORT=3000
       - REDIS_URL=redis://redis:6379
@@ -78,6 +104,21 @@ services:
       redis:
         condition: service_healthy
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "5"
 
   client-green:
     build:
@@ -91,7 +132,15 @@ services:
     depends_on:
       - server-green
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 64m
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "3"
 
-# Ensures Redis retains Rider queues/cache over Blue/Green drops
 volumes:
   neyokart_redis_data:

@@ -1,8 +1,11 @@
 node_modules
 dist
 npm-debug.log
-.env
+.env*
 .claude
 test
 coverage
 .DS_Store
+*.md
+tmp
+update-locations.ts

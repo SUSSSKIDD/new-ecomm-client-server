@@ -1,26 +1,30 @@
-# Build stage
+# ─── Stage 1: builder ─────────────────────────────────────────────────────────
 FROM node:20-alpine AS builder
 
-WORKDIR /usr/src/app
+WORKDIR /app
 
-# Define build arguments that Vite replaces at build time
 ARG VITE_API_URL
 ENV VITE_API_URL=$VITE_API_URL
 
 COPY package*.json ./
-RUN npm ci
+
+RUN --mount=type=cache,target=/root/.npm \
+    npm ci
 
 COPY . .
+
 RUN npm run build
 
-# Production stage - Serve using lightweight Nginx
-FROM nginx:alpine
+# ─── Stage 2: production ──────────────────────────────────────────────────────
+FROM nginx:1.27-alpine AS runner
 
-# Copy built artifacts from the Vite dist folder to Nginx's default public folder
-COPY --from=builder /usr/src/app/dist /usr/share/nginx/html
+# Remove default config and default html
+RUN rm /etc/nginx/conf.d/default.conf
 
-# Overwrite default Nginx configuration to support React Router (Single Page Application)
-RUN echo "server { listen 80; location / { root /usr/share/nginx/html; index index.html index.htm; try_files \$uri \$uri/ /index.html; } }" > /etc/nginx/conf.d/default.conf
+COPY --from=builder /app/dist /usr/share/nginx/html
+
+# Nginx config: SPA routing + gzip + security headers + static asset caching
+COPY nginx.conf /etc/nginx/conf.d/default.conf
 
 EXPOSE 80
 
