@@ -21,3 +21,6 @@ server/MULTI-CATEGORY-PLAN.md
 # Added by code-review-graph
 .code-review-graph/
 server/VARIANT-CREATION-PLAN.md
+.agents
+skills-lock.json
+.DS_Store
