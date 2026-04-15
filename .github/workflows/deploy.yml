@@ -6,29 +6,60 @@ on:
 
 jobs:
   check_changes:
-    name: Check for Server Changes
+    name: Detect Changed Paths
     runs-on: ubuntu-latest
     outputs:
       server: ${{ steps.filter.outputs.server }}
+      client: ${{ steps.filter.outputs.client }}
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Filter Server Changes
-        uses: dorny/paths-filter@v3
+      - uses: dorny/paths-filter@v3
         id: filter
         with:
           filters: |
             server:
               - 'server/**'
+            client:
+              - 'client/**'
 
+  # ── Build client (parallel, independent of tests) ───────────────────────────
+  build_client:
+    name: Build Client
+    needs: check_changes
+    if: needs.check_changes.outputs.client == 'true' || needs.check_changes.outputs.server == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: 'client/package-lock.json'
+
+      - name: Install client deps
+        run: cd client && npm ci
+
+      - name: Build client
+        run: cd client && npm run build
+        env:
+          VITE_API_URL: /api
+
+      - name: Upload client dist
+        uses: actions/upload-artifact@v4
+        with:
+          name: client-dist
+          path: client/dist
+          retention-days: 1
+
+  # ── E2E tests (parallel with client build) ──────────────────────────────────
   test:
-    name: Run E2E Tests
+    name: E2E Tests
     needs: check_changes
     if: needs.check_changes.outputs.server == 'true'
     runs-on: ubuntu-latest
-    
-    # We only need Redis locally for the BullMQ queues and cache.
+
     services:
       redis:
         image: redis:7-alpine
@@ -49,22 +80,18 @@ jobs:
           --health-retries 10
 
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
-          node-version: '24'
+          node-version: '20'
           cache: 'npm'
-          cache-dependency-path: '**/package-lock.json'
+          cache-dependency-path: 'server/package-lock.json'
 
-      - name: Install Dependencies
-        run: |
-          cd server && npm ci
-          cd ../client && npm ci
+      - name: Install server deps
+        run: cd server && npm ci
 
-      - name: Setup Prisma with Test DB
+      - name: Setup Prisma
         env:
           DATABASE_URL: postgresql://postgres:password123@localhost:5432/neyokart_test
           DIRECT_URL: postgresql://postgres:password123@localhost:5432/neyokart_test
@@ -74,7 +101,10 @@ jobs:
           npx prisma generate
           node seed.mjs
 
-      - name: Run E2E Tests
+      - name: Build server
+        run: cd server && npm run build
+
+      - name: Run E2E tests
         env:
           DATABASE_URL: postgresql://postgres:password123@localhost:5432/neyokart_test
           DIRECT_URL: postgresql://postgres:password123@localhost:5432/neyokart_test
@@ -93,27 +123,26 @@ jobs:
           MAX_DELIVERY_RADIUS_KM: 14
         run: |
           cd server
-          npm run build
-          node dist/src/main.js &
-          echo "Waiting for backend to start..."
-          until curl -sf http://localhost:3000/api > /dev/null; do
-            sleep 2
-          done
+          node --enable-source-maps dist/src/main.js &
+          echo "Waiting for backend..."
+          until curl -sf http://localhost:3000/api > /dev/null; do sleep 2; done
           node test/universal-e2e.mjs http://localhost:3000
 
+  # ── Deploy — waits for both jobs ────────────────────────────────────────────
   deploy:
     name: Zero-Downtime VPS Deployment
-    needs: [check_changes, test]
+    needs: [check_changes, test, build_client]
     if: |
-      always() && 
-      needs.check_changes.result == 'success' && 
-      (needs.test.result == 'success' || needs.test.result == 'skipped')
+      always() &&
+      needs.check_changes.result == 'success' &&
+      (needs.test.result == 'success' || needs.test.result == 'skipped') &&
+      (needs.build_client.result == 'success' || needs.build_client.result == 'skipped')
     runs-on: ubuntu-latest
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
 
-      - name: Securely Copy Source Code to VPS
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Copy source to VPS
         uses: appleboy/scp-action@master
         with:
           host: ${{ secrets.VPS_IP }}
@@ -122,7 +151,7 @@ jobs:
           source: "server/,client/,scripts/,docker-compose.prod.yml"
           target: "/opt/neyokart"
 
-      - name: Execute Deployment Script via SSH
+      - name: Deploy on VPS
         id: ssh_deploy
         continue-on-error: true
         uses: appleboy/ssh-action@v1.0.3
@@ -135,7 +164,7 @@ jobs:
             cd /opt/neyokart
             bash ./scripts/deployment/deploy.sh
 
-      - name: Retry Execute Deployment Script via SSH
+      - name: Retry Deploy
         if: steps.ssh_deploy.outcome == 'failure'
         uses: appleboy/ssh-action@v1.0.3
         with:

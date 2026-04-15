@@ -1,20 +1,85 @@
-# This file runs strictly on the Hostinger VPS.
-# Blue/Green deployment: traffic is routed via nginx on the host.
-# Redis is shared and persistent across both slots.
+# Runs on Hostinger VPS. Blue/Green deployment — traffic routed via host nginx.
+# Redis shared + persistent across both slots.
+
+x-redis-env: &redis-env
+  REDIS_URL: redis://redis:6379
+  RIDER_REDIS_URL: redis://redis:6379
+  BULL_REDIS_HOST: redis
+  BULL_REDIS_PORT: "6379"
+
+x-server-common: &server-common
+  build:
+    context: ./server
+  image: neyokart-server:latest
+  env_file:
+    - .env
+  environment:
+    <<: *redis-env
+    PORT: "3000"
+    NODE_ENV: production
+  depends_on:
+    redis:
+      condition: service_healthy
+  restart: unless-stopped
+  deploy:
+    resources:
+      limits:
+        memory: 512m
+  ulimits:
+    nofile:
+      soft: 65536
+      hard: 65536
+  healthcheck:
+    test: ["CMD", "wget", "-qO-", "http://localhost:3000/health"]
+    interval: 30s
+    timeout: 5s
+    start_period: 20s
+    retries: 3
+  logging:
+    driver: json-file
+    options:
+      max-size: "20m"
+      max-file: "5"
+  networks:
+    - app
+
+x-client-common: &client-common
+  build:
+    context: ./client
+    args:
+      - VITE_API_URL=/api
+  image: neyokart-client:latest
+  restart: unless-stopped
+  deploy:
+    resources:
+      limits:
+        memory: 64m
+  logging:
+    driver: json-file
+    options:
+      max-size: "5m"
+      max-file: "3"
+  networks:
+    - app
+
 services:
   redis:
     image: redis:7-alpine
     container_name: neyokart-redis
-    command: redis-server --appendonly yes
+    command: redis-server --appendonly yes --maxmemory 200mb --maxmemory-policy allkeys-lru
     ports:
       - "6379:6379"
     volumes:
       - neyokart_redis_data:/data
-    restart: always
+    restart: unless-stopped
     deploy:
       resources:
         limits:
           memory: 256m
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -25,122 +90,42 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+    networks:
+      - app
 
-  # ── BLUE ────────────────────────────────────────────────────────────────────
+  # ── BLUE ──────────────────────────────────────────────────────────────────────
   server-blue:
-    build:
-      context: ./server
-    image: neyokart-server:latest
+    <<: *server-common
     container_name: neyokart-server-blue
     ports:
       - "3001:3000"
-    env_file:
-      - .env
-    environment:
-      - PORT=3000
-      - REDIS_URL=redis://redis:6379
-      - RIDER_REDIS_URL=redis://redis:6379
-      - BULL_REDIS_HOST=redis
-      - BULL_REDIS_PORT=6379
-    depends_on:
-      redis:
-        condition: service_healthy
-    restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          memory: 512m
-    healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:3000/health"]
-      interval: 30s
-      timeout: 5s
-      start_period: 20s
-      retries: 3
-    logging:
-      driver: json-file
-      options:
-        max-size: "20m"
-        max-file: "5"
 
   client-blue:
-    build:
-      context: ./client
-      args:
-        - VITE_API_URL=/api
-    image: neyokart-client:latest
+    <<: *client-common
     container_name: neyokart-client-blue
     ports:
       - "8001:80"
     depends_on:
       - server-blue
-    restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          memory: 64m
-    logging:
-      driver: json-file
-      options:
-        max-size: "5m"
-        max-file: "3"
 
-  # ── GREEN ───────────────────────────────────────────────────────────────────
+  # ── GREEN ─────────────────────────────────────────────────────────────────────
   server-green:
-    build:
-      context: ./server
-    image: neyokart-server:latest
+    <<: *server-common
     container_name: neyokart-server-green
     ports:
       - "3002:3000"
-    env_file:
-      - .env
-    environment:
-      - PORT=3000
-      - REDIS_URL=redis://redis:6379
-      - RIDER_REDIS_URL=redis://redis:6379
-      - BULL_REDIS_HOST=redis
-      - BULL_REDIS_PORT=6379
-    depends_on:
-      redis:
-        condition: service_healthy
-    restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          memory: 512m
-    healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:3000/health"]
-      interval: 30s
-      timeout: 5s
-      start_period: 20s
-      retries: 3
-    logging:
-      driver: json-file
-      options:
-        max-size: "20m"
-        max-file: "5"
 
   client-green:
-    build:
-      context: ./client
-      args:
-        - VITE_API_URL=/api
-    image: neyokart-client:latest
+    <<: *client-common
     container_name: neyokart-client-green
     ports:
       - "8002:80"
     depends_on:
       - server-green
-    restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          memory: 64m
-    logging:
-      driver: json-file
-      options:
-        max-size: "5m"
-        max-file: "3"
+
+networks:
+  app:
+    driver: bridge
 
 volumes:
   neyokart_redis_data:

@@ -64,4 +64,4 @@ EXPOSE 3000
 
 # dumb-init as PID 1 forwards signals correctly to Node
 ENTRYPOINT ["dumb-init", "--"]
-CMD ["node", "dist/src/main"]
+CMD ["node", "--enable-source-maps", "dist/src/main"]

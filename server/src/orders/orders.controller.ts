@@ -14,6 +14,7 @@ import {
   Patch,
   Sse,
   MessageEvent,
+  Res,
 } from '@nestjs/common';
 import { map, Observable } from 'rxjs';
 import { UserSseService } from '../sse/user-sse.service';
@@ -28,12 +29,14 @@ import {
   ApiHeader,
 } from '@nestjs/swagger';
 import { Request } from 'express';
+import type { Response } from 'express';
 import { OrdersService } from './orders.service';
 import {
   CreateOrderDto,
   OrderPreviewDto,
 } from './dto/create-order.dto';
 import { OrderQueryDto } from './dto/order-query.dto';
+import { ExportQueryDto } from './dto/export-query.dto';
 import { ModifyOrderDto } from './dto/modify-order.dto';
 
 interface AuthenticatedRequest extends Request {
@@ -178,5 +181,27 @@ export class OrdersController {
     @Body('deliveryPersonId') riderId: string,
   ) {
     return this.ordersService.manualAssignDelivery(id, riderId, req.user.storeId);
+  }
+
+  @Get('admin/export/csv')
+  @UseGuards(RolesGuard)
+  @Roles('ADMIN', 'STORE_MANAGER')
+  @ApiOperation({ summary: 'Export orders and ledger data as CSV' })
+  async exportCsv(
+    @Req() req: AuthenticatedRequest,
+    @Query() query: ExportQueryDto,
+    @Res() res: Response,
+  ) {
+    const csv = await this.ordersService.exportCsv(
+      req.user.role,
+      req.user.storeId,
+      query.startDate,
+      query.endDate,
+      query.storeId,
+    );
+
+    res.header('Content-Type', 'text/csv');
+    res.header('Content-Disposition', `attachment; filename="export_${new Date().toISOString().slice(0, 10)}.csv"`);
+    res.send(csv);
   }
 }

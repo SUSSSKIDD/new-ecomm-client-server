@@ -33,9 +33,14 @@ fi
 echo "Current Active: $ACTIVE_COLOR ($OLD_PORT)"
 echo "Deploying to:   $NEW_COLOR ($NEW_PORT)"
 
-# 1. Build the absolute latest images locally on the VPS
-echo "[1/6] Building latest images locally..."
-docker compose -f $DOCKER_COMPOSE_FILE build --no-cache server-$NEW_COLOR client-$NEW_COLOR
+# 1. Build new slot images in parallel using BuildKit
+# --no-cache removed: BuildKit layer cache cuts repeat build time significantly.
+# DOCKER_BUILDKIT=1 enables parallel stage execution within each Dockerfile.
+# --parallel builds server + client simultaneously (independent, no shared layers).
+echo "[1/6] Building latest images (parallel, BuildKit)..."
+DOCKER_BUILDKIT=1 COMPOSE_DOCKER_CLI_BUILD=1 \
+  docker compose -f $DOCKER_COMPOSE_FILE build --parallel \
+  server-$NEW_COLOR client-$NEW_COLOR
 
 # 2. Start the new container in the background
 echo "[2/6] Starting $NEW_COLOR containers..."
@@ -48,7 +53,7 @@ MAX_RETRIES=20
 HEALTHY=false
 
 while [ $RETRIES -lt $MAX_RETRIES ]; do
-    if curl -sf http://localhost:$NEW_PORT/ > /dev/null; then
+    if curl -sf http://localhost:$NEW_PORT/health > /dev/null; then
         HEALTHY=true
         break
     fi

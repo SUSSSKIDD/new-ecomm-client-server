@@ -1329,7 +1329,6 @@ export class OrdersService {
 
     return paginate(orders, total, page, limit);
   }
-
   async findAllAdmin(query: OrderQueryDto) {
     const {
       page = 1,
@@ -1378,6 +1377,104 @@ export class OrdersService {
     ]);
 
     return paginate(orders, total, page, limit);
+  }
+
+  async exportCsv(role: string, userStoreId?: string, startDate?: string, endDate?: string, queryStoreId?: string) {
+    const storeId = role === 'STORE_MANAGER' ? userStoreId : queryStoreId;
+
+    const where: Prisma.OrderWhereInput = {
+      createdAt: {
+        gte: startDate ? new Date(startDate) : undefined,
+        lte: endDate ? new Date(endDate) : undefined,
+      },
+    };
+
+    if (storeId) {
+      where.items = { some: { storeId } };
+    } else {
+      where.parentOrderId = null;
+    }
+
+    const [orders, ledger] = await Promise.all([
+      this.prisma.order.findMany({
+        where,
+        include: {
+          items: true,
+          user: { select: { name: true, phone: true } },
+          childOrders: !storeId ? { include: { items: true } } : false,
+        },
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.ledgerService.findAll(storeId, startDate, endDate),
+    ]);
+
+    const headers = [
+      'Type', 'OrderNumber/TransactionId', 'Date', 'CustomerName', 'CustomerPhone',
+      'Status', 'PaymentMethod', 'PaymentStatus', 'Subtotal', 'DeliveryFee',
+      'Tax', 'Total', 'ItemCount', 'ItemsSummary', 'StoreName', 'StoreCode', 'ReferenceNotes'
+    ];
+
+    const rows = [headers.join(',')];
+
+    const escape = (val: any) => {
+      if (val === null || val === undefined) return '';
+      const s = String(val).replace(/"/g, '""');
+      return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s}"` : s;
+    };
+
+    // Process Orders
+    for (const order of orders) {
+      let allItems = order.items || [];
+      if (!storeId && (order as any).childOrders?.length > 0) {
+        allItems = (order as any).childOrders.flatMap((c: any) => c.items ?? []);
+      }
+
+      const itemsSummary = allItems.map(i => `${i.name} x${i.quantity}`).join('; ');
+      const storeNames = order.storeTypeName || 'N/A';
+      
+      const row = [
+        'ORDER',
+        order.orderNumber,
+        order.createdAt.toISOString(),
+        order.user?.name || 'N/A',
+        order.user?.phone || 'N/A',
+        order.status,
+        order.paymentMethod,
+        order.paymentStatus,
+        order.subtotal,
+        order.deliveryFee,
+        order.tax,
+        order.total,
+        allItems.length,
+        itemsSummary,
+        storeNames,
+        '', 
+        '' 
+      ];
+      rows.push(row.map(escape).join(','));
+    }
+
+    // Process Ledger
+    for (const entry of ledger) {
+      const row = [
+        'LEDGER',
+        entry.transactionId,
+        entry.date.toISOString(),
+        '', '', '', 
+        entry.paymentMethod,
+        '', 
+        '', '', '', 
+        entry.amount,
+        '', 
+        '', 
+        (entry as any).store?.name || 'N/A',
+        (entry as any).store?.storeCode || 'N/A',
+        entry.referenceNotes || ''
+      ];
+      rows.push(row.map(escape).join(','));
+    }
+
+    return rows.join('\n');
   }
 
   // Valid order status transitions (one-way hierarchy)
