@@ -326,49 +326,88 @@ const AdminOrders = () => {
                                                                     <span>RIDER ASSIGNMENT</span>
                                                                 </div>
                                                                 {o.childOrders.map(child => (
-                                                                    <div key={child.id} className="px-6 py-3 border-b border-gray-50 last:border-none hover:bg-gray-50/30 transition-colors flex justify-between items-center">
-                                                                        <div className="flex items-center gap-3">
-                                                                            <div className="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center">
-                                                                                <Store className="w-4 h-4 text-emerald-600" />
+                                                                    <div key={child.id} className="border-b border-gray-50 last:border-none">
+                                                                        {/* Store header + rider */}
+                                                                        <div className="px-6 py-3 flex justify-between items-center hover:bg-gray-50/30 transition-colors">
+                                                                            <div className="flex items-center gap-3">
+                                                                                <div className="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center">
+                                                                                    <Store className="w-4 h-4 text-emerald-600" />
+                                                                                </div>
+                                                                                <div>
+                                                                                    <div className="text-sm font-semibold text-gray-900">{child.storeTypeName || `Store ${child.id.substring(0, 4)}`}</div>
+                                                                                    <div className="text-[11px] text-gray-500 flex items-center gap-2">
+                                                                                        {child.items.length} item{child.items.length !== 1 ? 's' : ''}
+                                                                                        {child.deliveredAt && (
+                                                                                            <span className="text-[10px] bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded font-bold">
+                                                                                                Delivered: {formatTime(child.deliveredAt)}
+                                                                                            </span>
+                                                                                        )}
+                                                                                    </div>
+                                                                                </div>
                                                                             </div>
                                                                             <div>
-                                                                                <div className="text-sm font-semibold text-gray-900">{child.items[0]?.storeName || `Store ${child.id.substring(0, 4)}`}</div>
-                                                                                <div className="text-[11px] text-gray-500 flex items-center gap-2">
-                                                                                    {child.items.length} items
-                                                                                    {child.deliveredAt && (
-                                                                                        <span className="text-[10px] bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded font-bold">
-                                                                                            Delivered: {formatTime(child.deliveredAt)}
-                                                                                        </span>
-                                                                                    )}
-                                                                                </div>
+                                                                                {child.assignment ? (
+                                                                                    <div className="flex items-center gap-2 px-3 py-1.5 bg-green-50 text-green-700 rounded-full border border-green-100">
+                                                                                        <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
+                                                                                        <span className="text-xs font-bold">{child.assignment.deliveryPerson?.name}</span>
+                                                                                    </div>
+                                                                                ) : (
+                                                                                    <div className="flex flex-col gap-2">
+                                                                                        {['CONFIRMED', 'PROCESSING', 'ORDER_PICKED', 'SHIPPED'].includes(child.status) && (
+                                                                                            <div className="flex items-center gap-3">
+                                                                                                <button
+                                                                                                    onClick={() => handleAutoAssign(child.id)}
+                                                                                                    className="px-3 py-1 bg-blue-50 text-blue-600 rounded text-[10px] font-bold hover:bg-blue-100 transition-colors border border-blue-200"
+                                                                                                >
+                                                                                                    Auto
+                                                                                                </button>
+                                                                                                <button
+                                                                                                    onClick={() => { setAssigningOrder(child); setAssignmentType('MANUAL'); }}
+                                                                                                    className="px-3 py-1 bg-emerald-50 text-emerald-600 rounded text-[10px] font-bold hover:bg-emerald-100 transition-colors border border-emerald-200"
+                                                                                                >
+                                                                                                    Manual
+                                                                                                </button>
+                                                                                            </div>
+                                                                                        )}
+                                                                                    </div>
+                                                                                )}
                                                                             </div>
                                                                         </div>
-                                                                        <div>
-                                                                            {child.assignment ? (
-                                                                                <div className="flex items-center gap-2 px-3 py-1.5 bg-green-50 text-green-700 rounded-full border border-green-100">
-                                                                                    <div className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-                                                                                    <span className="text-xs font-bold">{child.assignment.deliveryPerson?.name}</span>
-                                                                                </div>
-                                                                            ) : (
-                                                                                <div className="flex flex-col gap-2">
-                                                                                    {['CONFIRMED', 'PROCESSING', 'ORDER_PICKED', 'SHIPPED'].includes(child.status) && (
-                                                                                        <div className="flex items-center gap-3">
-                                                                                            <button 
-                                                                                                onClick={() => handleAutoAssign(child.id)}
-                                                                                                className="px-3 py-1 bg-blue-50 text-blue-600 rounded text-[10px] font-bold hover:bg-blue-100 transition-colors border border-blue-200"
-                                                                                            >
-                                                                                                Auto
-                                                                                            </button>
-                                                                                            <button 
-                                                                                                onClick={() => { setAssigningOrder(child); setAssignmentType('MANUAL'); }}
-                                                                                                className="px-3 py-1 bg-emerald-50 text-emerald-600 rounded text-[10px] font-bold hover:bg-emerald-100 transition-colors border border-emerald-200"
-                                                                                            >
-                                                                                                Manual
-                                                                                            </button>
+                                                                        {/* Items for this sub-order */}
+                                                                        <div className="px-6 pb-3 space-y-1.5">
+                                                                            {child.items.map((item, idx) => (
+                                                                                <div key={item.id || idx} className="bg-white rounded-lg px-4 py-2 border border-gray-100">
+                                                                                    <div className="flex items-center justify-between">
+                                                                                        <div className="flex-1 min-w-0">
+                                                                                            <div className="flex items-center gap-2">
+                                                                                                <p className="text-sm font-medium text-gray-900 truncate">{item.name}</p>
+                                                                                                {item.variantLabel && (
+                                                                                                    <span className="px-1.5 py-0.5 bg-emerald-50 text-emerald-700 rounded text-[10px] font-bold uppercase ring-1 ring-emerald-100">
+                                                                                                        {item.variantLabel}
+                                                                                                    </span>
+                                                                                                )}
+                                                                                            </div>
+                                                                                            <p className="text-xs text-gray-400">Qty: {item.quantity} × ₹{item.price}</p>
+                                                                                        </div>
+                                                                                        <span className="text-sm font-bold text-gray-800 ml-4">₹{item.total || (item.price * item.quantity)}</span>
+                                                                                    </div>
+                                                                                    {(item.selectedSize || item.userUploadUrls?.length > 0 || item.printProductId) && (
+                                                                                        <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                                                                                            {item.printProductId && (
+                                                                                                <span className="px-2 py-0.5 bg-purple-50 text-purple-700 rounded text-xs font-medium">Custom Print</span>
+                                                                                            )}
+                                                                                            {item.selectedSize && (
+                                                                                                <span className="px-2 py-0.5 bg-blue-50 text-blue-700 rounded text-xs font-medium">Size: {item.selectedSize}</span>
+                                                                                            )}
+                                                                                            {item.userUploadUrls?.map((url, ui) => (
+                                                                                                <a key={ui} href={url} target="_blank" rel="noopener noreferrer" className="inline-block w-10 h-10 rounded border border-gray-200 overflow-hidden hover:ring-2 hover:ring-blue-400 transition-all">
+                                                                                                    <img src={url} alt={`Upload ${ui + 1}`} className="w-full h-full object-cover" />
+                                                                                                </a>
+                                                                                            ))}
                                                                                         </div>
                                                                                     )}
                                                                                 </div>
-                                                                            )}
+                                                                            ))}
                                                                         </div>
                                                                     </div>
                                                                 ))}

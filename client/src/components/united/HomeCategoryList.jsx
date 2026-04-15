@@ -16,7 +16,7 @@ const TITLE_TO_STORE_TYPE = {
 const HomeCategoryList = () => {
     const { selectedCategory, setActiveSubCategory } = useCategory();
     const [categories, setCategories] = useState(HOME_CATEGORIES);
-    const [photoUrls, setPhotoUrls] = useState({});
+    const [bannerImages, setBannerImages] = useState({});
     const [expandedSections, setExpandedSections] = useState(new Set());
     const navigate = useNavigate();
 
@@ -32,7 +32,7 @@ const HomeCategoryList = () => {
                     return { ...section, storeType, items: data.subcategories[storeType] };
                 });
                 setCategories(merged);
-                if (data.photoUrls) setPhotoUrls(data.photoUrls);
+                if (data.bannerImages) setBannerImages(data.bannerImages);
             })
             .catch(() => {});
         return () => { cancelled = true; };
@@ -96,8 +96,8 @@ const HomeCategoryList = () => {
                                         onClick={() => handleSubCategoryClick(section, item)}
                                     >
                                         <div className={`${isExpanded ? 'w-full aspect-square' : 'w-28 h-28 md:w-40 md:h-40'} rounded-xl shadow-sm border flex items-center justify-center overflow-hidden transition-all border-gray-100 group-hover:shadow-md bg-white`}>
-                                            {photoUrls[section.storeType]?.[item] ? (
-                                                <img src={photoUrls[section.storeType][item]} alt={item} className="w-full h-full object-cover" />
+                                            {bannerImages[section.storeType]?.[item] ? (
+                                                <img src={bannerImages[section.storeType][item]} alt={item} className="w-full h-full object-cover" />
                                             ) : (
                                                 <span className="text-4xl font-black select-none text-gray-200">{item.charAt(0)}</span>
                                             )}

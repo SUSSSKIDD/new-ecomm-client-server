@@ -1,5 +1,35 @@
+import { useState, useEffect } from 'react';
 import { RippleButton } from '../../components/ui/ripple-button';
+import { API_URL } from '../../lib/api';
+
+const FALLBACK_IMAGE = 'https://png.pngtree.com/png-clipart/20230914/ourmid/pngtree-basket-of-vegetables-png-image_10116238.png';
+
+// The subcategory key whose bannerImage is used for the hero section.
+const HERO_STORE_TYPE = 'GROCERY';
+const HERO_SUBCATEGORY = '__hero__';
+
 const HeroSection = () => {
+    const [bannerSrc, setBannerSrc] = useState(FALLBACK_IMAGE);
+    const [isVideo, setIsVideo] = useState(false);
+
+    useEffect(() => {
+        let cancelled = false;
+        fetch(`${API_URL}/stores/categories`)
+            .then(r => r.json())
+            .then(data => {
+                if (cancelled) return;
+                const url = data?.bannerImages?.[HERO_STORE_TYPE]?.[HERO_SUBCATEGORY];
+                if (url) {
+                    const lowerUrl = url.toLowerCase();
+                    const videoExts = ['.mp4', '.webm', '.ogg', '.mov'];
+                    setIsVideo(videoExts.some(ext => lowerUrl.includes(ext)));
+                    setBannerSrc(url);
+                }
+            })
+            .catch(() => {});
+        return () => { cancelled = true; };
+    }, []);
+
     return (
         <div className="bg-ud-primary text-white overflow-hidden relative">
             <div className="container mx-auto px-4 py-4 md:py-0 md:h-[400px] flex flex-row items-center justify-between relative z-10">
@@ -31,14 +61,25 @@ const HeroSection = () => {
                     <div className="absolute top-10 right-10 w-[400px] h-[400px] bg-white/10 rounded-full"></div>
                 </div>
 
-                {/* Hero Image (Vegetable Basket) */}
+                {/* Hero Banner (Image or Video) */}
                 <div className="w-2/5 md:w-auto md:absolute md:right-20 md:top-1/2 md:-translate-y-1/2 z-20 flex justify-end">
                     <div className="relative w-[120px] h-[100px] md:w-[450px] md:h-[300px]">
-                        <img
-                            src="https://png.pngtree.com/png-clipart/20230914/ourmid/pngtree-basket-of-vegetables-png-image_10116238.png"
-                            alt="Fresh Vegetables"
-                            className="w-full h-full object-contain filter drop-shadow-2xl hover:scale-105 transition-all duration-500"
-                        />
+                        {isVideo ? (
+                            <video
+                                src={bannerSrc}
+                                autoPlay
+                                loop
+                                muted
+                                playsInline
+                                className="w-full h-full object-contain filter drop-shadow-2xl"
+                            />
+                        ) : (
+                            <img
+                                src={bannerSrc}
+                                alt="Fresh Vegetables"
+                                className="w-full h-full object-contain filter drop-shadow-2xl hover:scale-105 transition-all duration-500"
+                            />
+                        )}
                     </div>
                 </div>
 

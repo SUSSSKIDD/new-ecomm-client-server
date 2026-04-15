@@ -2,6 +2,8 @@ import { Injectable, Logger, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { randomUUID } from 'crypto';
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const sharp: (input: Buffer) => import('sharp').Sharp = require('sharp');
 import 'multer';
 
 @Injectable()
@@ -10,11 +12,17 @@ export class SupabaseStorageService {
   private readonly supabase: SupabaseClient | null;
   private readonly BUCKET = 'product-images';
   private readonly MAX_SIZE = 5 * 1024 * 1024; // 5 MB
-  private readonly ALLOWED_TYPES = [
+  private readonly ALLOWED_IMAGE_TYPES = [
     'image/jpeg',
     'image/png',
     'image/webp',
     'image/jpg',
+  ];
+  private readonly ALLOWED_VIDEO_TYPES = [
+    'video/mp4',
+    'video/webm',
+    'video/ogg',
+    'video/quicktime',
   ];
 
   constructor(config: ConfigService) {
@@ -47,11 +55,13 @@ export class SupabaseStorageService {
     }
 
     const targetBucket = bucket || this.BUCKET;
+    const isImage = this.ALLOWED_IMAGE_TYPES.includes(file.mimetype);
+    const isVideo = this.ALLOWED_VIDEO_TYPES.includes(file.mimetype);
 
     // Validate MIME type
-    if (!this.ALLOWED_TYPES.includes(file.mimetype)) {
+    if (!isImage && !isVideo) {
       throw new BadRequestException(
-        `Invalid file type: ${file.mimetype}. Allowed: ${this.ALLOWED_TYPES.join(', ')}`,
+        `Invalid file type: ${file.mimetype}. Allowed images: ${this.ALLOWED_IMAGE_TYPES.join(', ')}. Allowed videos: ${this.ALLOWED_VIDEO_TYPES.join(', ')}`,
       );
     }
 
@@ -62,14 +72,37 @@ export class SupabaseStorageService {
       );
     }
 
+    let uploadBuffer: Buffer = file.buffer;
+    let contentType: string = file.mimetype;
+    let ext: string;
+
+    if (isImage) {
+      // Convert every image to WebP with quality/size optimisations
+      uploadBuffer = await sharp(file.buffer)
+        .rotate()                          // auto-orient from EXIF
+        .resize({ width: 1200, height: 1200, fit: 'inside', withoutEnlargement: true })
+        .webp({ quality: 82, effort: 4 })  // effort 4 = good compression, fast enough
+        .toBuffer();
+      contentType = 'image/webp';
+      ext = 'webp';
+    } else {
+      // Video — pass through as-is
+      const mimeToExt: Record<string, string> = {
+        'video/mp4': 'mp4',
+        'video/webm': 'webm',
+        'video/ogg': 'ogv',
+        'video/quicktime': 'mov',
+      };
+      ext = mimeToExt[file.mimetype] || 'mp4';
+    }
+
     // Generate unique filename
-    const ext = file.originalname.split('.').pop() || 'jpg';
     const filename = `${folder}/${Date.now()}-${randomUUID().slice(0, 8)}.${ext}`;
 
     const { error } = await this.supabase.storage
       .from(targetBucket)
-      .upload(filename, file.buffer, {
-        contentType: file.mimetype,
+      .upload(filename, uploadBuffer, {
+        contentType,
         upsert: false,
       });
 

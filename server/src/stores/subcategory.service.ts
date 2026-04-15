@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { CATEGORY_SUBCATEGORIES, StoreCategoryType } from '../common/constants/store-categories';
-import { Prisma } from '@prisma/client';
+import { PrismaClientKnownRequestError } from '@prisma/client-runtime-utils';
 
 @Injectable()
 export class SubcategoryService {
@@ -20,19 +20,19 @@ export class SubcategoryService {
    */
   async getSubcategories(storeType: string): Promise<string[]> {
     const staticSubs = CATEGORY_SUBCATEGORIES[storeType as StoreCategoryType] || [];
-    const customSubs = await this.prisma.customSubcategory.findMany({
+    const customSubs = await this.prisma.db.customSubcategory.findMany({
       where: { storeType },
       orderBy: { createdAt: 'asc' },
       select: { name: true },
     });
-    return [...staticSubs, ...customSubs.map((c) => c.name)];
+    return [...staticSubs, ...customSubs.map((c: any) => c.name)];
   }
 
   /**
    * Get all custom subcategories grouped by store type (with IDs for management).
    */
   async getAllCustomSubcategories() {
-    return this.prisma.customSubcategory.findMany({
+    return this.prisma.db.customSubcategory.findMany({
       orderBy: [{ storeType: 'asc' }, { createdAt: 'asc' }],
     });
   }
@@ -41,7 +41,7 @@ export class SubcategoryService {
    * Get custom subcategories for a specific store type (with IDs for management).
    */
   async getCustomSubcategoriesByType(storeType: string) {
-    return this.prisma.customSubcategory.findMany({
+    return this.prisma.db.customSubcategory.findMany({
       where: { storeType },
       orderBy: { createdAt: 'asc' },
     });
@@ -60,14 +60,14 @@ export class SubcategoryService {
     }
 
     try {
-      const subcategory = await this.prisma.customSubcategory.create({
+      const subcategory = await this.prisma.db.customSubcategory.create({
         data: { storeType, name: trimmed },
       });
       this.logger.log(`Custom subcategory created: "${trimmed}" under ${storeType}`);
       return subcategory;
     } catch (error) {
       if (
-        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error instanceof PrismaClientKnownRequestError &&
         error.code === 'P2002'
       ) {
         throw new ConflictException(`Subcategory "${trimmed}" already exists for ${storeType}`);
@@ -80,7 +80,7 @@ export class SubcategoryService {
    * Delete a custom subcategory by ID and all its related products & configs.
    */
   async remove(id: string) {
-    const subcategory = await this.prisma.customSubcategory.findUnique({
+    const subcategory = await this.prisma.db.customSubcategory.findUnique({
       where: { id },
     });
     if (!subcategory) {
@@ -90,20 +90,20 @@ export class SubcategoryService {
     const { name, storeType } = subcategory;
 
     // Cascade delete products and configs in a transaction
-    await this.prisma.$transaction([
-      this.prisma.product.deleteMany({
+    await this.prisma.db.$transaction([
+      this.prisma.db.product.deleteMany({
         where: {
           category: storeType,
           subCategory: name,
         },
       }),
-      this.prisma.categoryConfig.deleteMany({
+      this.prisma.db.categoryConfig.deleteMany({
         where: {
           storeType,
           subcategory: name,
         },
       }),
-      this.prisma.customSubcategory.delete({
+      this.prisma.db.customSubcategory.delete({
         where: { id },
       }),
     ]);
@@ -119,7 +119,7 @@ export class SubcategoryService {
     const staticSubs = CATEGORY_SUBCATEGORIES[storeType as StoreCategoryType] || [];
     if (staticSubs.includes(name)) return true;
 
-    const custom = await this.prisma.customSubcategory.findUnique({
+    const custom = await this.prisma.db.customSubcategory.findUnique({
       where: { storeType_name: { storeType, name } },
     });
     return !!custom;
@@ -131,7 +131,7 @@ export class SubcategoryService {
    * Get all category configs across all store types.
    */
   async getAllCategoryConfigs() {
-    return this.prisma.categoryConfig.findMany();
+    return this.prisma.db.categoryConfig.findMany();
   }
 
   /**
@@ -139,7 +139,7 @@ export class SubcategoryService {
    * Returns a map: subcategoryName → uploadType
    */
   async getCategoryConfigs(storeType: string): Promise<Record<string, string>> {
-    const configs = await this.prisma.categoryConfig.findMany({
+    const configs = await this.prisma.db.categoryConfig.findMany({
       where: { storeType },
     });
     const map: Record<string, string> = {};
@@ -164,9 +164,9 @@ export class SubcategoryService {
   }
 
   /**
-   * Upsert category config (set upload type and/or photo URL for a subcategory).
+   * Upsert category config (set upload type and/or banner image URL for a subcategory).
    */
-  async upsertCategoryConfig(storeType: string, subcategory: string, uploadType?: string, photoUrl?: string) {
+  async upsertCategoryConfig(storeType: string, subcategory: string, uploadType?: string, bannerImage?: string) {
     const validTypes = ['NONE', 'PHOTO_UPLOAD', 'DESIGN_UPLOAD'];
     if (uploadType && !validTypes.includes(uploadType)) {
       throw new BadRequestException(`Invalid uploadType. Must be one of: ${validTypes.join(', ')}`);
@@ -174,17 +174,17 @@ export class SubcategoryService {
 
     const dataToUpdate: any = {};
     if (uploadType) dataToUpdate.uploadType = uploadType;
-    if (photoUrl !== undefined) dataToUpdate.photoUrl = photoUrl; // can be null to clear
-    
+    if (bannerImage !== undefined) dataToUpdate.bannerImage = bannerImage;
+
     // Default values if creating
     const createData = {
       storeType,
       subcategory,
       uploadType: uploadType || 'NONE',
-      photoUrl: photoUrl || null,
+      bannerImage: bannerImage || null,
     };
 
-    const result = await this.prisma.categoryConfig.upsert({
+    const result = await this.prisma.db.categoryConfig.upsert({
       where: { storeType_subcategory: { storeType, subcategory } },
       update: dataToUpdate,
       create: createData,
@@ -193,11 +193,11 @@ export class SubcategoryService {
     return result;
   }
 
-  async removePhotoUrl(storeType: string, subcategory: string) {
-    const result = await this.prisma.categoryConfig.upsert({
+  async removeBannerImage(storeType: string, subcategory: string) {
+    const result = await this.prisma.db.categoryConfig.upsert({
       where: { storeType_subcategory: { storeType, subcategory } },
-      update: { photoUrl: null },
-      create: { storeType, subcategory, photoUrl: null },
+      update: { bannerImage: null },
+      create: { storeType, subcategory, bannerImage: null },
     });
     return result;
   }
@@ -206,10 +206,10 @@ export class SubcategoryService {
    * Delete a category config by ID.
    */
   async removeCategoryConfig(id: string) {
-    const config = await this.prisma.categoryConfig.findUnique({ where: { id } });
+    const config = await this.prisma.db.categoryConfig.findUnique({ where: { id } });
     if (!config) throw new NotFoundException(`Category config ${id} not found`);
 
-    await this.prisma.categoryConfig.delete({ where: { id } });
+    await this.prisma.db.categoryConfig.delete({ where: { id } });
     this.logger.log(`Category config deleted: ${config.storeType}/${config.subcategory}`);
     return { message: 'Config removed', id };
   }

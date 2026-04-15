@@ -17,6 +17,8 @@ export class PrismaService
   private readonly logger = new Logger(PrismaService.name);
   private readonly pool: Pool;
 
+  private readonly _db: PrismaClient;
+
   constructor(config: ConfigService) {
     const connectionString = config.get<string>('DATABASE_URL');
     const pool = new Pool({
@@ -29,6 +31,14 @@ export class PrismaService
     const adapter = new PrismaPg(pool);
     super({ adapter });
     this.pool = pool;
+    // Prisma 7 + adapter mode loses model delegates on subclass instances.
+    // Store a reference to the base PrismaClient so .db.model works correctly.
+    this._db = new PrismaClient({ adapter });
+  }
+
+  /** Workaround: Prisma 7 + adapter mode loses model typings on subclasses. */
+  get db(): any {
+    return this._db;
   }
 
   async onModuleInit() {

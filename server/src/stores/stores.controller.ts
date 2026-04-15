@@ -74,7 +74,7 @@ export class StoresController {
 
     const mergedSubcategories: Record<string, string[]> = {};
     const uploadTypes: Record<string, Record<string, string>> = {};
-    const photoUrls: Record<string, Record<string, string>> = {};
+    const bannerImages: Record<string, Record<string, string>> = {};
 
     for (const storeType of STORE_CATEGORIES) {
       const staticSubs = CATEGORY_SUBCATEGORIES[storeType] || [];
@@ -83,25 +83,32 @@ export class StoresController {
         .map((c) => c.name);
       mergedSubcategories[storeType] = [...staticSubs, ...customSubs];
 
-      // Build uploadType map and photoUrls map per subcategory
+      // Build uploadType map and bannerImages map per subcategory
       const typeMap: Record<string, string> = {};
-      const photoMap: Record<string, string> = {};
+      const bannerMap: Record<string, string> = {};
       for (const sub of mergedSubcategories[storeType]) {
         const conf = configMap.get(`${storeType}:${sub}`);
         if (conf) {
           if (conf.uploadType && conf.uploadType !== 'NONE') typeMap[sub] = conf.uploadType;
-          if (conf.photoUrl) photoMap[sub] = conf.photoUrl;
+          if (conf.bannerImage) bannerMap[sub] = conf.bannerImage;
+        }
+      }
+      // Also include special keys (e.g. __hero__) that aren't in the subcategories list
+      for (const [key, conf] of configMap) {
+        if (key.startsWith(`${storeType}:`) && conf.bannerImage) {
+          const sub = key.slice(storeType.length + 1);
+          if (!bannerMap[sub]) bannerMap[sub] = conf.bannerImage;
         }
       }
       if (Object.keys(typeMap).length > 0) uploadTypes[storeType] = typeMap;
-      if (Object.keys(photoMap).length > 0) photoUrls[storeType] = photoMap;
+      if (Object.keys(bannerMap).length > 0) bannerImages[storeType] = bannerMap;
     }
     return {
       categories: STORE_CATEGORIES,
       labels: STORE_CATEGORY_LABELS,
       subcategories: mergedSubcategories,
       uploadTypes,
-      photoUrls,
+      bannerImages,
     };
   }
 
@@ -281,22 +288,22 @@ export class StoresController {
     if (!file) throw new BadRequestException('No photo provided');
     if (!dto.storeType || !dto.subcategory) throw new BadRequestException('storeType and subcategory required');
     
-    // Upload image to Supabase
-    const photoUrl = await this.supabaseStorage.upload(file, `subcategories photo/${dto.storeType}`);
+    // Upload banner image/video to Supabase
+    const bannerImage = await this.supabaseStorage.upload(file, `subcategories photo/${dto.storeType}`);
     
     // Update CategoryConfig (create if not exists)
-    const config = await this.subcategoryService.upsertCategoryConfig(dto.storeType, dto.subcategory, undefined, photoUrl);
-    return { photoUrl, config };
+    const config = await this.subcategoryService.upsertCategoryConfig(dto.storeType, dto.subcategory, undefined, bannerImage);
+    return { bannerImage, config };
   }
 
   @Delete('subcategories/photo')
   @ApiBearerAuth()
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Roles('ADMIN')
-  @ApiOperation({ summary: 'Delete subcategory photo (SuperAdmin)' })
-  async deleteSubcategoryPhoto(@Body() dto: { storeType: string, subcategory: string }) {
+  @ApiOperation({ summary: 'Delete subcategory banner (SuperAdmin)' })
+  async deleteSubcategoryBanner(@Body() dto: { storeType: string, subcategory: string }) {
      if (!dto.storeType || !dto.subcategory) throw new BadRequestException('storeType and subcategory required');
-     await this.subcategoryService.removePhotoUrl(dto.storeType, dto.subcategory);
-     return { message: 'Photo removed successfully' };
+     await this.subcategoryService.removeBannerImage(dto.storeType, dto.subcategory);
+     return { message: 'Banner removed successfully' };
   }
 }
