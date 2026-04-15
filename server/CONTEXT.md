@@ -223,6 +223,9 @@ new grocery/
 - `GET /ledger` — List all ledger entries (ADMIN, with filters)
 - `GET /ledger/my-store` — Get ledger entries for own store
 
+### CSV Export (JWT + ADMIN/STORE_MANAGER)
+- `GET /orders/admin/export/csv?startDate=&endDate=` — Download combined CSV of grocery orders + payment ledger entries for a date range. ADMIN gets all stores; STORE_MANAGER gets only their store's data. Response: `text/csv` attachment.
+
 
 ### Cart (JWT required)
 - `GET /cart` — Get current cart (from Redis)
@@ -243,6 +246,8 @@ new grocery/
 - `GET /orders/admin/store` — List orders for admin's store (ADMIN sees all)
 - `PATCH /orders/admin/:id/status` — Update order status (validates state machine)
 - `POST /orders/admin/:id/assign-delivery` — Manually trigger delivery assignment
+- `POST /orders/admin/:id/manual-assign` — Manually assign specific rider to order
+- `GET /orders/admin/export/csv` — Export orders + ledger as combined CSV (date range filter)
 
 ### Payments
 - `GET /payments/status` — Check mock vs live mode (no auth)
@@ -791,6 +796,31 @@ To properly route custom domains (`neyokart.com`, `neyokart.in`) into the isolat
 ### Shift to Local Building
 - **Registry Privacy**: The deployment pipeline now bypasses Docker Hub entirely for proprietary images. Source code folders (`server/`, `client/`, `scripts/`) are transferred directly to the VPS via SCP.
 - **Local VPS Build**: Docker images are built locally on the Hostinger VPS (`docker compose build`), ensuring alignment with the host environment and improving deployment speed by avoiding large image transfers.
+
+## Deployment & Infrastructure Optimisations (2026-04-15)
+
+### CI/CD Parallelism (`.github/workflows/deploy.yml`)
+- `build_client` job runs **in parallel** with `test` job — Vite build no longer blocks e2e tests.
+- Server + client `npm ci` cached separately with correct `cache-dependency-path`.
+- Path filter extended to `client/**` — client build job skipped when only server changed.
+- Node version pinned to `20` (matches Dockerfile; was incorrectly `24`).
+
+### VPS Build Speed (`scripts/deployment/deploy.sh`)
+- `--no-cache` removed from `docker compose build` — BuildKit layer cache used instead. On code-only changes (no dep changes), `npm ci` layer is cached, saving ~60–90s per build.
+- `DOCKER_BUILDKIT=1` + `--parallel` flag — server + client build simultaneously on VPS (independent base images, no shared layers).
+- Health check URL fixed: was checking `/` (no route), now checks `/health`.
+
+### Health Endpoint (`app.controller.ts`)
+- Added `GET /health` → `{ status: "ok" }`. No auth, no DB query. Used by Docker healthcheck and deploy script polling loop.
+
+### Docker Compose Hardening
+- Explicit `app` bridge network added to both `docker-compose.yml` and `docker-compose.prod.yml` — containers isolated from host default bridge.
+- `ulimits.nofile: 65536` added on Redis + server — Node hits default OS limit of 1024 under load.
+- YAML anchors (`x-server-common`, `x-client-common`, `x-redis-env`) in `docker-compose.prod.yml` eliminate ~60 lines of duplication.
+- Redis `--maxmemory-policy noeviction` — required for BullMQ (job queue must never evict keys). Was incorrectly set to `allkeys-lru`.
+- `restart: always` → `unless-stopped` on prod — allows `docker stop` during manual deploys without auto-restart.
+- `--enable-source-maps` added to server Dockerfile CMD — stack traces show original TypeScript line numbers in prod logs.
+- Dev compose: `client` no longer waits for server health (`service_healthy` → simple `depends_on`) — client is static nginx, blocking on server health was unnecessary.
 
 ### Deployment Safety Checks (`deploy.sh`)
 - **Nginx Integrity**: The script runs `sudo nginx -t` (configuration test) immediately after upstream substitution. If the syntax check fails, it automatically rolls back the `sed` changes before they are reloaded, preventing site-wide downtime.
