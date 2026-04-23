@@ -60,6 +60,7 @@ if (gatewayStatus.status === 200) {
 
 const uid = () => Math.random().toString(36).slice(2, 8);
 const RUN_ID = uid();
+const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 const results = [];
 const issues = [];
 let totalTests = 0;
@@ -175,6 +176,8 @@ await step('Invalid admin PIN rejected', async () => {
 console.log('\n🔷 Phase 3: Store Setup (All 5 Types)');
 
 for (const storeType of STORE_TYPES) {
+  // Small delay to avoid hitting rate limits in environments where throttler is enabled
+  await sleep(100);
   const managerPhone = `+9188${seq}${STORE_TYPES.indexOf(storeType) + 1}0`;
 
   await step(`Create ${storeType} store`, async () => {
@@ -225,10 +228,12 @@ for (const storeType of STORE_TYPES) {
 console.log('\n🔷 Phase 4: Product Creation (All Store Types)');
 
 for (const storeType of STORE_TYPES) {
+  await sleep(100);
   const s = stores[storeType];
   const category = CATEGORIES_PER_TYPE[storeType];
 
   for (let i = 1; i <= 2; i++) {
+    await sleep(50);
     await step(`Create ${storeType} product ${i}`, async () => {
       const fd = new FormData();
       fd.append('name', `E2E ${storeType} Prod ${i} ${RUN_ID}`);

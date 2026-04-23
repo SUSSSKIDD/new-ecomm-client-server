@@ -47,6 +47,7 @@ set -a
 source "$ENV_TEST"
 set +a
 export PORT=$TEST_PORT
+export THROTTLE_DISABLED=true
 
 node dist/src/main.js &
 SERVER_PID=$!
