@@ -115,9 +115,9 @@ const ProductGrid = ({ mainCategory, subCategory }) => {
                             <RippleButton
                                 onClick={loadMore}
                                 disabled={loading}
-                                className="px-6 py-2 bg-gray-100 text-gray-700 font-semibold rounded-full hover:bg-gray-200 transition-colors disabled:opacity-50 flex items-center gap-2"
+                                className="px-6 py-2 bg-yellow-400 text-gray-900 font-bold rounded-full hover:bg-yellow-500 shadow-sm transition-all disabled:opacity-50 flex items-center gap-2"
                             >
-                                {loading && <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-600"></div>}
+                                {loading && <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-900"></div>}
                                 {loading ? 'Loading...' : 'Load More Products'}
                             </RippleButton>
                         </div>

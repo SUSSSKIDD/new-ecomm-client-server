@@ -1,6 +1,7 @@
 export const STORE_CATEGORIES = [
     'GROCERY',
     'PIZZA_TOWN',
+    'FASHION',
     'AUTO_SERVICE',
     'DROP_IN_FACTORY',
     'AUTO_PARTS_SHOP',
@@ -9,6 +10,7 @@ export const STORE_CATEGORIES = [
 export const STORE_CATEGORY_LABELS = {
     GROCERY: 'Grocery',
     PIZZA_TOWN: 'Pizza Town & Food Zone',
+    FASHION: 'Fashion',
     AUTO_SERVICE: 'Auto Service & Parts',
     DROP_IN_FACTORY: 'Drop In Factory',
     AUTO_PARTS_SHOP: 'Auto Parts Shop',
@@ -46,6 +48,7 @@ export const STORE_CATEGORY_SUBCATEGORIES = {
         'Stationery & Games',
     ],
     PIZZA_TOWN: ['Pizza', 'Burger', 'Sandwich', 'French Fries', 'Cake'],
+    FASHION: [],
     AUTO_SERVICE: ['Car Wash', 'Bike Wash', 'Car Products', 'Bike Products'],
     DROP_IN_FACTORY: [
         'General',
@@ -61,11 +64,11 @@ export const STORE_CATEGORY_SUBCATEGORIES = {
 // Navigation
 export const NAV_ITEMS = [
     'Grocery',
-    'Pizza town and food zone',
-    'Auto service and parts',
-    'Pickup and drop',
-    // 'Health Service',
-    'Print factory'
+    'Pizza Town & Food Zone',
+    'Fashion',
+    'Auto Service & Parts',
+    'Pickup & Drop',
+    'Print Factory'
 ];
 
 // Home Categories
@@ -85,6 +88,10 @@ export const HOME_CATEGORIES = [
     {
         title: "Pizza Town & Food Zone",
         items: ["Pizza", "Burger", "Sandwich", "French Fries", "Cake"]
+    },
+    {
+        title: "Fashion",
+        items: []
     },
     {
         title: "Auto Service & Parts",

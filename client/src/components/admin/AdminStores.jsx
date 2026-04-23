@@ -1,6 +1,7 @@
 import { RippleButton } from '../ui/ripple-button';
 import { useEffect, useState } from 'react';
 import { useAdminAuth } from '../../hooks/useAdminAuth';
+import { STORE_CATEGORIES, STORE_CATEGORY_LABELS } from '../../constants';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
@@ -158,12 +159,9 @@ const AdminStores = () => {
                         <div>
                             <label className="block text-sm font-medium mb-1 text-gray-800">Store Type</label>
                             <select disabled={!!editingId} value={formData.storeType} onChange={e => setFormData({ ...formData, storeType: e.target.value })} className={`w-full border rounded p-2 text-gray-900 ${editingId ? 'bg-gray-100 cursor-not-allowed' : ''}`}>
-                                <option value="GROCERY">Grocery</option>
-                                <option value="PIZZA_TOWN">Pizza Town & Food Zone</option>
-                                <option value="AUTO_SERVICE">Auto Service & Parts</option>
-                                <option value="DROP_IN_FACTORY">Print Factory</option>
-                                <option value="AUTO_PARTS_SHOP">Auto Parts Shop</option>
-                                <option value="HEALTH_SERVICE">Health Service</option>
+                                {STORE_CATEGORIES.map(cat => (
+                                    <option key={cat} value={cat}>{STORE_CATEGORY_LABELS[cat] || cat}</option>
+                                ))}
                             </select>
                         </div>
                         <RippleButton type="submit" className="bg-blue-600 text-white px-4 py-2 rounded">{editingId ? 'Update Store' : 'Create Store'}</RippleButton>

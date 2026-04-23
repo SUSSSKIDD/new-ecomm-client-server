@@ -1,6 +1,7 @@
 export const STORE_CATEGORIES = [
     'GROCERY',
     'PIZZA_TOWN',
+    'FASHION',
     'AUTO_SERVICE',
     'DROP_IN_FACTORY',
     'AUTO_PARTS_SHOP',
@@ -11,6 +12,7 @@ export type StoreCategoryType = (typeof STORE_CATEGORIES)[number];
 export const STORE_CATEGORY_LABELS: Record<StoreCategoryType, string> = {
     GROCERY: 'Grocery',
     PIZZA_TOWN: 'Pizza Town & Food Zone',
+    FASHION: 'Fashion',
     AUTO_SERVICE: 'Auto Service & Parts',
     DROP_IN_FACTORY: 'Drop In Factory',
     AUTO_PARTS_SHOP: 'Auto Parts Shop',
@@ -48,6 +50,7 @@ export const CATEGORY_SUBCATEGORIES: Record<StoreCategoryType, string[]> = {
         'Stationery & Games',
     ],
     PIZZA_TOWN: ['Pizza', 'Burger', 'Sandwich', 'French Fries', 'Cake'],
+    FASHION: [],
     AUTO_SERVICE: ['Car Wash', 'Bike Wash', 'Car Products', 'Bike Products'],
     DROP_IN_FACTORY: [
         'General',
