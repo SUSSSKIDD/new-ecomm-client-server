@@ -9,12 +9,14 @@ import {
   Param,
   Query,
   Req,
+  Res,
   UseGuards,
   ParseUUIDPipe,
   UseInterceptors,
   UploadedFile,
   BadRequestException,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { AuthGuard } from '@nestjs/passport';
 import {
@@ -122,6 +124,22 @@ export class StoresController {
   }
 
   // ── Admin CRUD ──────────────────────────────────────────────────
+
+  @Get('export/catalog/csv')
+  @ApiBearerAuth()
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Roles('ADMIN')
+  @ApiOperation({ summary: 'Export all products grouped by store as CSV (Admin)' })
+  async exportCatalogCsv(
+    @Query('storeId') storeId: string | undefined,
+    @Res() res: Response,
+  ) {
+    const csv = await this.storesService.exportCatalogCsv(storeId);
+    const date = new Date().toISOString().slice(0, 10);
+    res.header('Content-Type', 'text/csv');
+    res.header('Content-Disposition', `attachment; filename="catalog_${date}.csv"`);
+    res.send(csv);
+  }
 
   @Get()
   @ApiBearerAuth()

@@ -149,6 +149,8 @@ model Product {
   @@index([storeLocation])
   @@index([isGrocery])
   @@index([createdAt])
+  @@index([storeId])
+  @@index([storeId, isActive])
   @@index([category, createdAt(sort: Desc)])
   @@index([isGrocery, category])
 }

@@ -342,4 +342,52 @@ export class StoresService {
       throw error;
     }
   }
+
+  async exportCatalogCsv(storeId?: string): Promise<string> {
+    const escape = (val: any): string => {
+      if (val === null || val === undefined) return '';
+      const s = String(val).replace(/"/g, '""');
+      return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s}"` : s;
+    };
+
+    const products = await this.prisma.product.findMany({
+      where: {
+        ...(storeId ? { storeId } : {}),
+        isActive: true,
+      },
+      select: {
+        name: true,
+        price: true,
+        mrp: true,
+        category: true,
+        subCategory: true,
+        taxRate: true,
+        store: { select: { name: true } },
+        variants: {
+          where: { isActive: true },
+          select: { label: true, price: true, mrp: true },
+          orderBy: { price: 'asc' },
+        },
+      },
+      orderBy: [{ storeId: 'asc' }, { category: 'asc' }, { name: 'asc' }],
+    });
+
+    const headers = ['Store Name', 'Category', 'Sub Category', 'Product Name', 'Variant', 'Price', 'MRP', 'Tax Rate (%)'];
+    const rows: string[] = [headers.join(',')];
+
+    for (const p of products) {
+      const storeName = p.store?.name ?? '';
+      const base = [escape(storeName), escape(p.category), escape(p.subCategory), escape(p.name)];
+
+      if (p.variants.length > 0) {
+        for (const v of p.variants) {
+          rows.push([...base, escape(v.label), escape(v.price), escape(v.mrp ?? ''), escape(p.taxRate)].join(','));
+        }
+      } else {
+        rows.push([...base, '', escape(p.price), escape(p.mrp ?? ''), escape(p.taxRate)].join(','));
+      }
+    }
+
+    return rows.join('\n');
+  }
 }

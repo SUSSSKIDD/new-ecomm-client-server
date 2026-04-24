@@ -113,26 +113,58 @@ const AdminStores = () => {
         }
     };
 
+    const handleExport = async () => {
+        try {
+            const token = localStorage.getItem('ud_admin_token');
+            const res = await fetch(`${API_URL}/stores/export/catalog/csv`, {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            if (!res.ok) throw new Error('Export failed');
+            
+            const blob = await res.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            const date = new Date().toISOString().slice(0, 10);
+            a.href = url;
+            a.download = `catalog_export_${date}.csv`;
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+        } catch (err) {
+            console.error(err);
+            alert('Failed to export catalog');
+        }
+    };
+
     return (
         <div>
             <div className="flex justify-between items-center mb-6">
                 <h1 className="text-2xl font-bold text-gray-800">global stores</h1>
-                {admin?.role === 'ADMIN' && (
+                <div className="flex gap-4">
                     <RippleButton
-                        onClick={() => {
-                            if (showForm) {
-                                setShowForm(false);
-                                setEditingId(null);
-                                setFormData({ name: '', pincode: '', lat: '', lng: '', storeType: 'GROCERY' });
-                            } else {
-                                setShowForm(true);
-                            }
-                        }}
-                        className="bg-ud-primary text-white px-4 py-2 rounded hover:brightness-110"
+                        onClick={handleExport}
+                        className="bg-gray-200 text-gray-800 px-4 py-2 rounded hover:bg-gray-300"
                     >
-                        {showForm ? 'Cancel' : 'Add Store'}
+                        Export Catalog CSV
                     </RippleButton>
-                )}
+                    {admin?.role === 'ADMIN' && (
+                        <RippleButton
+                            onClick={() => {
+                                if (showForm) {
+                                    setShowForm(false);
+                                    setEditingId(null);
+                                    setFormData({ name: '', pincode: '', lat: '', lng: '', storeType: 'GROCERY' });
+                                } else {
+                                    setShowForm(true);
+                                }
+                            }}
+                            className="bg-ud-primary text-white px-4 py-2 rounded hover:brightness-110"
+                        >
+                            {showForm ? 'Cancel' : 'Add Store'}
+                        </RippleButton>
+                    )}
+                </div>
             </div>
 
             {showForm && (
