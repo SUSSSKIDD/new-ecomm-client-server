@@ -306,7 +306,7 @@ export class StoresController {
     if (!file) throw new BadRequestException('No photo provided');
     if (!dto.storeType || !dto.subcategory) throw new BadRequestException('storeType and subcategory required');
     
-    // Upload banner image/video to Supabase
+    // Upload banner image/video to local storage
     const bannerImage = await this.localStorage.upload(file, `subcategories-${dto.storeType}`);
     
     // Update CategoryConfig (create if not exists)

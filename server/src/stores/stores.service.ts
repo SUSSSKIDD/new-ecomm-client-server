@@ -245,9 +245,6 @@ export class StoresService {
     // Best effort cleanup of product images in storage
     const allImages = products.flatMap((p) => p.images || []);
     if (allImages.length > 0) {
-      // Need storage service here? Actually better to let the user delete products manually if they want full image cleanup.
-      // Or I can inject the SupabaseStorageService here... Or just let it be.
-      // Since it's a cascade, images remain in Supabase bucket but the DB record is gone.
     }
 
     await this.invalidateCache();
