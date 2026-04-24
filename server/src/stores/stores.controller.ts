@@ -47,7 +47,7 @@ import {
   STORE_CATEGORY_LABELS,
   CATEGORY_SUBCATEGORIES,
 } from '../common/constants/store-categories';
-import { SupabaseStorageService } from '../common/services/supabase-storage.service';
+import { LocalStorageService } from '../common/services/local-storage.service';
 
 interface AuthenticatedRequest {
   user: { sub: string; phone: string; role: string; storeId?: string };
@@ -59,7 +59,7 @@ export class StoresController {
   constructor(
     private readonly storesService: StoresService,
     private readonly subcategoryService: SubcategoryService,
-    private readonly supabaseStorage: SupabaseStorageService,
+    private readonly localStorage: LocalStorageService,
   ) { }
 
   // ── Public ───────────────────────────────────────────────────────
@@ -307,7 +307,7 @@ export class StoresController {
     if (!dto.storeType || !dto.subcategory) throw new BadRequestException('storeType and subcategory required');
     
     // Upload banner image/video to Supabase
-    const bannerImage = await this.supabaseStorage.upload(file, `subcategories photo/${dto.storeType}`);
+    const bannerImage = await this.localStorage.upload(file, `subcategories-${dto.storeType}`);
     
     // Update CategoryConfig (create if not exists)
     const config = await this.subcategoryService.upsertCategoryConfig(dto.storeType, dto.subcategory, undefined, bannerImage);

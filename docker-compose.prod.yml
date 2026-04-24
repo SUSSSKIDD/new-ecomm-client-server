@@ -17,9 +17,14 @@ x-server-common: &server-common
     <<: *redis-env
     PORT: "3000"
     NODE_ENV: production
+    UPLOAD_PATH: /app/uploads
   depends_on:
     redis:
       condition: service_healthy
+  volumes:
+    - /opt/neyokart/uploads:/app/uploads
+  extra_hosts:
+    - "host.docker.internal:host-gateway"
   restart: unless-stopped
   deploy:
     resources:

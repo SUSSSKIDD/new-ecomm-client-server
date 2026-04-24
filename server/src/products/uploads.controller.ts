@@ -10,7 +10,7 @@ import {
 import { AuthGuard } from '@nestjs/passport';
 import { FilesInterceptor, FileInterceptor } from '@nestjs/platform-express';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiConsumes } from '@nestjs/swagger';
-import { SupabaseStorageService } from '../common/services/supabase-storage.service';
+import { LocalStorageService } from '../common/services/local-storage.service';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 
@@ -28,7 +28,7 @@ const MULTER_IMAGE_OPTIONS = {
 @ApiTags('uploads')
 @Controller('uploads')
 export class UploadsController {
-  constructor(private readonly storage: SupabaseStorageService) { }
+  constructor(private readonly storage: LocalStorageService) { }
 
   @Post('user-designs')
   @ApiBearerAuth()

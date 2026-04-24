@@ -24,3 +24,6 @@ server/VARIANT-CREATION-PLAN.md
 .agents
 skills-lock.json
 .DS_Store
+server/test_dl.jpeg
+server/download_item.sh
+server/download_media.sh

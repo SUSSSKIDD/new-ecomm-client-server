@@ -6,7 +6,7 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
-import { SupabaseStorageService } from '../common/services/supabase-storage.service';
+import { LocalStorageService } from '../common/services/local-storage.service';
 import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { ProductQueryDto } from './dto/product-query.dto';
@@ -25,7 +25,7 @@ export class ProductsService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly storage: SupabaseStorageService,
+    private readonly storage: LocalStorageService,
     private readonly cache: RedisCacheService,
     private readonly subcategoryService: SubcategoryService,
     private readonly storesService: StoresService,

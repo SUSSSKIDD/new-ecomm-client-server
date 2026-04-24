@@ -23,9 +23,9 @@ export class PrismaService
     const connectionString = config.get<string>('DATABASE_URL');
     const pool = new Pool({
       connectionString,
-      max: 50, // Max connections in pool
-      min: 10, // Keep 10 warm connections ready
-      idleTimeoutMillis: 30_000, // Close idle connections after 30s
+      max: 10, // Reduced from 50 (10 x 2 instances = 20 total)
+      min: 2,  // Reduced from 10
+      idleTimeoutMillis: 10_000, // Reduced from 30s
       connectionTimeoutMillis: 5_000, // Fail fast if can't connect in 5s
     });
     const adapter = new PrismaPg(pool);
