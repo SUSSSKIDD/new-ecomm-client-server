@@ -24,7 +24,7 @@ export class LocalStorageService implements OnModuleInit {
     ];
 
     constructor(private readonly config: ConfigService) {
-        this.uploadsDir = config.get<string>('UPLOADS_DIR', '/app/uploads');
+        this.uploadsDir = config.get<string>('UPLOADS_DIR', path.join(process.cwd(), 'uploads'));
         this.baseUrl = config.get<string>('MEDIA_BASE_URL', 'http://localhost:3000');
     }
 
