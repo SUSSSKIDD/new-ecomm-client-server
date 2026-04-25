@@ -23,7 +23,7 @@ NEYOKART is a hyper-local grocery delivery platform with a React frontend and Ne
 | Cache | Redis (ioredis TCP, single instance via Docker `neyokart-redis` on port 6379) — app cache, rider pool/locks, presence/location |
 | Auth | JWT (60-day expiry) + MSG91 SMS OTP + Store Manager PIN + Parcel Manager PIN + Delivery Person PIN |
 | Payment | Razorpay SDK (test mode: `rzp_test_*`, mock mode when credentials absent) |
-| Storage | Supabase Storage (product images, graceful degradation) |
+| Storage | Local Filesystem (Sharp WebP conversion, /opt/neyokart/uploads) |
 | Security | Helmet, CORS, ValidationPipe (whitelist + transform), RolesGuard, StoreGuard |
 | Docs | Swagger at `/api` |
 | Tests | Jest 30 + ts-jest + supertest |
@@ -191,10 +191,10 @@ new grocery/
         │   ├── delivery-sse.service.ts          # Real-time SSE streams for NEW_AVAILABLE_ORDER, ORDER_CLAIMED
         │   └── dto/
         ├── common/
-        │   ├── common.module.ts                 # Global module (exports Redis + Supabase)
+        │   ├── common.module.ts                 # Global module (exports Redis + Local Storage)
         │   ├── services/
         │   │   ├── redis-cache.service.ts       # get/set/del/delPattern
-        │   │   └── supabase-storage.service.ts  # upload/delete images to Supabase Storage
+        │   │   └── local-storage.service.ts     # Local filesystem storage with WebP conversion
         │   └── utils/
         │       └── geo.util.ts                  # Haversine distance, MAX_DELIVERY_RADIUS_KM = 10
         ├── prisma.service.ts, prisma.module.ts
@@ -550,14 +550,16 @@ CANCELLED  CANCELLED     CANCELLED       CANCELLED   CANCELLED   CANCELLED
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `DATABASE_URL` | — | PostgreSQL connection (pooled, pgbouncer) |
-| `DIRECT_URL` | — | PostgreSQL connection (direct, for migrations) |
+| `DATABASE_URL` | — | PostgreSQL connection (pooled via PgBouncer on port 6432) |
+| `DIRECT_URL` | — | PostgreSQL connection (direct to port 5432 for migrations) |
+| `UPLOAD_PATH` | `/app/uploads` | Path for image uploads (mounted to host /opt/neyokart/uploads) |
+| `MEDIA_BASE_URL` | `https://neyokart.com` | Base URL for serving uploaded media |
 | `JWT_SECRET` | — | Secret for JWT signing |
 | `MSG91_AUTH_KEY` | (empty) | MSG91 auth key (empty = DEV MODE, OTP 123456 accepted) |
 | `MSG91_BASE_URL` | `https://control.msg91.com/api/v5` | MSG91 API base URL |
-| `REDIS_URL` | `redis://localhost:6379` | ioredis TCP connection for app cache |
-| `RIDER_REDIS_URL` | `redis://localhost:6379` | ioredis TCP connection for rider pool/locks/presence |
-| `BULL_REDIS_HOST` | `localhost` | BullMQ Redis host |
+| `REDIS_URL` | `redis://neyokart-redis:6379` | ioredis TCP connection for app cache |
+| `RIDER_REDIS_URL` | `redis://neyokart-redis:6379` | ioredis TCP connection for rider pool/locks/presence |
+| `BULL_REDIS_HOST` | `neyokart-redis` | BullMQ Redis host |
 | `BULL_REDIS_PORT` | `6379` | BullMQ Redis port |
 | `PORT` | 3000 | Server port |
 | `SUPER_ADMIN_PHONE` | — | Super admin phone number (e.g. `+917785945524`) |
@@ -568,8 +570,6 @@ CANCELLED  CANCELLED     CANCELLED       CANCELLED   CANCELLED   CANCELLED
 | `RAZORPAY_KEY_ID` | (empty) | Empty = mock mode, `rzp_test_*` = test mode |
 | `RAZORPAY_KEY_SECRET` | (empty) | Empty = mock mode |
 | `RAZORPAY_WEBHOOK_SECRET` | (empty) | For webhook signature verification |
-| `SUPABASE_URL` | — | Supabase project URL (empty = image uploads disabled) |
-| `SUPABASE_SERVICE_ROLE_KEY` | — | Supabase service role key for storage access |
 | `ORDER_CLAIM_TIMEOUT_SECONDS` | 120 | Unclaimed order pool timeout before retry/re-broadcast |
 | `MAX_DELIVERY_RADIUS_KM` | 10 | Maximum delivery radius in km (configurable) |
 
@@ -637,13 +637,13 @@ Use `StoreGuard` for store-scoped operations (validates `req.user.storeId` match
 
 ## Image Upload
 
-- **Storage**: Supabase Storage bucket `product-images` (must be set to Public, hyphenated name)
-- **Max**: 3 images per product (combined URL + file count enforced), 5MB each
-- **Types**: JPEG, PNG, WebP (validated at Multer level before buffering)
-- **Naming**: `products/{timestamp}-{uuid8}.{ext}`
-- **Cleanup**: DB record deleted first, then images cleaned up (best-effort). Uploaded images rolled back on DB failure.
-- **Concurrency**: `addImages` uses Prisma `$transaction` to prevent TOCTOU race conditions
-- **Graceful degradation**: If Supabase env vars missing, upload endpoints return 400
+- **Storage**: Local Filesystem at `/opt/neyokart/uploads` (host) / `/app/uploads` (container)
+- **Optimization**: All images are automatically converted to **WebP** with `sharp` (quality: 80).
+- **Subdirectories**: `products/`, `user-designs/`, `print-product-images/`, `subcategories/`.
+- **Naming**: `{timestamp}-{uuid8}.webp`
+- **Max**: 3 images per product (combined URL + file count enforced), 5MB each.
+- **Nginx Serving**: Nginx on the host serves `/uploads/*` directly via `alias /opt/neyokart/uploads/;`.
+- **Cleanup**: DB record deleted first, then files removed from filesystem (best-effort).
 
 ## Security Measures
 
@@ -849,3 +849,26 @@ To properly route custom domains (`neyokart.com`, `neyokart.in`) into the isolat
 - **Search Integration:** Complete Nominatim API integration allowing manual text search to dynamically reset global coordinates natively via `LocationPickerModal`.
 - **Location-Aware Filtering:** Passing `lat` and `lng` filters product grid catalogs based directly on 10km radius proximity to user's custom pin, persisting across state reliably.
 - **Back-Button Patch:** Popstate history listeners injected natively directly into context routes so closing modals naturally pops context state via back buttons accurately.
+
+## VPS Infrastructure & Database Migration (2026-04-24)
+- **Database Architecture**: Migrated from Supabase Managed Postgres to a self-hosted PostgreSQL 16 instance on the VPS host.
+  - **PgBouncer**: Implemented as a transaction-mode pooler on port `6432`. This allows the NestJS backend to maintain a high number of virtual connections while using a small number of physical Postgres connections.
+  - **Direct Access**: Port `5432` is reserved for administrative tasks and Prisma migrations.
+  - **Security**: Database is bound to `127.0.0.1` and `172.17.0.1` (Docker bridge) to prevent external access.
+  - **User**: Dedicated `neyokart_app` user with ownership of the `neyokart` database.
+
+- **Postgres Optimization**:
+  - **Prisma Connection Pooling**: Configured in `prisma.service.ts` with `connection_limit=10` and `pool_timeout=20` to stay within the VPS resource limits.
+  - **Idle Timeout**: Set to 20 seconds to aggressively recycle unused connections.
+
+- **Media Persistence**: 
+  - **Storage**: Entirely self-hosted at `/opt/neyokart/uploads/` on the VPS.
+  - **Nginx Serving**: Optimized Nginx configuration serves media files directly from the host filesystem, bypassing the Node.js application for high-performance delivery.
+  - **Image Processing**: `sharp` library used for auto-conversion to WebP (80% quality) to minimize storage footprint and bandwidth.
+
+- **Docker Networking**:
+  - `host.docker.internal` (via `extra_hosts: ["host.docker.internal:host-gateway"]` in `docker-compose.prod.yml`) allows containers to reach host services (Postgres, PgBouncer) securely via the Docker gateway (`172.17.0.1`).
+
+- **Zero-Downtime Deployment**: 
+  - Maintains the Blue/Green strategy with Nginx port swapping.
+  - Docker healthchecks on `/health` ensure the new container is ready before the traffic swap.
