@@ -126,6 +126,7 @@ model Product {
   name          String
   description   String?
   price         Float
+  storePrice    Float?           // Hidden from customers
   mrp           Float?
   category      String
   subCategory   String?
@@ -161,6 +162,7 @@ model ProductVariant {
   product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
   label     String   // e.g. "500ml", "1L", "Small"
   price     Float
+  storePrice Float?   // Hidden from customers
   mrp       Float?
   stock     Int      @default(0)
   images    String[]

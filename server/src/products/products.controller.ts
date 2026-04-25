@@ -62,25 +62,27 @@ export class ProductsController {
 
   @Get()
   @ApiOperation({ summary: 'List products with pagination and filters' })
-  findAll(@Query() query: ProductQueryDto) {
-    return this.productsService.findAll(query);
+  async findAll(@Query() query: ProductQueryDto) {
+    const result = await this.productsService.findAll(query);
+    return this.stripStorePriceFromResponse(result);
   }
 
   @Get(':id')
   @ApiOperation({ summary: 'Get product by ID' })
   @ApiResponse({ status: 404, description: 'Product not found' })
-  findOne(
+  async findOne(
     @Param('id', ParseUUIDPipe) id: string,
     @Query('lat') lat?: string,
     @Query('lng') lng?: string,
     @Query('pincode') pincode?: string
   ) {
-    return this.productsService.findOne(
+    const product = await this.productsService.findOne(
       id,
       lat ? parseFloat(lat) : undefined,
       lng ? parseFloat(lng) : undefined,
       pincode
     );
+    return this.stripStorePriceFromResponse(product);
   }
 
   @Get('admin/my-store')
@@ -247,5 +249,30 @@ export class ProductsController {
     @Param('variantId', ParseUUIDPipe) variantId: string,
   ) {
     return this.productsService.deleteVariant(variantId);
+  }
+
+  private stripStorePrice(product: any) {
+    if (!product) return product;
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { storePrice, ...rest } = product;
+    if (rest.variants) {
+      rest.variants = rest.variants.map((v: any) => {
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const { storePrice: _, ...vRest } = v;
+        return vRest;
+      });
+    }
+    return rest;
+  }
+
+  private stripStorePriceFromResponse(res: any) {
+    if (!res) return res;
+    if (Array.isArray(res)) {
+      return res.map(p => this.stripStorePrice(p));
+    }
+    if (res.data && Array.isArray(res.data)) {
+      return { ...res, data: res.data.map((p: any) => this.stripStorePrice(p)) };
+    }
+    return this.stripStorePrice(res);
   }
 }
