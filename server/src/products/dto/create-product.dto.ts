@@ -16,6 +16,7 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 export class CreateVariantDto {
   @IsString() label: string;
   @Type(() => Number) @IsNumber() price: number;
+  @IsOptional() @Type(() => Number) @IsNumber() storePrice?: number;
   @IsOptional() @Type(() => Number) @IsNumber() mrp?: number;
   @Type(() => Number) @IsNumber() stock: number;
   @IsOptional() @IsArray() @IsString({ each: true }) images?: string[];
@@ -37,6 +38,13 @@ export class CreateProductDto {
   @IsNumber()
   @Min(0)
   price: number;
+
+  @ApiPropertyOptional({ description: 'Store price (hidden from customers)' })
+  @Type(() => Number)
+  @IsNumber()
+  @IsOptional()
+  @Min(0)
+  storePrice?: number;
 
   @ApiPropertyOptional({ description: 'Maximum retail price' })
   @Type(() => Number)

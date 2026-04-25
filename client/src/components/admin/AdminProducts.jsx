@@ -5,7 +5,7 @@ import { useAdminAuth } from '../../hooks/useAdminAuth';
 import { adminApi, API_URL } from '../../lib/api';
 import { STORE_CATEGORY_SUBCATEGORIES } from '../../constants';
 
-const emptyForm = { name: '', description: '', price: '', mrp: '', category: '', stock: '', storeLocation: '', taxRate: '0' };
+const emptyForm = { name: '', description: '', price: '', mrp: '', storePrice: '', category: '', stock: '', storeLocation: '', taxRate: '0' };
 
 const ProductModal = ({ product, onClose, onSaved, admin }) => {
     const defaultStoreLocation = admin?.storeCode || '';
@@ -14,6 +14,7 @@ const ProductModal = ({ product, onClose, onSaved, admin }) => {
         description: product.description || '',
         price: product.price || '',
         mrp: product.mrp || '',
+        storePrice: product.storePrice || '',
         category: product.subCategory || product.category || '',
         stock: product.stock || '',
         storeLocation: product.storeLocation || defaultStoreLocation,
@@ -26,10 +27,10 @@ const ProductModal = ({ product, onClose, onSaved, admin }) => {
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState('');
     const [hasVariants, setHasVariants] = useState(false);
-    const [variants, setVariants] = useState([{ label: '', price: '', mrp: '', stock: '', image: null }]);
+    const [variants, setVariants] = useState([{ label: '', price: '', mrp: '', storePrice: '', stock: '', image: null }]);
 
     const addVariant = () =>
-        setVariants(v => [...v, { label: '', price: '', mrp: '', stock: '', image: null }]);
+        setVariants(v => [...v, { label: '', price: '', mrp: '', storePrice: '', stock: '', image: null }]);
 
     const removeVariant = (i) =>
         setVariants(v => v.filter((_, idx) => idx !== i));
@@ -59,10 +60,11 @@ const ProductModal = ({ product, onClose, onSaved, admin }) => {
         fd.append('category', form.category);
         if (!product && hasVariants && variants.length > 0) {
             fd.append('stock', '0'); // variants hold the true stock
-            const variantMeta = variants.map(({ label, price, mrp, stock }) => ({
+            const variantMeta = variants.map(({ label, price, mrp, storePrice, stock }) => ({
                 label,
                 price: Number(price),
                 mrp: mrp ? Number(mrp) : undefined,
+                storePrice: storePrice ? Number(storePrice) : undefined,
                 stock: Number(stock),
             }));
             fd.append('variantsJson', JSON.stringify(variantMeta));
@@ -76,6 +78,7 @@ const ProductModal = ({ product, onClose, onSaved, admin }) => {
         if (form.storeLocation) fd.append('storeLocation', form.storeLocation);
         if (form.description) fd.append('description', form.description);
         if (form.mrp) fd.append('mrp', Number(form.mrp));
+        if (form.storePrice) fd.append('storePrice', Number(form.storePrice));
         if (images) {
             for (let i = 0; i < Math.min(images.length, 3); i++) {
                 fd.append('images', images[i]);
@@ -119,7 +122,7 @@ const ProductModal = ({ product, onClose, onSaved, admin }) => {
                             className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ud-primary text-gray-900" />
                     </div>
                     {!(!product && hasVariants) && (
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-3 gap-4">
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">Price *</label>
                                 <input type="number" required min="0" step="0.01" value={form.price} onChange={e => setForm(f => ({ ...f, price: e.target.value }))}
@@ -129,6 +132,12 @@ const ProductModal = ({ product, onClose, onSaved, admin }) => {
                                 <label className="block text-sm font-medium text-gray-700 mb-1">MRP</label>
                                 <input type="number" min="0" step="0.01" value={form.mrp} onChange={e => setForm(f => ({ ...f, mrp: e.target.value }))}
                                     className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ud-primary text-gray-900" />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Store Price</label>
+                                <input type="number" min="0" step="0.01" value={form.storePrice} onChange={e => setForm(f => ({ ...f, storePrice: e.target.value }))}
+                                    className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ud-primary text-gray-900"
+                                    placeholder="Private" />
                             </div>
                         </div>
                     )}
@@ -185,12 +194,15 @@ const ProductModal = ({ product, onClose, onSaved, admin }) => {
                                                 <input type="number" placeholder="Price *" min="0" step="0.01" value={v.price}
                                                     onChange={e => updateVariant(i, 'price', e.target.value)}
                                                     className="w-full border border-gray-300 rounded px-2 py-1 text-sm" required />
-                                                <input type="number" placeholder="MRP (optional)" min="0" step="0.01" value={v.mrp}
+                                                <input type="number" placeholder="MRP (opt)" min="0" step="0.01" value={v.mrp}
                                                     onChange={e => updateVariant(i, 'mrp', e.target.value)}
+                                                    className="w-full border border-gray-300 rounded px-2 py-1 text-sm" />
+                                                <input type="number" placeholder="Store Price (opt)" min="0" step="0.01" value={v.storePrice}
+                                                    onChange={e => updateVariant(i, 'storePrice', e.target.value)}
                                                     className="w-full border border-gray-300 rounded px-2 py-1 text-sm" />
                                                 <input type="number" placeholder="Stock *" min="0" value={v.stock}
                                                     onChange={e => updateVariant(i, 'stock', e.target.value)}
-                                                    className="w-full border border-gray-300 rounded px-2 py-1 text-sm" required />
+                                                    className="w-full border border-gray-300 rounded px-2 py-1 text-sm col-span-2" required />
                                             </div>
                                             <div>
                                                 <label className="text-xs text-gray-500 block mb-1">Image (optional)</label>
@@ -252,17 +264,21 @@ const ProductModal = ({ product, onClose, onSaved, admin }) => {
 
 const VariantsModal = ({ product, onClose, onRefresh }) => {
     const [variants, setVariants] = useState(product.variants || []);
-    const [newVar, setNewVar] = useState({ label: '', price: '', mrp: '', stock: '' });
+    const [newVar, setNewVar] = useState({ label: '', price: '', mrp: '', storePrice: '', stock: '' });
     const [editingId, setEditingId] = useState(null);
-    const [editForm, setEditForm] = useState({ label: '', price: '', mrp: '', stock: '' });
+    const [editForm, setEditForm] = useState({ label: '', price: '', mrp: '', storePrice: '', stock: '' });
 
     const handleAdd = async () => {
         try {
             const res = await adminApi().post(`/products/${product.id}/variants`, {
-                label: newVar.label, price: Number(newVar.price), mrp: newVar.mrp ? Number(newVar.mrp) : undefined, stock: Number(newVar.stock)
+                label: newVar.label,
+                price: Number(newVar.price),
+                mrp: newVar.mrp ? Number(newVar.mrp) : undefined,
+                storePrice: newVar.storePrice ? Number(newVar.storePrice) : undefined,
+                stock: Number(newVar.stock)
             });
             setVariants([...variants, res.data]);
-            setNewVar({ label: '', price: '', mrp: '', stock: '' });
+            setNewVar({ label: '', price: '', mrp: '', storePrice: '', stock: '' });
             onRefresh();
         } catch (err) {
             alert(err.response?.data?.message || 'Failed to add variant');
@@ -271,7 +287,7 @@ const VariantsModal = ({ product, onClose, onRefresh }) => {
 
     const handleEditStart = (v) => {
         setEditingId(v.id);
-        setEditForm({ label: v.label, price: v.price, mrp: v.mrp || '', stock: v.stock });
+        setEditForm({ label: v.label, price: v.price, mrp: v.mrp || '', storePrice: v.storePrice || '', stock: v.stock });
     };
 
     const handleSave = async (id) => {
@@ -280,6 +296,7 @@ const VariantsModal = ({ product, onClose, onRefresh }) => {
                 label: editForm.label,
                 price: Number(editForm.price),
                 mrp: editForm.mrp ? Number(editForm.mrp) : null,
+                storePrice: editForm.storePrice ? Number(editForm.storePrice) : null,
                 stock: Number(editForm.stock)
             });
             setVariants(variants.map(v => v.id === id ? res.data : v));
@@ -321,7 +338,8 @@ const VariantsModal = ({ product, onClose, onRefresh }) => {
                                                 <input type="text" value={editForm.label} onChange={e => setEditForm(f => ({ ...f, label: e.target.value }))} className="px-2 py-1 text-sm border rounded text-gray-900" placeholder="Label" />
                                                 <input type="number" value={editForm.price} onChange={e => setEditForm(f => ({ ...f, price: e.target.value }))} className="px-2 py-1 text-sm border rounded text-gray-900" placeholder="Price" />
                                                 <input type="number" value={editForm.mrp} onChange={e => setEditForm(f => ({ ...f, mrp: e.target.value }))} className="px-2 py-1 text-sm border rounded text-gray-900" placeholder="MRP" />
-                                                <input type="number" value={editForm.stock} onChange={e => setEditForm(f => ({ ...f, stock: e.target.value }))} className="px-2 py-1 text-sm border rounded text-gray-900" placeholder="Stock" />
+                                                <input type="number" value={editForm.storePrice} onChange={e => setEditForm(f => ({ ...f, storePrice: e.target.value }))} className="px-2 py-1 text-sm border rounded text-gray-900" placeholder="Store Price" />
+                                                <input type="number" value={editForm.stock} onChange={e => setEditForm(f => ({ ...f, stock: e.target.value }))} className="px-2 py-1 text-sm border rounded text-gray-900 col-span-2" placeholder="Stock" />
                                             </div>
                                             <div className="flex gap-2">
                                                 <button onClick={() => handleSave(v.id)} className="bg-ud-primary text-white px-3 py-1 text-xs rounded">Save</button>
@@ -340,7 +358,7 @@ const VariantsModal = ({ product, onClose, onRefresh }) => {
                                                 </div>
                                                 <div>
                                                     <p className="font-bold text-sm text-gray-800">{v.label}</p>
-                                                    <p className="text-xs text-gray-500">₹{v.price} {v.mrp ? `(MRP: ₹${v.mrp})` : ''} • {v.stock} in stock</p>
+                                                    <p className="text-xs text-gray-500">₹{v.price} {v.mrp ? `(MRP: ₹${v.mrp})` : ''} {v.storePrice ? `• Store: ₹${v.storePrice}` : ''} • {v.stock} in stock</p>
                                                 </div>
                                             </div>
                                             <div className="flex gap-2">
@@ -359,7 +377,8 @@ const VariantsModal = ({ product, onClose, onRefresh }) => {
                             <input type="text" placeholder="Label (e.g. 500g)" value={newVar.label} onChange={e => setNewVar(v => ({ ...v, label: e.target.value }))} className="px-2 py-1 text-sm border rounded text-gray-900" />
                             <input type="number" placeholder="Price" value={newVar.price} onChange={e => setNewVar(v => ({ ...v, price: e.target.value }))} className="px-2 py-1 text-sm border rounded text-gray-900" />
                             <input type="number" placeholder="MRP (Optional)" value={newVar.mrp} onChange={e => setNewVar(v => ({ ...v, mrp: e.target.value }))} className="px-2 py-1 text-sm border rounded text-gray-900" />
-                            <input type="number" placeholder="Stock" value={newVar.stock} onChange={e => setNewVar(v => ({ ...v, stock: e.target.value }))} className="px-2 py-1 text-sm border rounded text-gray-900" />
+                            <input type="number" placeholder="Store Price (Optional)" value={newVar.storePrice} onChange={e => setNewVar(v => ({ ...v, storePrice: e.target.value }))} className="px-2 py-1 text-sm border rounded text-gray-900" />
+                            <input type="number" placeholder="Stock" value={newVar.stock} onChange={e => setNewVar(v => ({ ...v, stock: e.target.value }))} className="px-2 py-1 text-sm border rounded text-gray-900 col-span-2" />
                         </div>
                         <RippleButton onClick={handleAdd} disabled={!newVar.label || !newVar.price || !newVar.stock} className="w-full bg-ud-primary text-white py-2 text-sm rounded disabled:opacity-50">Add Variant</RippleButton>
                     </div>

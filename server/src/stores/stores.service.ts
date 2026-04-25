@@ -355,6 +355,7 @@ export class StoresService {
       select: {
         name: true,
         price: true,
+        storePrice: true,
         mrp: true,
         category: true,
         subCategory: true,
@@ -362,14 +363,14 @@ export class StoresService {
         store: { select: { name: true } },
         variants: {
           where: { isActive: true },
-          select: { label: true, price: true, mrp: true },
+          select: { label: true, price: true, storePrice: true, mrp: true },
           orderBy: { price: 'asc' },
         },
       },
       orderBy: [{ storeId: 'asc' }, { category: 'asc' }, { name: 'asc' }],
     });
 
-    const headers = ['Store Name', 'Category', 'Sub Category', 'Product Name', 'Variant', 'Price', 'MRP', 'Tax Rate (%)'];
+    const headers = ['Store Name', 'Category', 'Sub Category', 'Product Name', 'Variant', 'Price', 'MRP', 'Tax Rate (%)', 'Store Price'];
     const rows: string[] = [headers.join(',')];
 
     for (const p of products) {
@@ -378,10 +379,10 @@ export class StoresService {
 
       if (p.variants.length > 0) {
         for (const v of p.variants) {
-          rows.push([...base, escape(v.label), escape(v.price), escape(v.mrp ?? ''), escape(p.taxRate)].join(','));
+          rows.push([...base, escape(v.label), escape(v.price), escape(v.mrp ?? ''), escape(p.taxRate), escape(v.storePrice ?? '')].join(','));
         }
       } else {
-        rows.push([...base, '', escape(p.price), escape(p.mrp ?? ''), escape(p.taxRate)].join(','));
+        rows.push([...base, '', escape(p.price), escape(p.mrp ?? ''), escape(p.taxRate), escape(p.storePrice ?? '')].join(','));
       }
     }
 
