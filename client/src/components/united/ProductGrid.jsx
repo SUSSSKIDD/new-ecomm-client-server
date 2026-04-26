@@ -3,7 +3,7 @@ import PropTypes from 'prop-types';
 import { useCategory } from '../../context/CategoryContext';
 import { useProductList } from '../../hooks/useProductList';
 
-const ProductGrid = ({ mainCategory, subCategory }) => {
+const ProductGrid = ({ mainCategory, subCategory, onProductSelect }) => {
     const { activeSubCategory, addToCart, setSelectedProduct } = useCategory();
     const effectiveSubCategory = subCategory || activeSubCategory;
 
@@ -13,6 +13,15 @@ const ProductGrid = ({ mainCategory, subCategory }) => {
         subCategory: effectiveSubCategory,
         limit: 8 // Load 8 at a time for better grid layout (2 rows of 4)
     });
+
+    const handleSelect = (product) => {
+        const productWithCat = { ...product, category: mainCategory };
+        if (onProductSelect) {
+            onProductSelect(productWithCat);
+        } else {
+            setSelectedProduct(productWithCat);
+        }
+    };
 
     if (!effectiveSubCategory) return null;
 
@@ -52,7 +61,7 @@ const ProductGrid = ({ mainCategory, subCategory }) => {
                             <div
                                 key={product.id}
                                 className="bg-white rounded-lg shadow-sm border border-gray-100 p-4 flex gap-4 hover:shadow-md transition-all cursor-pointer relative"
-                                onClick={() => setSelectedProduct({ ...product, category: mainCategory })}
+                                onClick={() => handleSelect(product)}
                             >
                                 <div className="h-24 w-24 shrink-0 flex items-center justify-center bg-gray-50 rounded-md overflow-hidden relative">
                                     {product.images?.[0] ? (
@@ -89,7 +98,7 @@ const ProductGrid = ({ mainCategory, subCategory }) => {
                                             onClick={(e) => {
                                                 e.stopPropagation();
                                                 if (hasVariants) {
-                                                    setSelectedProduct({ ...product, category: mainCategory });
+                                                    handleSelect(product);
                                                 } else if (stock > 0) {
                                                     addToCart(product, mainCategory);
                                                 }

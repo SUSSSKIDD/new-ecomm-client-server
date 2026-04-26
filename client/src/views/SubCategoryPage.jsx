@@ -1,5 +1,5 @@
 import { useParams, useNavigate } from 'react-router-dom';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Header from '../components/united/Header';
 import ProductGrid from '../components/united/ProductGrid';
 import CartSidebar from '../components/united/CartSidebar';
@@ -24,11 +24,37 @@ const SubCategoryPage = () => {
     const navigate = useNavigate();
     const { selectedProduct, setSelectedProduct, setActiveSubCategory } = useCategory();
     const [allSubCategories, setAllSubCategories] = useState([]);
+    const scrollContainerRef = useRef(null);
 
     // Derived values from URL
     const mainCategory = decodeURIComponent(mainCat || '');
     const subCategory = decodeURIComponent(subCat || '');
     const storeType = TITLE_TO_STORE_TYPE[mainCategory] || mainCategory;
+
+    // Scroll restoration logic
+    useEffect(() => {
+        if (!selectedProduct && scrollContainerRef.current) {
+            const scrollKey = `scroll_${mainCategory}_${subCategory}`;
+            const savedPosition = sessionStorage.getItem(scrollKey);
+            if (savedPosition) {
+                // Small timeout to allow ProductGrid content to render
+                setTimeout(() => {
+                    if (scrollContainerRef.current) {
+                        scrollContainerRef.current.scrollTop = parseInt(savedPosition, 10);
+                    }
+                }, 100);
+            }
+        }
+    }, [selectedProduct, mainCategory, subCategory]);
+
+    // Capture scroll position before selecting product
+    const handleProductSelect = (product) => {
+        if (scrollContainerRef.current) {
+            const scrollKey = `scroll_${mainCategory}_${subCategory}`;
+            sessionStorage.setItem(scrollKey, scrollContainerRef.current.scrollTop.toString());
+        }
+        setSelectedProduct(product);
+    };
 
     useEffect(() => {
         // Initial load from constants
@@ -68,7 +94,10 @@ const SubCategoryPage = () => {
             <CartSidebar />
             <ProfileSidebar />
 
-            <div className="flex-1 w-full overflow-y-auto overscroll-none scroll-smooth flex flex-col">
+            <div 
+                ref={scrollContainerRef}
+                className="flex-1 w-full overflow-y-auto overscroll-none scroll-smooth flex flex-col"
+            >
                 {selectedProduct ? (
                     <ProductDetailView />
                 ) : (
@@ -128,7 +157,11 @@ const SubCategoryPage = () => {
 
                                     {/* Product List Section */}
                                     <div className="p-6 md:p-10">
-                                        <ProductGrid mainCategory={mainCategory} subCategory={subCategory} />
+                                        <ProductGrid 
+                                            mainCategory={mainCategory} 
+                                            subCategory={subCategory} 
+                                            onProductSelect={handleProductSelect}
+                                        />
                                     </div>
                                 </div>
                             </div>
