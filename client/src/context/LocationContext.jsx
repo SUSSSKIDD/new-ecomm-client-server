@@ -1,6 +1,8 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import PropTypes from 'prop-types';
 import axios from 'axios';
+import { Geolocation } from '@capacitor/geolocation';
+import { Capacitor } from '@capacitor/core';
 
 const LocationContext = createContext();
 
@@ -42,54 +44,73 @@ export const LocationProvider = ({ children }) => {
         }
     }, []);
 
-    const requestLocation = useCallback((force = false) => {
+    const requestLocation = useCallback(async (force = false) => {
         if (!force && locationStatus === 'granted') return;
-
-        if (!navigator.geolocation) {
-            setLocationStatus('denied');
-            setServiceable(true);
-            return;
-        }
 
         setLocationStatus('requesting');
 
-        navigator.geolocation.getCurrentPosition(
-            async (position) => {
-                const { latitude: lat, longitude: lng } = position.coords;
-                setLocation({ lat, lng });
-                setLocationStatus('granted');
-                localStorage.setItem('user_location', JSON.stringify({ lat, lng }));
-                
-                try {
-                    const addrRes = await axios.get(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`);
-                    if (addrRes.data && addrRes.data.display_name) {
-                        const parts = addrRes.data.display_name.split(',');
-                        const addr = parts.slice(0, 3).join(', ');
-                        setUserAddress(addr);
-                        localStorage.setItem('user_address', addr);
-
-                        // Extract pincode if available
-                        const pincodeMatch = addrRes.data.display_name.match(/\b\d{6}\b/);
-                        if (pincodeMatch) {
-                            setUserPincode(pincodeMatch[0]);
-                            localStorage.setItem('user_pincode', pincodeMatch[0]);
-                        }
-                    } else {
-                        setUserAddress('Current Location');
+        try {
+            let lat, lng;
+            
+            if (Capacitor.isNativePlatform()) {
+                const permissions = await Geolocation.checkPermissions();
+                if (permissions.location !== 'granted') {
+                    const request = await Geolocation.requestPermissions();
+                    if (request.location !== 'granted') {
+                        throw new Error('Location permission denied');
                     }
-                } catch (e) {
+                }
+                const position = await Geolocation.getCurrentPosition({
+                    enableHighAccuracy: true,
+                    timeout: 10000
+                });
+                lat = position.coords.latitude;
+                lng = position.coords.longitude;
+            } else {
+                if (!navigator.geolocation) {
+                    throw new Error('Geolocation not supported');
+                }
+                const position = await new Promise((resolve, reject) => {
+                    navigator.geolocation.getCurrentPosition(resolve, reject, {
+                        enableHighAccuracy: true,
+                        timeout: 10000,
+                        maximumAge: 0
+                    });
+                });
+                lat = position.coords.latitude;
+                lng = position.coords.longitude;
+            }
+
+            setLocation({ lat, lng });
+            setLocationStatus('granted');
+            localStorage.setItem('user_location', JSON.stringify({ lat, lng }));
+            
+            try {
+                const addrRes = await axios.get(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`);
+                if (addrRes.data && addrRes.data.display_name) {
+                    const parts = addrRes.data.display_name.split(',');
+                    const addr = parts.slice(0, 3).join(', ');
+                    setUserAddress(addr);
+                    localStorage.setItem('user_address', addr);
+
+                    const pincodeMatch = addrRes.data.display_name.match(/\b\d{6}\b/);
+                    if (pincodeMatch) {
+                        setUserPincode(pincodeMatch[0]);
+                        localStorage.setItem('user_pincode', pincodeMatch[0]);
+                    }
+                } else {
                     setUserAddress('Current Location');
                 }
+            } catch (e) {
+                setUserAddress('Current Location');
+            }
 
-                await checkServiceability(lat, lng);
-            },
-            (error) => {
-                console.warn('Geolocation denied:', error.message);
-                setLocationStatus('denied');
-                setServiceable(true);
-            },
-            { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 },
-        );
+            await checkServiceability(lat, lng);
+        } catch (error) {
+            console.warn('Geolocation failed:', error.message);
+            setLocationStatus('denied');
+            setServiceable(true);
+        }
     }, [checkServiceability, locationStatus]);
 
     const setManualLocation = useCallback(async (lat, lng, address) => {

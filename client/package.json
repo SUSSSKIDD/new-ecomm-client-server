@@ -16,9 +16,16 @@
     "cap:run:user": "npm run cap:link:user && npx cap run android",
     "cap:run:delivery": "npm run cap:link:delivery && npx cap run android",
     "cap:open:user": "npm run cap:link:user && npx cap open android",
-    "cap:open:delivery": "npm run cap:link:delivery && npx cap open android"
+    "cap:open:delivery": "npm run cap:link:delivery && npx cap open android",
+    "build:android:user": "cross-env VITE_APP_TYPE=USER VITE_API_URL=https://neyokart.com/api npm run build",
+    "build:android:delivery": "cross-env VITE_APP_TYPE=DELIVERY VITE_API_URL=https://neyokart.com/api npm run build",
+    "cap:sync:user:prod": "npm run build:android:user && npm run cap:link:user && npx cap sync android",
+    "cap:sync:delivery:prod": "npm run build:android:delivery && npm run cap:link:delivery && npx cap sync android"
   },
   "dependencies": {
+    "@capacitor/geolocation": "^8.2.0",
+    "@capacitor/preferences": "^8.0.1",
+    "@capacitor/status-bar": "^8.0.2",
     "@motionone/utils": "^10.18.0",
     "axios": "^1.13.5",
     "clsx": "^2.1.1",
