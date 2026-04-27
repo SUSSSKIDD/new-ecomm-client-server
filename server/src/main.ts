@@ -21,7 +21,13 @@ async function bootstrap() {
   app.enableCors({
     origin: process.env.CORS_ORIGINS
       ? process.env.CORS_ORIGINS.split(',')
-      : ['http://localhost:5173', 'http://localhost:3000', 'https://new-ecomm-client.vercel.app'],
+      : [
+          'http://localhost:5173',
+          'http://localhost:3000',
+          'https://new-ecomm-client.vercel.app',
+          'https://localhost',
+          'capacitor://localhost',
+        ],
     credentials: true,
   });
 

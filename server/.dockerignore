@@ -9,3 +9,4 @@ coverage
 *.md
 tmp
 update-locations.ts
+#comments
