@@ -139,6 +139,7 @@ export class StoresService {
       case 'AUTO_PARTS_SHOP': prefix = 'AUTO-'; break;
       case 'DROP_IN_FACTORY': prefix = 'PF-'; break;
       case 'HEALTH_SERVICE': prefix = 'HS-'; break;
+      case 'HOME_SERVICE': prefix = 'HS-'; break;
       default: prefix = 'A'; break;
     }
 

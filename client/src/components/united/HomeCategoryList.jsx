@@ -10,6 +10,7 @@ const TITLE_TO_STORE_TYPE = {
     'Pizza Town & Food Zone': 'PIZZA_TOWN',
     'Fashion': 'FASHION',
     'Auto Service & Parts': 'AUTO_SERVICE',
+    'Home Service': 'HOME_SERVICE',
     'Print Factory': 'DROP_IN_FACTORY',
     'Auto Parts Shop': 'AUTO_PARTS_SHOP',
 };
@@ -61,7 +62,7 @@ const HomeCategoryList = () => {
         : categories.filter(cat =>
             cat.title.toLowerCase() === selectedCategory.toLowerCase() ||
             (selectedCategory === "Pizza town and food zone" && cat.title === "Pizza Town & Food Zone") ||
-            (selectedCategory === "Auto service and parts" && cat.title === "Auto Service & Parts") ||
+            (selectedCategory === "Home service" && cat.title === "Home Service") ||
             (selectedCategory === "Pickup and drop" && cat.title === "Pickup & Drop") ||
             (selectedCategory === "Health Service" && cat.title === "Health Service") ||
             (selectedCategory === "Print factory" && cat.title === "Print Factory")

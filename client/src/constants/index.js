@@ -5,6 +5,7 @@ export const STORE_CATEGORIES = [
     'AUTO_SERVICE',
     'DROP_IN_FACTORY',
     'AUTO_PARTS_SHOP',
+    'HOME_SERVICE',
 ];
 
 export const STORE_CATEGORY_LABELS = {
@@ -14,6 +15,7 @@ export const STORE_CATEGORY_LABELS = {
     AUTO_SERVICE: 'Auto Service & Parts',
     DROP_IN_FACTORY: 'Drop In Factory',
     AUTO_PARTS_SHOP: 'Auto Parts Shop',
+    HOME_SERVICE: 'Home Service',
 };
 
 export const STORE_CATEGORY_SUBCATEGORIES = {
@@ -49,7 +51,7 @@ export const STORE_CATEGORY_SUBCATEGORIES = {
     ],
     PIZZA_TOWN: ['Pizza', 'Burger', 'Sandwich', 'French Fries', 'Cake'],
     FASHION: [],
-    AUTO_SERVICE: ['Car Wash', 'Bike Wash', 'Car Products', 'Bike Products'],
+    AUTO_SERVICE: [],
     DROP_IN_FACTORY: [
         'General',
         'Photo Frames',
@@ -58,7 +60,8 @@ export const STORE_CATEGORY_SUBCATEGORIES = {
         'Personalized Gifts',
         'Stationery Printing',
     ],
-    AUTO_PARTS_SHOP: ['Parts', 'Accessories', 'Tools'],
+    AUTO_PARTS_SHOP: [],
+    HOME_SERVICE: [],
 };
 
 // Navigation
@@ -68,6 +71,7 @@ export const NAV_ITEMS = [
     'Fashion',
     'Auto Service & Parts',
     'Pickup & Drop',
+    'Home Service',
     'Print Factory'
 ];
 
@@ -95,17 +99,17 @@ export const HOME_CATEGORIES = [
     },
     {
         title: "Auto Service & Parts",
-        items: ["Car Wash", "Bike Wash", "Car Products", "Bike Products"]
+        items: []
+    },
+    {
+        title: "Home Service",
+        items: []
     },
     {
         title: "Pickup & Drop",
         description: "Task-based service. Describe items to pick up and drop off.",
         items: []
     },
-    /* {
-        title: "Health Service",
-        items: ["Call a Doctor", "BP Checking", "Take an Injection", "Blood Test", "Nursing Services", "Physiotherapy"]
-    }, */
     {
         title: "Print Factory",
         items: ["General", "Photo Frames", "Coffee Mugs", "Custom T-Shirts", "Personalized Gifts", "Stationery Printing"]

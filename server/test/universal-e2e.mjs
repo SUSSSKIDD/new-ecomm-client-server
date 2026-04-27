@@ -104,14 +104,13 @@ const stores = {};      // { storeType: { id, managerId, managerToken, productId
 let userToken, userId;
 let addressId;
 
-const STORE_TYPES = ['GROCERY', 'PIZZA_TOWN', 'FASHION', 'AUTO_SERVICE', 'DROP_IN_FACTORY', 'AUTO_PARTS_SHOP'];
+const STORE_TYPES = ['GROCERY', 'PIZZA_TOWN', 'FASHION', 'HOME_SERVICE', 'DROP_IN_FACTORY'];
 const CATEGORIES_PER_TYPE = {
   GROCERY: 'Atta, Rice & Dal',
   PIZZA_TOWN: 'Pizza',
   FASHION: 'T-Shirts',
-  AUTO_SERVICE: 'Car Wash',
+  HOME_SERVICE: 'General Repair',
   DROP_IN_FACTORY: 'General',
-  AUTO_PARTS_SHOP: 'Parts',
 };
 
 const seq = String(Date.now()).slice(-6);
@@ -210,11 +209,11 @@ for (const storeType of STORE_TYPES) {
     stores[storeType].managerToken = r.data.access_token;
   });
 
-  if (storeType === 'FASHION') {
-    await step('Create custom subcategory for FASHION', async () => {
+  if (storeType === 'FASHION' || storeType === 'HOME_SERVICE') {
+    await step(`Create custom subcategory for ${storeType}`, async () => {
       const r = await api.post('/stores/subcategories/custom/admin', {
-        storeType: 'FASHION',
-        name: 'T-Shirts'
+        storeType,
+        name: CATEGORIES_PER_TYPE[storeType]
       }, auth(adminToken));
       assert(r.status === 201 || r.status === 200, `${r.status}: ${r.data?.message}`);
     });

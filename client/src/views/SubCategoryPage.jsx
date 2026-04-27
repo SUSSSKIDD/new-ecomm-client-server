@@ -14,9 +14,8 @@ import { API_URL } from '../lib/api';
 const TITLE_TO_STORE_TYPE = {
     'Grocery': 'GROCERY',
     'Pizza Town & Food Zone': 'PIZZA_TOWN',
-    'Auto Service & Parts': 'AUTO_SERVICE',
+    'Home Service': 'HOME_SERVICE',
     'Print Factory': 'DROP_IN_FACTORY',
-    'Auto Parts Shop': 'AUTO_PARTS_SHOP',
 };
 
 const SubCategoryPage = () => {

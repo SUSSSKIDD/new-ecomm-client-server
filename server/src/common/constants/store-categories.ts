@@ -5,6 +5,7 @@ export const STORE_CATEGORIES = [
     'AUTO_SERVICE',
     'DROP_IN_FACTORY',
     'AUTO_PARTS_SHOP',
+    'HOME_SERVICE',
 ] as const;
 
 export type StoreCategoryType = (typeof STORE_CATEGORIES)[number];
@@ -16,6 +17,7 @@ export const STORE_CATEGORY_LABELS: Record<StoreCategoryType, string> = {
     AUTO_SERVICE: 'Auto Service & Parts',
     DROP_IN_FACTORY: 'Drop In Factory',
     AUTO_PARTS_SHOP: 'Auto Parts Shop',
+    HOME_SERVICE: 'Home Service',
 };
 
 export const CATEGORY_SUBCATEGORIES: Record<StoreCategoryType, string[]> = {
@@ -51,7 +53,7 @@ export const CATEGORY_SUBCATEGORIES: Record<StoreCategoryType, string[]> = {
     ],
     PIZZA_TOWN: ['Pizza', 'Burger', 'Sandwich', 'French Fries', 'Cake'],
     FASHION: [],
-    AUTO_SERVICE: ['Car Wash', 'Bike Wash', 'Car Products', 'Bike Products'],
+    AUTO_SERVICE: [],
     DROP_IN_FACTORY: [
         'General',
         'Photo Frames',
@@ -60,5 +62,6 @@ export const CATEGORY_SUBCATEGORIES: Record<StoreCategoryType, string[]> = {
         'Personalized Gifts',
         'Stationery Printing',
     ],
-    AUTO_PARTS_SHOP: ['Parts', 'Accessories', 'Tools'], // Added default ones if needed
+    AUTO_PARTS_SHOP: [],
+    HOME_SERVICE: [],
 };
