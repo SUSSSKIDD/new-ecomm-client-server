@@ -7,7 +7,7 @@ import { CategoryProvider } from './context/CategoryContext';
 import ErrorBoundary from './components/ErrorBoundary';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { Suspense, lazy, useEffect } from 'react';
-import { App } from '@capacitor/app';
+import { App as CapApp } from '@capacitor/app';
 import { Network } from '@capacitor/network';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
 import { Capacitor } from '@capacitor/core';
@@ -41,14 +41,14 @@ function App() {
     if (!Capacitor.isNativePlatform()) return;
 
     // Item 4: Hardware Back Button
-    const backListener = App.addListener('backButton', ({ canGoBack }) => {
+    const backListener = CapApp.addListener('backButton', ({ canGoBack }) => {
       if (location.pathname === '/' || location.pathname === '/delivery/dashboard' || location.pathname === '/admin/dashboard') {
         // Exit app if at root
-        App.exitApp();
+        CapApp.exitApp();
       } else if (canGoBack) {
         window.history.back();
       } else {
-        App.exitApp();
+        CapApp.exitApp();
       }
     });
 
