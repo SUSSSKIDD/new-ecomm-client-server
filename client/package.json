@@ -23,8 +23,13 @@
     "cap:sync:delivery:prod": "npm run build:android:delivery && npm run cap:link:delivery && npx cap sync android"
   },
   "dependencies": {
+    "@capacitor/app": "^8.1.0",
     "@capacitor/geolocation": "^8.2.0",
+    "@capacitor/haptics": "^8.0.2",
+    "@capacitor/keyboard": "^8.0.3",
+    "@capacitor/network": "^8.0.1",
     "@capacitor/preferences": "^8.0.1",
+    "@capacitor/splash-screen": "^8.0.1",
     "@capacitor/status-bar": "^8.0.2",
     "@motionone/utils": "^10.18.0",
     "axios": "^1.13.5",
@@ -34,7 +39,6 @@
     "konsta": "^4.0.1",
     "lucide-react": "^0.575.0",
     "motion": "^12.34.3",
-    "puppeteer": "^24.37.5",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-router-dom": "^7.13.0",

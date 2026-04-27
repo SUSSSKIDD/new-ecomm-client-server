@@ -6,7 +6,12 @@ import { CartProvider } from './context/CartContext';
 import { CategoryProvider } from './context/CategoryContext';
 import ErrorBoundary from './components/ErrorBoundary';
 import { Routes, Route, Navigate } from 'react-router-dom';
-import { Suspense, lazy } from 'react';
+import { Suspense, lazy, useEffect } from 'react';
+import { App } from '@capacitor/app';
+import { Network } from '@capacitor/network';
+import { Haptics, ImpactStyle } from '@capacitor/haptics';
+import { Capacitor } from '@capacitor/core';
+import { useNavigate, useLocation } from 'react-router-dom';
 
 const ProductDetails = lazy(() => import('./views/ProductDetails'));
 const DeliveryLogin = lazy(() => import('./components/delivery/DeliveryLogin'));
@@ -29,6 +34,39 @@ const LegalPage = lazy(() => import('./views/LegalPage'));
 const SubCategoryPage = lazy(() => import('./views/SubCategoryPage'));
 
 function App() {
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  useEffect(() => {
+    if (!Capacitor.isNativePlatform()) return;
+
+    // Item 4: Hardware Back Button
+    const backListener = App.addListener('backButton', ({ canGoBack }) => {
+      if (location.pathname === '/' || location.pathname === '/delivery/dashboard' || location.pathname === '/admin/dashboard') {
+        // Exit app if at root
+        App.exitApp();
+      } else if (canGoBack) {
+        window.history.back();
+      } else {
+        App.exitApp();
+      }
+    });
+
+    // Item 9: Network Status
+    const networkListener = Network.addListener('networkStatusChange', status => {
+      if (!status.connected) {
+        Haptics.impact({ style: ImpactStyle.Heavy });
+        // You could show a global toast here if you had a global toast context
+        console.log('Network disconnected');
+      }
+    });
+
+    return () => {
+      backListener.remove();
+      networkListener.remove();
+    };
+  }, [location, navigate]);
+
   return (
     <AuthProvider>
       <AdminAuthProvider>

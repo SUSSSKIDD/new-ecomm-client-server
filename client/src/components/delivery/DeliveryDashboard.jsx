@@ -1,4 +1,8 @@
 import { RippleButton } from '../ui/ripple-button';
+import { Capacitor } from '@capacitor/core';
+import { Geolocation } from '@capacitor/geolocation';
+import { Haptics, ImpactStyle } from '@capacitor/haptics';
+import { App } from '@capacitor/app';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
@@ -97,39 +101,90 @@ const DeliveryDashboard = () => {
 
     // GPS watching
     useEffect(() => {
-        if (!token || !navigator.geolocation) return;
+        if (!token) return;
 
-        const watchId = navigator.geolocation.watchPosition(
-            async (pos) => {
-                setGpsActive(true);
-                try {
-                    await api('post', '/delivery/location', {
-                        lat: pos.coords.latitude,
-                        lng: pos.coords.longitude,
-                    });
-                } catch {
-                    // silent — GPS updates are non-critical
+        let watchId;
+
+        const startWatching = async () => {
+            if (Capacitor.isNativePlatform()) {
+                // Request permissions first
+                const perm = await Geolocation.requestPermissions();
+                if (perm.location !== 'granted') {
+                    showToast('Location permission denied — cannot track delivery');
+                    return;
                 }
-            },
-            () => setGpsActive(false),
-            { enableHighAccuracy: true, maximumAge: 30000, timeout: 15000 },
-        );
-        watchIdRef.current = watchId;
+
+                watchId = await Geolocation.watchPosition(
+                    { enableHighAccuracy: true },
+                    async (pos) => {
+                        if (pos) {
+                            setGpsActive(true);
+                            try {
+                                await api('post', '/delivery/location', {
+                                    lat: pos.coords.latitude,
+                                    lng: pos.coords.longitude,
+                                });
+                            } catch { }
+                        }
+                    }
+                );
+            } else if (navigator.geolocation) {
+                watchId = navigator.geolocation.watchPosition(
+                    async (pos) => {
+                        setGpsActive(true);
+                        try {
+                            await api('post', '/delivery/location', {
+                                lat: pos.coords.latitude,
+                                lng: pos.coords.longitude,
+                            });
+                        } catch { }
+                    },
+                    () => setGpsActive(false),
+                    { enableHighAccuracy: true, maximumAge: 30000, timeout: 15000 },
+                );
+            }
+            watchIdRef.current = watchId;
+        };
+
+        startWatching();
 
         return () => {
-            if (watchIdRef.current !== null) {
-                navigator.geolocation.clearWatch(watchIdRef.current);
+            if (watchIdRef.current) {
+                if (Capacitor.isNativePlatform()) {
+                    Geolocation.clearWatch({ id: watchIdRef.current });
+                } else {
+                    navigator.geolocation.clearWatch(watchIdRef.current);
+                }
             }
         };
-    }, [token, api]);
+    }, [token, api, showToast]);
 
-    // SSE for real-time notifications
+    // Hardware Back Button specialized handling
+    useEffect(() => {
+        if (!Capacitor.isNativePlatform()) return;
+
+        const backListener = App.addListener('backButton', () => {
+            if (status !== 'FREE') {
+                showToast('Cannot exit while on duty. Please go offline first.');
+                Haptics.impact({ style: ImpactStyle.Medium });
+            } else {
+                App.exitApp();
+            }
+        });
+
+        return () => {
+            backListener.remove();
+        };
+    }, [status, showToast]);
+
+    // SSE for real-time notifications (Web) or Polling (Native)
     useEffect(() => {
         if (!token) return;
 
         let cancelled = false;
         let currentController = new AbortController();
         let reconnectTimer = null;
+        let pollTimer = null;
         sseAbortRef.current = currentController;
 
         const connectSSE = async () => {
@@ -163,14 +218,12 @@ const DeliveryDashboard = () => {
                                 const event = JSON.parse(line.slice(6));
 
                                 if (event.type === 'NEW_ORDER') {
-                                    // Legacy: direct assignment notification
                                     const res = await api('get', '/delivery/orders');
                                     setOrders(res.data);
                                     showToast(`New order assigned: ${event.data.orderNumber}`);
                                 }
 
                                 if (event.type === 'NEW_AVAILABLE_ORDER') {
-                                    // New order available — show with accept/reject
                                     setAvailableOrders((prev) => {
                                         if (prev.some((o) => o.orderId === event.data.orderId)) return prev;
                                         return [...prev, event.data];
@@ -180,14 +233,12 @@ const DeliveryDashboard = () => {
                                 }
 
                                 if (event.type === 'ORDER_CLAIMED') {
-                                    // Another rider claimed — remove from available
                                     setAvailableOrders((prev) =>
                                         prev.filter((o) => o.orderId !== event.data.orderId),
                                     );
                                 }
 
                                 if (event.type === 'CLAIM_CONFIRMED') {
-                                    // We successfully claimed — refresh assigned orders + parcels
                                     const [ordersRes, parcelRes] = await Promise.all([
                                         api('get', '/delivery/orders'),
                                         api('get', '/delivery/parcel-orders'),
@@ -195,28 +246,60 @@ const DeliveryDashboard = () => {
                                     setOrders(ordersRes.data);
                                     setParcelOrders(parcelRes.data);
                                     setStatus('BUSY');
+                                    Haptics.impact({ style: ImpactStyle.Heavy });
                                     showToast(`${event.data.orderNumber} accepted!`);
                                 }
-                            } catch {
-                                // Parse error — skip
-                            }
+                            } catch { }
                         }
                     }
                 }
             } catch (err) {
                 if (err.name !== 'AbortError' && !cancelled) {
-                    console.error('SSE connection error:', err);
                     reconnectTimer = setTimeout(connectSSE, 5000);
                 }
             }
         };
 
-        connectSSE();
+        const startPolling = () => {
+            const poll = async () => {
+                if (cancelled) return;
+                try {
+                    const [ordersRes, parcelRes, availableRes] = await Promise.all([
+                        api('get', '/delivery/orders'),
+                        api('get', '/delivery/parcel-orders'),
+                        api('get', '/delivery/available-orders'),
+                    ]);
+                    
+                    // Simple logic to detect new orders and show toast
+                    if (availableRes.data.length > availableOrders.length) {
+                        showToast('New orders available');
+                    }
+                    if (ordersRes.data.length + parcelRes.data.length > orders.length + parcelOrders.length) {
+                        showToast('New order assigned');
+                    }
+
+                    setOrders(ordersRes.data);
+                    setParcelOrders(parcelRes.data);
+                    setAvailableOrders(availableRes.data);
+                } catch (err) {
+                    console.error('Polling failed:', err);
+                }
+                pollTimer = setTimeout(poll, 8000);
+            };
+            poll();
+        };
+
+        if (Capacitor.isNativePlatform()) {
+            startPolling();
+        } else {
+            connectSSE();
+        }
 
         return () => {
             cancelled = true;
-            currentController.abort();
+            if (sseAbortRef.current) sseAbortRef.current.abort();
             if (reconnectTimer) clearTimeout(reconnectTimer);
+            if (pollTimer) clearTimeout(pollTimer);
         };
     }, [token, api, showToast]);
 
@@ -249,6 +332,7 @@ const DeliveryDashboard = () => {
             : `/delivery/orders/${orderId}/claim`;
 
         try {
+            Haptics.impact({ style: ImpactStyle.Medium });
             await api('post', claimPath);
             // Assignment is now auto-accepted on claim.
             // CLAIM_CONFIRMED SSE event will refresh assigned orders in real time.
@@ -275,6 +359,7 @@ const DeliveryDashboard = () => {
     const handleAccept = async (orderId) => {
         try {
             await api('post', `/delivery/orders/${orderId}/accept`);
+            Haptics.impact({ style: ImpactStyle.Light });
             setOrders((prev) =>
                 prev.map((a) =>
                     a.order?.id === orderId ? { ...a, acceptedAt: new Date().toISOString() } : a
@@ -302,6 +387,7 @@ const DeliveryDashboard = () => {
     const handleComplete = async (orderId, result, deliveryPin, reason) => {
         try {
             await api('post', `/delivery/orders/${orderId}/complete`, { result, deliveryPin, reason });
+            Haptics.impact({ style: ImpactStyle.Heavy });
             setOrders((prev) => prev.filter((a) => a.order?.id !== orderId));
             setStatus('FREE');
             showToast(`Order marked as ${result}`, 3000);

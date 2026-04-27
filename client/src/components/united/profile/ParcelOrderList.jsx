@@ -3,6 +3,8 @@ import { useAuth } from '../../../context/AuthContext';
 import { api, API_URL } from '../../../lib/api';
 import { getParcelStatusLabel, getParcelStatusColor } from '../../../lib/status';
 import { PARCEL_CATEGORIES } from '../../../constants';
+import { usePolling } from '../../../hooks/usePolling';
+import { Capacitor } from '@capacitor/core';
 
 const ParcelOrderList = () => {
     const { token } = useAuth();
@@ -24,10 +26,12 @@ const ParcelOrderList = () => {
 
     useEffect(() => { fetchParcels(); }, [fetchParcels]);
 
-    // Real-time SSE updates for parcels
+    usePolling(fetchParcels, 8000, !!token && Capacitor.isNativePlatform());
+
+    // Real-time SSE updates for parcels (Web only)
     const reconnectTimeout = useRef(null);
     useEffect(() => {
-        if (!token) return;
+        if (!token || Capacitor.isNativePlatform()) return;
 
         let eventSource;
         const connect = () => {

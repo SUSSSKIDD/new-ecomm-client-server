@@ -194,6 +194,7 @@ const LoginModal = ({ isOpen, onClose }) => {
                                     onChange={(e) => setOtp(e.target.value)}
                                     maxLength="6"
                                     inputMode="numeric"
+                                    autoComplete="one-time-code"
                                     autoFocus
                                     required
                                 />

@@ -1,5 +1,6 @@
 import { RippleButton } from '../../../components/ui/ripple-button';
 import { useState, useCallback, useEffect, useRef } from 'react';
+import { Capacitor } from '@capacitor/core';
 
 import { useAuth } from '../../../context/AuthContext';
 import { api, API_URL } from '../../../lib/api';
@@ -184,10 +185,10 @@ const OrderList = ({ onBack }) => {
 
     usePolling(fetchOrders, 8000, !!token);
 
-    // Real-time SSE updates
+    // Real-time SSE updates (Web only)
     const reconnectTimeout = useRef(null);
     useEffect(() => {
-        if (!token) return;
+        if (!token || Capacitor.isNativePlatform()) return;
 
         let eventSource;
         const connect = () => {
