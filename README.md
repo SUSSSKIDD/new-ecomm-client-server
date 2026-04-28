@@ -87,6 +87,11 @@ new grocery/
 │       │   └── ProductDetails.jsx               # Product detail route
 │       └── App.jsx, main.jsx
 │
+├── app/                                 # Native Mobile Apps (React Native / Capacitor)
+│   ├── user-android/                    # Native Android app for users
+│   ├── user-ios/                        # Native iOS app for users
+│   ├── delivery-android/                # Native Android app for delivery riders
+│   └── delivery-ios/                    # Native iOS app for delivery riders
 └── server/
 │   ├── scripts/
 │   │   └── deployment/

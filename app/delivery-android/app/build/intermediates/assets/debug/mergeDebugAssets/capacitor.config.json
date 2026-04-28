@@ -1,0 +1,17 @@
+{
+	"appId": "com.neyokart.delivery",
+	"appName": "Neyokart Delivery",
+	"webDir": "dist",
+	"bundledWebRuntime": false,
+	"android": {
+		"path": "android"
+	},
+	"ios": {
+		"path": "ios"
+	},
+	"plugins": {
+		"CapacitorHttp": {
+			"enabled": true
+		}
+	}
+}
