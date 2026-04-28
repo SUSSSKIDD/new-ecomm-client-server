@@ -23,6 +23,9 @@
     "cap:sync:delivery:prod": "npm run build:android:delivery && npm run cap:link:delivery && npx cap sync android"
   },
   "dependencies": {
+    "@capacitor-firebase/analytics": "^8.2.0",
+    "@capacitor-firebase/crashlytics": "^8.2.0",
+    "@capacitor-firebase/performance": "^8.2.0",
     "@capacitor/app": "^8.1.0",
     "@capacitor/geolocation": "^8.2.0",
     "@capacitor/haptics": "^8.0.2",

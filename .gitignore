@@ -28,3 +28,5 @@ server/test_dl.jpeg
 server/download_item.sh
 server/download_media.sh
 appcommands.md
+app/user-android/app/google-services.json
+app/delivery-android/app/google-services.json

@@ -7,6 +7,7 @@ import { api } from '../../lib/api';
 import AddressForm from './profile/AddressForm';
 import { useAddresses } from '../../hooks/useAddresses';
 import { loadRazorpayScript } from '../../lib/utils';
+import { logEvent } from '../../lib/analytics';
 const DELIVERY_FEE = 30; // Updated from 40
 const FREE_DELIVERY_THRESHOLD = 199;
 
@@ -150,6 +151,7 @@ const CartSidebar = () => {
 
     // Go to checkout: load addresses
     const handleProceedToCheckout = async () => {
+        logEvent('begin_checkout').catch(() => {});
         if (!isAuthenticated) {
             setPendingCheckout(true);
             openLoginModal();
@@ -233,6 +235,7 @@ const CartSidebar = () => {
                         const mockRes = await http.post(`/payments/mock/${order.id}`);
                         setOrderResult(mockRes.data.order);
                         setStep('success');
+                        logEvent('purchase', { order_id: mockRes.data.order.id, value: mockRes.data.order.total, payment_method: paymentMethod }).catch(() => {});
                         if (buyNowProduct) {
                             setBuyNowProduct(null);
                         } else {
@@ -291,6 +294,7 @@ const CartSidebar = () => {
 
                             setOrderResult(verifyRes.data.order);
                             setStep('success');
+                            logEvent('purchase', { order_id: verifyRes.data.order.id, value: verifyRes.data.order.total, payment_method: paymentMethod }).catch(() => {});
                             if (buyNowProduct) {
                                 setBuyNowProduct(null);
                             } else {
@@ -323,6 +327,7 @@ const CartSidebar = () => {
                 // COD Flow
                 setOrderResult(order);
                 setStep('success');
+                logEvent('purchase', { order_id: order.id, value: order.total, payment_method: 'COD' }).catch(() => {});
                 if (buyNowProduct) {
                     setBuyNowProduct(null);
                 } else {
@@ -786,7 +791,7 @@ const CartSidebar = () => {
                                 {/* COD Option */}
                                 <button
                                     type="button"
-                                    onClick={() => setPaymentMethod('COD')}
+                                    onClick={() => { setPaymentMethod('COD'); logEvent('payment_method_selected', { method: 'COD' }).catch(() => {}); }}
                                     className={`w-full flex items-center gap-3 p-3 rounded-xl border-2 transition-all ${paymentMethod === 'COD'
                                         ? 'border-emerald-500 bg-emerald-50'
                                         : 'border-gray-100 bg-white hover:border-emerald-200'
@@ -805,7 +810,7 @@ const CartSidebar = () => {
                                 {/* Razorpay Option */}
                                 <button
                                     type="button"
-                                    onClick={() => setPaymentMethod('RAZORPAY')}
+                                    onClick={() => { setPaymentMethod('RAZORPAY'); logEvent('payment_method_selected', { method: 'RAZORPAY' }).catch(() => {}); }}
                                     className={`w-full flex items-center gap-3 p-3 rounded-xl border-2 transition-all ${paymentMethod === 'RAZORPAY'
                                         ? 'border-emerald-500 bg-emerald-50'
                                         : 'border-gray-100 bg-white hover:border-emerald-200'

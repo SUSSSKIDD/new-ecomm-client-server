@@ -2,6 +2,7 @@ import { createContext, useContext, useState, useEffect, useCallback, useRef } f
 import PropTypes from 'prop-types';
 import axios from 'axios';
 import LoginModal from '../components/auth/LoginModal';
+import { logEvent, setUserId } from '../lib/analytics';
 
 const AuthContext = createContext();
 
@@ -82,6 +83,11 @@ export const AuthProvider = ({ children }) => {
             setToken(access_token);
             setUser(userData);
             setIsAuthenticated(true);
+            
+            // Analytics
+            await setUserId(userData.id);
+            await logEvent('login', { method: 'otp' });
+            
             return { success: true, user: userData };
         } catch (error) {
             console.error(error);

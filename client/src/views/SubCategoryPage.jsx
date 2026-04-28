@@ -9,6 +9,7 @@ import { useCategory } from '../context/CategoryContext';
 import Footer from '../components/united/Footer';
 import { HOME_CATEGORIES } from '../constants';
 import { API_URL } from '../lib/api';
+import { logEvent } from '../lib/analytics';
 
 // Map HOME_CATEGORIES titles to store types for API filtering
 const TITLE_TO_STORE_TYPE = {
@@ -29,6 +30,12 @@ const SubCategoryPage = () => {
     const mainCategory = decodeURIComponent(mainCat || '');
     const subCategory = decodeURIComponent(subCat || '');
     const storeType = TITLE_TO_STORE_TYPE[mainCategory] || mainCategory;
+
+    useEffect(() => {
+        if (mainCategory && subCategory) {
+            logEvent('view_item_list', { item_category: subCategory, item_main_category: mainCategory }).catch(() => {});
+        }
+    }, [mainCategory, subCategory]);
 
     // Scroll restoration logic
     useEffect(() => {

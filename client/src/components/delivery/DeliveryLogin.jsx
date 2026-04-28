@@ -2,6 +2,7 @@ import { RippleButton } from '../ui/ripple-button';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
+import { setUserId, logEvent } from '../../lib/analytics';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
@@ -25,6 +26,11 @@ const DeliveryLogin = () => {
             });
             localStorage.setItem('delivery_token', res.data.access_token);
             localStorage.setItem('delivery_person', JSON.stringify(res.data.person));
+            
+            // Analytics
+            await setUserId(res.data.person.id);
+            await logEvent('login', { method: 'pin' });
+            
             navigate('/delivery/dashboard');
         } catch (err) {
             setError(err.response?.data?.message || 'Login failed');

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { RippleButton } from '../../components/ui/ripple-button';
 import { useCategory } from '../../context/CategoryContext';
 import ImageCarousel from './ImageCarousel';
+import { logEvent } from '../../lib/analytics';
 
 const ProductDetailView = () => {
     const { selectedProduct, setSelectedProduct, addToCart, setBuyNowProduct, setIsCartOpen } = useCategory();
@@ -13,6 +14,12 @@ const ProductDetailView = () => {
             setSelectedVariant(selectedProduct.variants[0]);
         } else {
             setSelectedVariant(null);
+        }
+    }, [selectedProduct]);
+
+    useEffect(() => {
+        if (selectedProduct) {
+            logEvent('view_item', { item_id: selectedProduct.id, item_name: selectedProduct.name, price: selectedProduct.price }).catch(() => {});
         }
     }, [selectedProduct]);
 

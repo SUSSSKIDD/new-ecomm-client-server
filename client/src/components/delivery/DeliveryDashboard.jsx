@@ -10,6 +10,7 @@ import DeliveryOrderCard from './DeliveryOrderCard';
 import DeliveryParcelCard from './DeliveryParcelCard';
 import AvailableOrderCard from './AvailableOrderCard';
 import DeliveryStatusToggle from './DeliveryStatusToggle';
+import { logEvent } from '../../lib/analytics';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
@@ -310,6 +311,8 @@ const DeliveryDashboard = () => {
         setStatus(newStatus); // Optimistic update
         try {
             await api('post', '/delivery/status', { status: newStatus });
+            if (newStatus === 'FREE') logEvent('duty_on').catch(() => {});
+            else if (newStatus === 'DUTY_OFF') logEvent('duty_off').catch(() => {});
         } catch (err) {
             console.error('Status update failed:', err);
             setStatus(prevStatus); // Revert on error
@@ -324,6 +327,7 @@ const DeliveryDashboard = () => {
 
     // Accept broadcast order: claim + auto-accept in sequence
     const handleAcceptBroadcast = async (orderId, isParcel) => {
+        logEvent('order_claimed', { order_id: orderId }).catch(() => {});
         // Optimistic removal from available list
         setAvailableOrders((prev) => prev.filter((o) => o.orderId !== orderId));
 
@@ -387,6 +391,7 @@ const DeliveryDashboard = () => {
     const handleComplete = async (orderId, result, deliveryPin, reason) => {
         try {
             await api('post', `/delivery/orders/${orderId}/complete`, { result, deliveryPin, reason });
+            logEvent('delivery_completed', { order_id: orderId, result }).catch(() => {});
             Haptics.impact({ style: ImpactStyle.Heavy });
             setOrders((prev) => prev.filter((a) => a.order?.id !== orderId));
             setStatus('FREE');
@@ -434,6 +439,7 @@ const DeliveryDashboard = () => {
     const handleParcelComplete = async (parcelOrderId, result, deliveryPin, reason) => {
         try {
             await api('post', `/delivery/parcels/${parcelOrderId}/complete`, { result, deliveryPin, reason });
+            logEvent('delivery_completed', { order_id: parcelOrderId, result }).catch(() => {});
             setParcelOrders((prev) => prev.filter((a) => a.parcelOrder?.id !== parcelOrderId));
             setStatus('FREE');
             showToast(`Parcel marked as ${result}`, 3000);

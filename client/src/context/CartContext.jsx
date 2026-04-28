@@ -2,6 +2,7 @@ import { createContext, useContext, useState, useRef, useCallback, useEffect } f
 import PropTypes from 'prop-types';
 import { useAuth } from './AuthContext';
 import { api } from '../lib/api';
+import { logEvent } from '../lib/analytics';
 
 const CartContext = createContext();
 
@@ -110,6 +111,14 @@ export const CartProvider = ({ children }) => {
             }
 
             showToast(`${product.name} Added!`);
+            
+            // Analytics
+            logEvent('add_to_cart', {
+                item_id: product.id,
+                item_name: product.name,
+                price: product.price
+            }).catch(() => {});
+            
             const apiPayload = { productId: product.id, quantity: 1 };
             if (customFields?.selectedSize) apiPayload.selectedSize = customFields.selectedSize;
             if (customFields?.userUploadUrls?.length) apiPayload.userUploadUrls = customFields.userUploadUrls;
