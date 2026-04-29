@@ -102,13 +102,9 @@ const SubCategoryPage = () => {
 
             <div 
                 ref={scrollContainerRef}
-                className="flex-1 w-full overflow-y-auto overscroll-none scroll-smooth flex flex-col"
+                className={`flex-1 w-full overflow-y-auto overscroll-none scroll-smooth flex flex-col ${selectedProduct ? 'hidden' : ''}`}
             >
-                {selectedProduct ? (
-                    <ProductDetailView />
-                ) : (
-                    <>
-                        <div className="w-full">
+                <div className="w-full">
                             {/* Interactive Navigation Bar */}
                             <div className="sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b border-gray-100 flex items-center px-4 md:px-6">
                                 <div className="container mx-auto max-w-7xl flex items-center gap-4 py-3">
@@ -173,11 +169,9 @@ const SubCategoryPage = () => {
                             </div>
                         </div>
                         
-                        {/* Footer below products */}
-                        <Footer />
-                    </>
-                )}
-            </div>
+                    <Footer />
+                </div>
+            {selectedProduct && <ProductDetailView />}
         </div>
     );
 };
