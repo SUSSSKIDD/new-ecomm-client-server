@@ -6,12 +6,13 @@ import { CartProvider } from './context/CartContext';
 import { CategoryProvider } from './context/CategoryContext';
 import ErrorBoundary from './components/ErrorBoundary';
 import { Routes, Route, Navigate } from 'react-router-dom';
-import { Suspense, lazy, useEffect } from 'react';
+import { Suspense, lazy, useEffect, useState } from 'react';
 import { App as CapApp } from '@capacitor/app';
 import { Network } from '@capacitor/network';
 import { Haptics, ImpactStyle } from '@capacitor/haptics';
 import { Capacitor } from '@capacitor/core';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { usePushNotifications } from './hooks/usePushNotifications';
 
 const ProductDetails = lazy(() => import('./views/ProductDetails'));
 const DeliveryLogin = lazy(() => import('./components/delivery/DeliveryLogin'));
@@ -32,10 +33,14 @@ const AdminSubcategoryPhoto = lazy(() => import('./components/admin/AdminSubcate
 const AdminPrintProducts = lazy(() => import('./components/admin/AdminPrintProducts'));
 const LegalPage = lazy(() => import('./views/LegalPage'));
 const SubCategoryPage = lazy(() => import('./views/SubCategoryPage'));
+const ParcelBooking = lazy(() => import('./views/ParcelBooking'));
 
 function App() {
   const navigate = useNavigate();
   const location = useLocation();
+  const [isOffline, setIsOffline] = useState(!navigator.onLine);
+
+  usePushNotifications();
 
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return;
@@ -54,9 +59,9 @@ function App() {
 
     // Item 9: Network Status
     const networkListener = Network.addListener('networkStatusChange', status => {
+      setIsOffline(!status.connected);
       if (!status.connected) {
         Haptics.impact({ style: ImpactStyle.Heavy });
-        // You could show a global toast here if you had a global toast context
         console.log('Network disconnected');
       }
     });
@@ -79,6 +84,11 @@ function App() {
                     <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-ud-primary"></div>
                   </div>
                 }>
+                  {isOffline && (
+                    <div className="fixed top-0 left-0 right-0 z-[9999] bg-red-600 text-white text-center py-2 text-xs font-bold animate-pulse shadow-lg">
+                      No Internet Connection. Some features may be unavailable.
+                    </div>
+                  )}
                   <Routes>
                     {/* Build-type based entry point redirection */}
                     {import.meta.env.VITE_APP_TYPE === 'DELIVERY' ? (
@@ -91,6 +101,7 @@ function App() {
                     <Route path="/legal" element={<LegalPage />} />
                     <Route path="/delivery/login" element={<DeliveryLogin />} />
                     <Route path="/delivery/dashboard" element={<DeliveryDashboard />} />
+                    <Route path="/pickup-drop" element={<ParcelBooking />} />
 
 
                     {/* Admin Routes */}

@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence } from "motion/react";
 
 export function RippleButton({ children, className = "", ...props }) {
   const buttonRef = useRef(null);
