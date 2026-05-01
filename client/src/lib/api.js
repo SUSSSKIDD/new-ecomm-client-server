@@ -2,35 +2,40 @@ import axios from 'axios';
 
 export const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
-/**
- * Create an authenticated axios instance.
- * Centralises API_URL + auth header injection.
- * Usage: api(token).get('/orders') or api(token).post('/orders', body)
- */
+let _apiInstance = null;
+let _adminInstance = null;
+let _deliveryInstance = null;
+
 export function api(token) {
-  return axios.create({
-    baseURL: API_URL,
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-  });
+  if (!_apiInstance || _apiInstance.defaults.headers.Authorization !== `Bearer ${token}`) {
+    _apiInstance = axios.create({ baseURL: API_URL });
+    _apiInstance.interceptors.request.use(cfg => {
+      if (token) cfg.headers.Authorization = `Bearer ${token}`;
+      return cfg;
+    });
+  }
+  return _apiInstance;
 }
 
-/**
- * Same for admin token stored in localStorage.
- */
 export function adminApi() {
   const token = localStorage.getItem('ud_admin_token');
-  return axios.create({
-    baseURL: API_URL,
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-  });
+  if (!_adminInstance || _adminInstance.defaults.headers.Authorization !== `Bearer ${token}`) {
+    _adminInstance = axios.create({ baseURL: API_URL });
+    _adminInstance.interceptors.request.use(cfg => {
+      if (token) cfg.headers.Authorization = `Bearer ${token}`;
+      return cfg;
+    });
+  }
+  return _adminInstance;
 }
 
-/**
- * For delivery token.
- */
 export function deliveryApi(token) {
-  return axios.create({
-    baseURL: API_URL,
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-  });
+  if (!_deliveryInstance || _deliveryInstance.defaults.headers.Authorization !== `Bearer ${token}`) {
+    _deliveryInstance = axios.create({ baseURL: API_URL });
+    _deliveryInstance.interceptors.request.use(cfg => {
+      if (token) cfg.headers.Authorization = `Bearer ${token}`;
+      return cfg;
+    });
+  }
+  return _deliveryInstance;
 }

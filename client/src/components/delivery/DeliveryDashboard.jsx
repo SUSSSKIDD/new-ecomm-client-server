@@ -28,6 +28,7 @@ const DeliveryDashboard = () => {
     const [historyLoading, setHistoryLoading] = useState(false);
     const [statusLoading, setStatusLoading] = useState(false);
     const [toast, setToast] = useState(null);
+    const [showLocationRationale, setShowLocationRationale] = useState(false);
     const watchIdRef = useRef(null);
     const sseAbortRef = useRef(null);
     const historyFetchedRef = useRef(false);
@@ -108,13 +109,42 @@ const DeliveryDashboard = () => {
 
         const startWatching = async () => {
             if (Capacitor.isNativePlatform()) {
-                // Request permissions first
-                const perm = await Geolocation.requestPermissions();
-                if (perm.location !== 'granted') {
+                // Item 1.2: Improved Location Permission Flow
+                const perm = await Geolocation.checkPermissions();
+                
+                if (perm.location === 'denied') {
                     showToast('Location permission denied — cannot track delivery');
                     return;
                 }
 
+                if (perm.location !== 'granted') {
+                    const reqPerm = await Geolocation.requestPermissions();
+                    if (reqPerm.location !== 'granted') {
+                        showToast('Location permission denied — cannot track delivery');
+                        return;
+                    }
+                }
+
+                // If on Android, check for background location
+                if (Capacitor.getPlatform() === 'android') {
+                    const backgroundPerm = await Geolocation.checkPermissions();
+                    if (backgroundPerm.coarseLocation === 'granted' || backgroundPerm.location === 'granted') {
+                        // We have foreground, now check/request background if needed
+                        // Most plugins handle this via requestPermissions, but Play Store requires rationale
+                        setShowLocationRationale(true);
+                        return; // Wait for user to accept rationale
+                    }
+                }
+
+                await setupWatch();
+            } else if (navigator.geolocation) {
+                await setupWatch();
+            }
+        };
+
+        const setupWatch = async () => {
+            let watchId;
+            if (Capacitor.isNativePlatform()) {
                 watchId = await Geolocation.watchPosition(
                     { enableHighAccuracy: true },
                     async (pos) => {
@@ -129,7 +159,7 @@ const DeliveryDashboard = () => {
                         }
                     }
                 );
-            } else if (navigator.geolocation) {
+            } else {
                 watchId = navigator.geolocation.watchPosition(
                     async (pos) => {
                         setGpsActive(true);
@@ -484,6 +514,59 @@ const DeliveryDashboard = () => {
 
     return (
         <div className="h-[100dvh] w-full bg-gray-50 flex flex-col overflow-hidden overscroll-none">
+            {/* Background Location Rationale Modal */}
+            {showLocationRationale && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+                    <div className="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl animate-in fade-in zoom-in duration-300">
+                        <div className="p-8 text-center">
+                            <div className="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-6">
+                                <svg className="w-10 h-10 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                                </svg>
+                            </div>
+                            <h3 className="text-xl font-bold text-gray-900 mb-3">Location Permission</h3>
+                            <p className="text-gray-600 text-sm leading-relaxed mb-8">
+                                Neyokart Delivery needs background location to track your position while delivering, even when the app is minimised. This ensures accurate delivery status and customer notifications.
+                            </p>
+                            <div className="space-y-3">
+                                <RippleButton
+                                    onClick={async () => {
+                                        setShowLocationRationale(false);
+                                        await Geolocation.requestPermissions();
+                                        // Re-run setupWatch after permission request
+                                        let watchId = await Geolocation.watchPosition(
+                                            { enableHighAccuracy: true },
+                                            async (pos) => {
+                                                if (pos) {
+                                                    setGpsActive(true);
+                                                    try {
+                                                        await api('post', '/delivery/location', {
+                                                            lat: pos.coords.latitude,
+                                                            lng: pos.coords.longitude,
+                                                        });
+                                                    } catch { }
+                                                }
+                                            }
+                                        );
+                                        watchIdRef.current = watchId;
+                                    }}
+                                    className="w-full bg-emerald-600 text-white py-4 rounded-2xl font-bold shadow-lg shadow-emerald-200"
+                                >
+                                    Continue
+                                </RippleButton>
+                                <button
+                                    onClick={() => setShowLocationRationale(false)}
+                                    className="w-full text-gray-500 py-2 text-sm font-medium"
+                                >
+                                    Not Now
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Toast */}
             {toast && (
                 <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-emerald-600 text-white px-6 py-3 rounded-xl shadow-lg shadow-emerald-500/30 text-sm font-medium animate-bounce">

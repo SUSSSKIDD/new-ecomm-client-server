@@ -10,6 +10,9 @@ export default defineConfig({
         manualChunks: {
           vendor: ['react', 'react-dom', 'react-router-dom'],
           ui: ['konsta/react'],
+          animation: ['gsap', 'motion', 'motion/react'],
+          firebase: ['firebase/app', 'firebase/analytics'],
+          icons: ['lucide-react'],
         },
       },
     },
