@@ -40,7 +40,7 @@ const DeliveryLogin = () => {
     };
 
     return (
-        <div className="h-[100dvh] w-full flex flex-col overflow-hidden overscroll-none bg-gradient-to-br from-emerald-50 via-white to-teal-50 flex items-center justify-center p-4">
+        <div className="h-[100dvh] w-full flex flex-col overflow-hidden overscroll-none bg-gradient-to-br from-emerald-50 via-white to-teal-50 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 flex items-center justify-center p-4">
             <div className="w-full max-w-sm">
                 {/* Logo */}
                 <div className="text-center mb-8">
@@ -49,12 +49,12 @@ const DeliveryLogin = () => {
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16V6a1 1 0 00-1-1H4a1 1 0 00-1 1v10a1 1 0 001 1h1m8-1a1 1 0 01-1 1H9m4-1V8a1 1 0 011-1h2.586a1 1 0 01.707.293l3.414 3.414a1 1 0 01.293.707V16a1 1 0 01-1 1h-1m-6-1a1 1 0 001 1h1M5 17a2 2 0 104 0m-4 0a2 2 0 114 0m6 0a2 2 0 104 0m-4 0a2 2 0 114 0" />
                         </svg>
                     </div>
-                    <h1 className="text-2xl font-bold text-gray-900">Delivery Partner</h1>
-                    <p className="text-sm text-gray-500 mt-1">Sign in to start delivering</p>
+                    <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Delivery Partner</h1>
+                    <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Sign in to start delivering</p>
                 </div>
 
                 {/* Form */}
-                <form onSubmit={handleSubmit} className="bg-white rounded-2xl shadow-xl shadow-gray-200/50 p-6 space-y-5">
+                <form onSubmit={handleSubmit} className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl shadow-gray-200/50 dark:shadow-none p-6 space-y-5 border border-transparent dark:border-slate-700">
                     <div>
                         <label className="block text-xs font-bold text-gray-600 uppercase tracking-wide mb-2">Phone Number</label>
                         <div className="relative">
@@ -69,7 +69,7 @@ const DeliveryLogin = () => {
                                 placeholder="9876543210"
                                 maxLength={10}
                                 required
-                                className="w-full pl-12 pr-4 py-3 border border-gray-200 rounded-xl text-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all font-medium tracking-wider"
+                                className="w-full pl-12 pr-4 py-3 border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-gray-900 dark:text-gray-100 rounded-xl text-sm focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all font-medium tracking-wider"
                             />
                         </div>
                     </div>
@@ -83,12 +83,12 @@ const DeliveryLogin = () => {
                             placeholder="••••"
                             maxLength={4}
                             required
-                            className="w-full px-4 py-3 border border-gray-200 rounded-xl text-sm text-center tracking-[0.5em] font-mono focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all"
+                            className="w-full px-4 py-3 border border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-gray-900 dark:text-gray-100 rounded-xl text-sm text-center tracking-[0.5em] font-mono focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all"
                         />
                     </div>
 
                     {error && (
-                        <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-4 py-3">
+                        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-900/50 text-red-700 dark:text-red-400 text-sm rounded-xl px-4 py-3">
                             {error}
                         </div>
                     )}

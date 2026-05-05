@@ -101,7 +101,7 @@ const ParcelOrderList = () => {
         return (
             <div className="text-center py-12 px-4">
                 <span className="text-4xl">📦</span>
-                <p className="text-gray-500 mt-2 text-sm">No parcel bookings yet</p>
+                <p className="text-gray-500 dark:text-gray-400 mt-2 text-sm">No parcel bookings yet</p>
             </div>
         );
     }
@@ -109,7 +109,7 @@ const ParcelOrderList = () => {
     return (
         <div className="max-w-lg mx-auto px-4 pb-8 space-y-3">
             {cancelError && (
-                <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm flex justify-between items-center">
+                <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-900/50 rounded-lg text-red-700 dark:text-red-400 text-sm flex justify-between items-center">
                     <span>{cancelError}</span>
                     <button onClick={() => setCancelError('')} className="text-red-400 hover:text-red-600 ml-2">&times;</button>
                 </div>
@@ -120,10 +120,10 @@ const ParcelOrderList = () => {
                 const canCancel = parcel.status === 'PENDING' || parcel.status === 'APPROVED';
 
                 return (
-                    <div key={parcel.id} className="bg-white rounded-xl border border-gray-200 p-4 space-y-3">
+                    <div key={parcel.id} className="bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 p-4 space-y-3">
                         {/* Header */}
                         <div className="flex items-center justify-between">
-                            <span className="text-sm font-bold text-gray-900">{parcel.parcelNumber}</span>
+                            <span className="text-sm font-bold text-gray-900 dark:text-gray-100">{parcel.parcelNumber}</span>
                             <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${getParcelStatusColor(parcel.status)}`}>
                                 {getParcelStatusLabel(parcel.status)}
                             </span>
@@ -131,14 +131,14 @@ const ParcelOrderList = () => {
 
                         {/* Delivery PIN — visible only for active parcels */}
                         {parcel.deliveryPin && parcel.status !== 'DELIVERED' && parcel.status !== 'CANCELLED' && (
-                            <div className="bg-purple-50 border border-purple-100 rounded-lg p-2.5 flex items-center justify-between">
+                            <div className="bg-purple-50 dark:bg-purple-900/20 border border-purple-100 dark:border-purple-900/50 rounded-lg p-2.5 flex items-center justify-between">
                                 <div>
-                                    <p className="text-[10px] font-bold text-purple-600 uppercase tracking-widest leading-none">Security PIN</p>
-                                    <p className="text-[10px] text-purple-500 mt-1">Share with the delivery agent only at drop-off</p>
+                                    <p className="text-[10px] font-bold text-purple-600 dark:text-purple-400 uppercase tracking-widest leading-none">Security PIN</p>
+                                    <p className="text-[10px] text-purple-500 dark:text-purple-500/80 mt-1">Share with the delivery agent only at drop-off</p>
                                 </div>
                                 <div className="flex gap-1">
                                     {parcel.deliveryPin.split('').map((digit, i) => (
-                                        <span key={i} className="w-7 h-8 bg-white border border-purple-200 rounded flex items-center justify-center text-base font-black text-purple-700 shadow-sm">
+                                        <span key={i} className="w-7 h-8 bg-white dark:bg-slate-700 border border-purple-200 dark:border-purple-900/50 rounded flex items-center justify-center text-base font-black text-purple-700 dark:text-purple-400 shadow-sm">
                                             {digit}
                                         </span>
                                     ))}
@@ -150,54 +150,54 @@ const ParcelOrderList = () => {
                         <div className="flex items-start gap-3">
                             <div className="flex flex-col items-center pt-1">
                                 <div className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
-                                <div className="w-0.5 h-8 bg-gray-200" />
+                                <div className="w-0.5 h-8 bg-gray-200 dark:bg-slate-700" />
                                 <div className="w-2.5 h-2.5 rounded-full bg-red-500" />
                             </div>
                             <div className="flex-1 space-y-2">
                                 <div>
-                                    <p className="text-xs text-gray-400">PICKUP</p>
-                                    <p className="text-sm text-gray-700">{[pickupAddr.houseNo, pickupAddr.street, pickupAddr.city].filter(Boolean).join(', ') || 'N/A'}</p>
+                                    <p className="text-xs text-gray-400 dark:text-gray-500">PICKUP</p>
+                                    <p className="text-sm text-gray-700 dark:text-gray-300">{[pickupAddr.houseNo, pickupAddr.street, pickupAddr.city].filter(Boolean).join(', ') || 'N/A'}</p>
                                 </div>
                                 <div>
-                                    <p className="text-xs text-gray-400">DROP</p>
-                                    <p className="text-sm text-gray-700">{[dropAddr.houseNo, dropAddr.street, dropAddr.city].filter(Boolean).join(', ') || 'N/A'}</p>
+                                    <p className="text-xs text-gray-400 dark:text-gray-500">DROP</p>
+                                    <p className="text-sm text-gray-700 dark:text-gray-300">{[dropAddr.houseNo, dropAddr.street, dropAddr.city].filter(Boolean).join(', ') || 'N/A'}</p>
                                 </div>
                             </div>
                         </div>
 
                         {/* Details */}
                         <div className="grid grid-cols-3 gap-2 text-xs">
-                            <div className="bg-gray-50 rounded-lg p-2">
-                                <p className="text-gray-400">Category</p>
-                                <p className="font-medium text-gray-700">{getCategoryLabel(parcel.category)}</p>
+                            <div className="bg-gray-50 dark:bg-slate-900 rounded-lg p-2">
+                                <p className="text-gray-400 dark:text-gray-500">Category</p>
+                                <p className="font-medium text-gray-700 dark:text-gray-200">{getCategoryLabel(parcel.category)}</p>
                             </div>
-                            <div className="bg-gray-50 rounded-lg p-2">
-                                <p className="text-gray-400">Weight</p>
-                                <p className="font-medium text-gray-700">{parcel.weight} kg</p>
+                            <div className="bg-gray-50 dark:bg-slate-900 rounded-lg p-2">
+                                <p className="text-gray-400 dark:text-gray-500">Weight</p>
+                                <p className="font-medium text-gray-700 dark:text-gray-200">{parcel.weight} kg</p>
                             </div>
-                            <div className="bg-gray-50 rounded-lg p-2">
-                                <p className="text-gray-400">COD</p>
-                                <p className="font-medium text-gray-700">{parcel.codAmount != null ? `₹${parcel.codAmount}` : 'TBD'}</p>
+                            <div className="bg-gray-50 dark:bg-slate-900 rounded-lg p-2">
+                                <p className="text-gray-400 dark:text-gray-500">COD</p>
+                                <p className="font-medium text-gray-700 dark:text-gray-200">{parcel.codAmount != null ? `₹${parcel.codAmount}` : 'TBD'}</p>
                             </div>
                         </div>
 
                         {/* Schedule */}
                         <div className="grid grid-cols-2 gap-2 text-xs">
-                            <div className="bg-blue-50 rounded-lg p-2">
-                                <p className="text-blue-400">Pickup</p>
-                                <p className="font-medium text-blue-700">{formatDate(parcel.pickupTime)} {formatTime(parcel.pickupTime)}</p>
+                            <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-2">
+                                <p className="text-blue-400 dark:text-blue-500">Pickup</p>
+                                <p className="font-medium text-blue-700 dark:text-blue-300">{formatDate(parcel.pickupTime)} {formatTime(parcel.pickupTime)}</p>
                             </div>
-                            <div className="bg-orange-50 rounded-lg p-2">
-                                <p className="text-orange-400">Drop</p>
-                                <p className="font-medium text-orange-700">{formatDate(parcel.dropTime)} {formatTime(parcel.dropTime)}</p>
+                            <div className="bg-orange-50 dark:bg-orange-900/20 rounded-lg p-2">
+                                <p className="text-orange-400 dark:text-orange-500">Drop</p>
+                                <p className="font-medium text-orange-700 dark:text-orange-300">{formatDate(parcel.dropTime)} {formatTime(parcel.dropTime)}</p>
                             </div>
                         </div>
 
                         {/* Rider info */}
                         {parcel.assignment?.deliveryPerson && (
-                            <div className="bg-purple-50 rounded-lg p-2 text-xs flex items-center gap-2">
-                                <span className="text-purple-400">Rider:</span>
-                                <span className="font-medium text-purple-700">{parcel.assignment.deliveryPerson.name} ({parcel.assignment.deliveryPerson.phone})</span>
+                            <div className="bg-purple-50 dark:bg-purple-900/20 rounded-lg p-2 text-xs flex items-center gap-2">
+                                <span className="text-purple-400 dark:text-purple-500">Rider:</span>
+                                <span className="font-medium text-purple-700 dark:text-purple-300">{parcel.assignment.deliveryPerson.name} ({parcel.assignment.deliveryPerson.phone})</span>
                             </div>
                         )}
 
@@ -206,7 +206,7 @@ const ParcelOrderList = () => {
                             <button
                                 onClick={() => handleCancel(parcel.id)}
                                 disabled={cancellingId === parcel.id}
-                                className="w-full py-2 text-sm font-medium text-red-600 border border-red-200 rounded-lg hover:bg-red-50 transition-colors disabled:opacity-50"
+                                className="w-full py-2 text-sm font-medium text-red-600 dark:text-red-400 border border-red-200 dark:border-red-900/50 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/40 transition-colors disabled:opacity-50"
                             >
                                 {cancellingId === parcel.id ? 'Cancelling...' : 'Cancel Booking'}
                             </button>

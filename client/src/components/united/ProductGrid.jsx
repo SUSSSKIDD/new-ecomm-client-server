@@ -43,10 +43,10 @@ const ProductGrid = ({ mainCategory, subCategory, onProductSelect }) => {
 
     return (
         <div className="w-full py-2">
-            <h2 className="text-xl font-bold text-gray-900 mb-4">{effectiveSubCategory}</h2>
+            <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-4">{effectiveSubCategory}</h2>
 
             {products.length === 0 ? (
-                <p className="text-gray-500 italic mt-4 text-center">No products found in this category.</p>
+                <p className="text-gray-500 dark:text-gray-400 italic mt-4 text-center">No products found in this category.</p>
             ) : (
                 <>
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
@@ -60,14 +60,14 @@ const ProductGrid = ({ mainCategory, subCategory, onProductSelect }) => {
                             return (
                             <div
                                 key={product.id}
-                                className="bg-white rounded-lg shadow-sm border border-gray-100 p-4 flex gap-4 hover:shadow-md transition-all cursor-pointer relative"
+                                className="bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-gray-100 dark:border-slate-700 p-4 flex gap-4 hover:shadow-md transition-all cursor-pointer relative"
                                 onClick={() => handleSelect(product)}
                             >
-                                <div className="h-24 w-24 shrink-0 flex items-center justify-center bg-gray-50 rounded-md overflow-hidden relative">
+                                <div className="h-24 w-24 shrink-0 flex items-center justify-center bg-gray-50 dark:bg-slate-900 rounded-md overflow-hidden relative">
                                     {product.images?.[0] ? (
-                                        <img src={product.images[0]} alt={product.name} className="h-full object-contain mix-blend-multiply" loading="lazy" />
+                                        <img src={product.images[0]} alt={product.name} className="h-full object-contain mix-blend-multiply dark:mix-blend-normal" loading="lazy" />
                                     ) : (
-                                        <span className="text-gray-300 text-[10px]">No Image</span>
+                                        <span className="text-gray-300 dark:text-gray-600 text-[10px]">No Image</span>
                                     )}
                                     {/* Badge for stock */}
                                     {stock <= 0 && !hasVariants && (
@@ -79,19 +79,19 @@ const ProductGrid = ({ mainCategory, subCategory, onProductSelect }) => {
 
                                 <div className="flex-1 flex flex-col justify-between py-1 min-w-0">
                                     <div>
-                                        <h3 className="text-sm font-bold text-gray-900 line-clamp-1 mb-1">{product.name}</h3>
+                                        <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100 line-clamp-1 mb-1">{product.name}</h3>
                                         {hasVariants ? (
-                                            <p className="text-xs text-emerald-600 font-bold leading-tight">{product.variants.length} Variants Available</p>
+                                            <p className="text-xs text-emerald-600 dark:text-emerald-400 font-bold leading-tight">{product.variants.length} Variants Available</p>
                                         ) : (
-                                            <p className="text-xs text-gray-500 line-clamp-2 leading-tight">Authentic {product.name} from {mainCategory}</p>
+                                            <p className="text-xs text-gray-500 dark:text-gray-400 line-clamp-2 leading-tight">Authentic {product.name} from {mainCategory}</p>
                                         )}
                                     </div>
                                     
                                     <div className="flex items-center justify-between mt-auto">
                                         <div className="flex flex-col">
-                                            <span className="text-base font-black text-gray-900">₹{displayPrice}</span>
+                                            <span className="text-base font-black text-gray-900 dark:text-gray-100">₹{displayPrice}</span>
                                             {displayMrp && displayMrp > displayPrice && (
-                                                <span className="text-xs text-gray-400 line-through">₹{displayMrp}</span>
+                                                <span className="text-xs text-gray-400 dark:text-gray-500 line-through">₹{displayMrp}</span>
                                             )}
                                         </div>
                                         <RippleButton

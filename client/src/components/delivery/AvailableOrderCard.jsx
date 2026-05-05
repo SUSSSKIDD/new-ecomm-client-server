@@ -59,9 +59,9 @@ const AvailableOrderCard = memo(({ order, onAccept, onReject }) => {
 
     return (
         <div
-            className={`bg-white rounded-2xl shadow-lg overflow-hidden border transition-all duration-300 ${
+            className={`bg-white dark:bg-slate-800 rounded-2xl shadow-lg overflow-hidden border transition-all duration-300 ${
                 animateOut ? 'opacity-0 scale-95 -translate-y-2' : 'opacity-100 scale-100'
-            } ${isParcel ? 'shadow-purple-100/50 border-purple-100' : 'shadow-blue-100/50 border-blue-100'}`}
+            } ${isParcel ? 'shadow-purple-100/50 dark:shadow-none border-purple-100 dark:border-purple-900/50' : 'shadow-blue-100/50 dark:shadow-none border-blue-100 dark:border-blue-900/50'}`}
         >
             {/* Header */}
             <div className={`px-4 py-3 flex items-center justify-between ${isParcel
@@ -82,41 +82,41 @@ const AvailableOrderCard = memo(({ order, onAccept, onReject }) => {
 
             {/* Waiting badge */}
             <div className="px-4 pt-3">
-                <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                <div className="flex items-center gap-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-900/50 rounded-lg px-3 py-2">
                     <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
-                    <span className="text-xs font-medium text-amber-700">Accept or reject this delivery</span>
+                    <span className="text-xs font-medium text-amber-700 dark:text-amber-400">Accept or reject this delivery</span>
                 </div>
             </div>
 
             {isParcel ? (
                 <>
                     {/* Parcel details */}
-                    <div className="px-4 py-3 border-b border-gray-100">
-                        <p className="text-xs font-bold text-gray-500 uppercase mb-2">Parcel Details</p>
+                    <div className="px-4 py-3 border-b border-gray-100 dark:border-slate-700">
+                        <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase mb-2">Parcel Details</p>
                         <div className="flex gap-2">
-                            <span className="bg-purple-50 text-purple-700 px-2 py-1 rounded-lg text-xs font-medium">
+                            <span className="bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 px-2 py-1 rounded-lg text-xs font-medium">
                                 {getCategoryLabel(order.category)}
                             </span>
-                            <span className="bg-gray-50 text-gray-700 px-2 py-1 rounded-lg text-xs font-medium">
+                            <span className="bg-gray-50 dark:bg-slate-700 text-gray-700 dark:text-gray-300 px-2 py-1 rounded-lg text-xs font-medium">
                                 {order.weight} kg
                             </span>
                         </div>
                     </div>
 
                     {/* Pickup Address + Maps link */}
-                    <div className="px-4 py-3 border-b border-gray-100">
-                        <p className="text-xs font-bold text-emerald-600 uppercase mb-1">Pickup</p>
-                        <p className="text-sm text-gray-700">
+                    <div className="px-4 py-3 border-b border-gray-100 dark:border-slate-700">
+                        <p className="text-xs font-bold text-emerald-600 dark:text-emerald-400 uppercase mb-1">Pickup</p>
+                        <p className="text-sm text-gray-700 dark:text-gray-300">
                             {order.storeName || 'Pickup location'}
                         </p>
-                        <MapsLink lat={order.storeLat} lng={order.storeLng} color="text-emerald-600 hover:text-emerald-800" />
+                        <MapsLink lat={order.storeLat} lng={order.storeLng} color="text-emerald-600 dark:text-emerald-400 hover:text-emerald-800 dark:hover:text-emerald-300" />
                     </div>
 
                     {/* Drop Address */}
                     {order.deliveryAddress && (
-                        <div className="px-4 py-3 border-b border-gray-100">
-                            <p className="text-xs font-bold text-red-500 uppercase mb-1">Drop</p>
-                            <p className="text-sm text-gray-700">
+                        <div className="px-4 py-3 border-b border-gray-100 dark:border-slate-700">
+                            <p className="text-xs font-bold text-red-500 dark:text-red-400 uppercase mb-1">Drop</p>
+                            <p className="text-sm text-gray-700 dark:text-gray-300">
                                 {order.deliveryAddress.houseNo && `${order.deliveryAddress.houseNo}, `}
                                 {order.deliveryAddress.street}, {order.deliveryAddress.city}{' '}
                                 {order.deliveryAddress.zipCode || order.deliveryAddress.pincode}
@@ -127,18 +127,18 @@ const AvailableOrderCard = memo(({ order, onAccept, onReject }) => {
             ) : (
                 <>
                     {/* Items summary */}
-                    <div className="px-4 py-3 border-b border-gray-100">
-                        <p className="text-xs font-bold text-gray-500 uppercase mb-2">
+                    <div className="px-4 py-3 border-b border-gray-100 dark:border-slate-700">
+                        <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase mb-2">
                             {order.itemCount || order.items?.length || 0} Items
                         </p>
                         {order.items && (
                             <div className="space-y-1">
                                 {order.items.slice(0, 5).map((item, i) => (
                                     <div key={i} className="flex justify-between text-sm">
-                                        <span className="text-gray-700 truncate flex-1 mr-2">
+                                        <span className="text-gray-700 dark:text-gray-300 truncate flex-1 mr-2">
                                             {item.name} &times; {item.quantity}
                                         </span>
-                                        <span className="text-gray-900 font-medium">
+                                        <span className="text-gray-900 dark:text-gray-100 font-medium">
                                             &#8377;{item.total}
                                         </span>
                                     </div>
@@ -152,15 +152,15 @@ const AvailableOrderCard = memo(({ order, onAccept, onReject }) => {
 
                     {/* Delivery Address */}
                     {order.deliveryAddress && (
-                        <div className="px-4 py-3 border-b border-gray-100">
-                            <p className="text-xs font-bold text-gray-500 uppercase mb-1">Delivery To</p>
-                            <p className="text-sm text-gray-700">
+                        <div className="px-4 py-3 border-b border-gray-100 dark:border-slate-700">
+                            <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase mb-1">Delivery To</p>
+                            <p className="text-sm text-gray-700 dark:text-gray-300">
                                 {order.deliveryAddress.houseNo && `${order.deliveryAddress.houseNo}, `}
                                 {order.deliveryAddress.street}, {order.deliveryAddress.city}{' '}
                                 {order.deliveryAddress.zipCode || order.deliveryAddress.pincode}
                             </p>
                             {order.deliveryAddress.landmark && (
-                                <p className="text-xs text-gray-500 mt-0.5">
+                                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
                                     Near: {order.deliveryAddress.landmark}
                                 </p>
                             )}
@@ -169,13 +169,13 @@ const AvailableOrderCard = memo(({ order, onAccept, onReject }) => {
 
                     {/* Pickup Store + Maps link */}
                     {order.storeName && (
-                        <div className="px-4 py-3 border-b border-gray-100">
-                            <p className="text-xs font-bold text-gray-500 uppercase mb-1">Pickup Store</p>
-                            <p className="text-sm font-medium text-gray-800">{order.storeName}</p>
+                        <div className="px-4 py-3 border-b border-gray-100 dark:border-slate-700">
+                            <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase mb-1">Pickup Store</p>
+                            <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{order.storeName}</p>
                             {order.storeAddress && order.storeAddress !== order.storeName && (
-                                <p className="text-xs text-gray-500 mt-0.5">{order.storeAddress}</p>
+                                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{order.storeAddress}</p>
                             )}
-                            <MapsLink lat={order.storeLat} lng={order.storeLng} color="text-blue-600 hover:text-blue-800" />
+                            <MapsLink lat={order.storeLat} lng={order.storeLng} color="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300" />
                         </div>
                     )}
                 </>
@@ -187,11 +187,11 @@ const AvailableOrderCard = memo(({ order, onAccept, onReject }) => {
                     <RippleButton
                         onClick={handleReject}
                         disabled={!!actionLoading}
-                        className="flex-1 py-3 border-2 border-red-200 text-red-600 rounded-xl font-bold text-sm hover:bg-red-50 transition-colors disabled:opacity-50"
+                        className="flex-1 py-3 border-2 border-red-200 dark:border-red-900/30 text-red-600 dark:text-red-400 rounded-xl font-bold text-sm hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors disabled:opacity-50"
                     >
                         {actionLoading === 'reject' ? (
                             <span className="flex items-center justify-center gap-2">
-                                <span className="w-4 h-4 border-2 border-red-300 border-t-red-600 rounded-full animate-spin"></span>
+                                <span className="w-4 h-4 border-2 border-red-300 dark:border-red-800 border-t-red-600 dark:border-t-red-400 rounded-full animate-spin"></span>
                                 Rejecting...
                             </span>
                         ) : 'Reject'}

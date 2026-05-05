@@ -504,8 +504,8 @@ const DeliveryDashboard = () => {
 
     if (loading) {
         return (
-            <div className="h-[100dvh] flex items-center justify-center bg-gray-50 w-full overflow-hidden">
-                <div className="w-10 h-10 border-4 border-emerald-200 border-t-emerald-600 rounded-full animate-spin"></div>
+            <div className="h-[100dvh] flex items-center justify-center bg-gray-50 dark:bg-slate-900 w-full overflow-hidden">
+                <div className="w-10 h-10 border-4 border-emerald-200 dark:border-emerald-900/30 border-t-emerald-600 rounded-full animate-spin"></div>
             </div>
         );
     }
@@ -513,20 +513,20 @@ const DeliveryDashboard = () => {
     const totalAssigned = orders.length + parcelOrders.length;
 
     return (
-        <div className="h-[100dvh] w-full bg-gray-50 flex flex-col overflow-hidden overscroll-none">
+        <div className="h-[100dvh] w-full bg-gray-50 dark:bg-slate-900 flex flex-col overflow-hidden overscroll-none">
             {/* Background Location Rationale Modal */}
             {showLocationRationale && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-                    <div className="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl animate-in fade-in zoom-in duration-300">
+                    <div className="bg-white dark:bg-slate-800 rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl animate-in fade-in zoom-in duration-300">
                         <div className="p-8 text-center">
-                            <div className="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-6">
-                                <svg className="w-10 h-10 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <div className="w-20 h-20 bg-emerald-100 dark:bg-emerald-900/30 rounded-full flex items-center justify-center mx-auto mb-6">
+                                <svg className="w-10 h-10 text-emerald-600 dark:text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
                                 </svg>
                             </div>
-                            <h3 className="text-xl font-bold text-gray-900 mb-3">Location Permission</h3>
-                            <p className="text-gray-600 text-sm leading-relaxed mb-8">
+                            <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-3">Location Permission</h3>
+                            <p className="text-gray-600 dark:text-gray-400 text-sm leading-relaxed mb-8">
                                 Neyokart Delivery needs background location to track your position while delivering, even when the app is minimised. This ensures accurate delivery status and customer notifications.
                             </p>
                             <div className="space-y-3">
@@ -557,7 +557,7 @@ const DeliveryDashboard = () => {
                                 </RippleButton>
                                 <button
                                     onClick={() => setShowLocationRationale(false)}
-                                    className="w-full text-gray-500 py-2 text-sm font-medium"
+                                    className="w-full text-gray-500 dark:text-gray-400 py-2 text-sm font-medium"
                                 >
                                     Not Now
                                 </button>
@@ -575,13 +575,13 @@ const DeliveryDashboard = () => {
             )}
 
             {/* Header */}
-            <header className="bg-white shadow-sm sticky top-0 z-40">
+            <header className="bg-white dark:bg-slate-800 shadow-sm sticky top-0 z-40 border-b border-gray-100 dark:border-slate-700">
                 <div className="max-w-lg mx-auto px-4 py-3 flex items-center justify-between">
                     <div>
-                        <h1 className="text-lg font-bold text-gray-900">
+                        <h1 className="text-lg font-bold text-gray-900 dark:text-gray-100">
                             Delivery Dashboard
                         </h1>
-                        <p className="text-xs text-gray-500">
+                        <p className="text-xs text-gray-500 dark:text-gray-400">
                             {person?.name || 'Partner'}
                         </p>
                     </div>
@@ -593,7 +593,7 @@ const DeliveryDashboard = () => {
                         />
                         <RippleButton
                             onClick={handleLogout}
-                            className="text-gray-400 hover:text-gray-600 transition-colors"
+                            className="text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
                         >
                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
@@ -606,8 +606,8 @@ const DeliveryDashboard = () => {
             {/* GPS Indicator */}
             <div className="max-w-lg mx-auto px-4 py-2">
                 <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium ${gpsActive
-                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                    : 'bg-yellow-50 text-yellow-700 border border-yellow-200'
+                    ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-900/50'
+                    : 'bg-yellow-50 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-400 border border-yellow-200 dark:border-yellow-900/50'
                     }`}>
                     <span className={`w-2 h-2 rounded-full ${gpsActive ? 'bg-emerald-500 animate-pulse' : 'bg-yellow-500'}`}></span>
                     {gpsActive ? 'GPS Active' : 'GPS Inactive'}
@@ -616,16 +616,16 @@ const DeliveryDashboard = () => {
 
             {/* Tab Switcher */}
             <div className="max-w-lg mx-auto px-4 pb-2">
-                <div className="flex bg-gray-200 rounded-xl p-1">
+                <div className="flex bg-gray-200 dark:bg-slate-800 rounded-xl p-1">
                     <button
                         onClick={() => setActiveTab('active')}
                         className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all ${activeTab === 'active'
-                            ? 'bg-white text-gray-900 shadow-sm'
-                            : 'text-gray-500 hover:text-gray-700'
+                            ? 'bg-white dark:bg-slate-700 text-gray-900 dark:text-white shadow-sm'
+                            : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
                             }`}
                     >
                         Active {(totalAssigned + availableOrders.length) > 0 && (
-                            <span className="ml-1 bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded-full text-xs">
+                            <span className="ml-1 bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400 px-1.5 py-0.5 rounded-full text-xs">
                                 {totalAssigned + availableOrders.length}
                             </span>
                         )}
@@ -633,8 +633,8 @@ const DeliveryDashboard = () => {
                     <button
                         onClick={() => setActiveTab('history')}
                         className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all ${activeTab === 'history'
-                            ? 'bg-white text-gray-900 shadow-sm'
-                            : 'text-gray-500 hover:text-gray-700'
+                            ? 'bg-white dark:bg-slate-700 text-gray-900 dark:text-white shadow-sm'
+                            : 'text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200'
                             }`}
                     >
                         My Deliveries
@@ -648,7 +648,7 @@ const DeliveryDashboard = () => {
                         {/* Available Orders (Accept/Reject) */}
                         {availableOrders.length > 0 && status === 'FREE' && (
                             <section>
-                                <h2 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-3 flex items-center gap-2">
+                                <h2 className="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3 flex items-center gap-2">
                                     <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></span>
                                     New Orders ({availableOrders.length})
                                 </h2>
@@ -668,11 +668,11 @@ const DeliveryDashboard = () => {
                         {/* Assigned Orders + Parcels */}
                         <section>
                             {totalAssigned === 0 && availableOrders.length === 0 ? (
-                                <div className="flex flex-col items-center justify-center py-20 text-gray-400">
+                                <div className="flex flex-col items-center justify-center py-20 text-gray-400 dark:text-gray-500">
                                     <svg className="w-16 h-16 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
                                     </svg>
-                                    <p className="text-lg font-medium">No active deliveries</p>
+                                    <p className="text-lg font-medium text-gray-900 dark:text-gray-100">No active deliveries</p>
                                     <p className="text-sm mt-1">
                                         {status === 'BUSY'
                                             ? "Delivery in progress"
@@ -684,7 +684,7 @@ const DeliveryDashboard = () => {
                             ) : (
                                 <>
                                     {totalAssigned > 0 && (
-                                        <h2 className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-3">
+                                        <h2 className="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">
                                             Assigned ({totalAssigned})
                                         </h2>
                                     )}
@@ -717,14 +717,14 @@ const DeliveryDashboard = () => {
                     <section>
                         {historyLoading ? (
                             <div className="flex items-center justify-center py-20">
-                                <div className="w-8 h-8 border-4 border-gray-200 border-t-emerald-600 rounded-full animate-spin"></div>
+                                <div className="w-8 h-8 border-4 border-gray-200 dark:border-slate-800 border-t-emerald-600 rounded-full animate-spin"></div>
                             </div>
                         ) : history.length === 0 ? (
-                            <div className="flex flex-col items-center justify-center py-20 text-gray-400">
+                            <div className="flex flex-col items-center justify-center py-20 text-gray-400 dark:text-gray-500">
                                 <svg className="w-16 h-16 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                                 </svg>
-                                <p className="text-lg font-medium">No delivery history</p>
+                                <p className="text-lg font-medium text-gray-900 dark:text-gray-100">No delivery history</p>
                                 <p className="text-sm mt-1">Completed deliveries will appear here</p>
                             </div>
                         ) : (
@@ -748,34 +748,34 @@ const HistoryCard = ({ item }) => {
     const addr = item.deliveryAddress || {};
 
     return (
-        <div className="bg-white rounded-2xl shadow-sm overflow-hidden border border-gray-100">
+        <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-sm overflow-hidden border border-gray-100 dark:border-slate-700">
             {/* Header */}
             <div className={`px-4 py-3 flex items-center justify-between ${isParcel
-                ? 'bg-gradient-to-r from-purple-50 to-violet-50'
-                : 'bg-gradient-to-r from-blue-50 to-indigo-50'
+                ? 'bg-gradient-to-r from-purple-50 dark:from-purple-900/20 to-violet-50 dark:to-violet-900/20'
+                : 'bg-gradient-to-r from-blue-50 dark:from-blue-900/20 to-indigo-50 dark:to-indigo-900/20'
                 }`}>
                 <div>
                     <div className="flex items-center gap-2">
                         <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${isParcel
-                            ? 'bg-purple-100 text-purple-700'
-                            : 'bg-blue-100 text-blue-700'
+                            ? 'bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-400'
+                            : 'bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-400'
                             }`}>
                             {isParcel ? 'Parcel' : 'Order'}
                         </span>
                         <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${isDelivered
-                            ? 'bg-emerald-100 text-emerald-700'
-                            : 'bg-red-100 text-red-700'
+                            ? 'bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400'
+                            : 'bg-red-100 dark:bg-red-900/40 text-red-700 dark:text-red-400'
                             }`}>
                             {isDelivered ? 'Delivered' : 'Not Delivered'}
                         </span>
                     </div>
-                    <p className="text-sm font-bold text-gray-900 mt-1">{item.orderNumber}</p>
+                    <p className="text-sm font-bold text-gray-900 dark:text-gray-100 mt-1">{item.orderNumber}</p>
                 </div>
                 <div className="text-right">
-                    <p className="text-xs text-gray-500">
+                    <p className="text-xs text-gray-500 dark:text-gray-400">
                         {completedDate.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
                     </p>
-                    <p className="text-sm font-bold text-gray-900">
+                    <p className="text-sm font-bold text-gray-900 dark:text-gray-100">
                         {item.total != null ? `₹${item.total}` : '—'}
                     </p>
                 </div>
@@ -783,18 +783,18 @@ const HistoryCard = ({ item }) => {
 
             {/* Address */}
             <div className="px-4 py-2.5">
-                <p className="text-xs text-gray-500">
+                <p className="text-xs text-gray-500 dark:text-gray-400">
                     {addr.houseNo && `${addr.houseNo}, `}
                     {addr.street && `${addr.street}, `}
                     {addr.city}
                     {(addr.zipCode || addr.pincode) && ` ${addr.zipCode || addr.pincode}`}
                 </p>
                 {isParcel && item.category && (
-                    <p className="text-xs text-purple-600 mt-1">
+                    <p className="text-xs text-purple-600 dark:text-purple-400 mt-1">
                         {item.category} &middot; {item.weight} kg
                     </p>
                 )}
-                <p className="text-xs text-gray-400 mt-1">
+                <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
                     {completedDate.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })}
                     {' · '}{item.paymentMethod}
                 </p>

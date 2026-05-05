@@ -31,7 +31,7 @@ const HeroSection = () => {
     }, []);
 
     return (
-        <div className="bg-ud-primary text-white overflow-hidden relative">
+        <div className="bg-ud-primary dark:bg-slate-900 text-white overflow-hidden relative transition-colors duration-300">
             <div className="container mx-auto px-4 py-4 md:py-0 md:h-[400px] flex flex-row items-center justify-between relative z-10">
 
                 {/* Left Arrow (Desktop Only) */}
@@ -57,8 +57,8 @@ const HeroSection = () => {
 
                 {/* Circle Graphics */}
                 <div className="absolute top-0 right-0 h-full w-1/2 overflow-hidden pointer-events-none hidden md:block">
-                    <div className="absolute -top-20 -right-20 w-[600px] h-[600px] bg-yellow-400 rounded-full opacity-90"></div>
-                    <div className="absolute top-10 right-10 w-[400px] h-[400px] bg-white/10 rounded-full"></div>
+                    <div className="absolute -top-20 -right-20 w-[600px] h-[600px] bg-yellow-400 dark:bg-emerald-900/20 rounded-full opacity-90 transition-colors duration-300"></div>
+                    <div className="absolute top-10 right-10 w-[400px] h-[400px] bg-white/10 dark:bg-white/5 rounded-full"></div>
                 </div>
 
                 {/* Hero Banner (Image or Video) */}

@@ -33,7 +33,15 @@ const isNonOperational = () => {
 };
 
 const Header = () => {
-    const { selectedCategory, setSelectedCategory, cart, setIsCartOpen, setActivePage, setSelectedProduct } = useCategory();
+    const { 
+        selectedCategory, 
+        setSelectedCategory, 
+        cart, 
+        setIsCartOpen, 
+        setActivePage, 
+        setSelectedProduct,
+        setActiveSubCategory 
+    } = useCategory();
     const { nearestStore, serviceable, locationStatus, requestLocation } = useDeviceLocation();
     const routerLocation = useRouterLocation();
     const navigate = useNavigate();
@@ -52,18 +60,20 @@ const Header = () => {
 
     const handleLogoClick = () => {
         setSelectedCategory('All');
+        setActiveSubCategory(null);
         setSelectedProduct(null);
+        setActivePage('home');
         if (routerLocation.pathname !== '/') {
             navigate('/');
         }
     };
 
     return (
-        <div className="bg-white shadow-sm sticky top-0 z-50">
+        <div className="bg-white dark:bg-[var(--color-bg-surface)] shadow-sm sticky top-0 z-50">
             {/* Location Bar */}
-            <div className="bg-gradient-to-r from-emerald-50 to-teal-50 border-b border-emerald-100">
+            <div className="bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-slate-800 dark:to-slate-900 border-b border-emerald-100 dark:border-slate-700">
                 <div className="container mx-auto px-4 py-1.5 flex items-center justify-between">
-                    <div className="flex items-center gap-1.5 text-xs text-emerald-700">
+                    <div className="flex items-center gap-1.5 text-xs text-emerald-700 dark:text-emerald-400">
                         <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />

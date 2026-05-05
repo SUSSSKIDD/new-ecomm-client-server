@@ -427,38 +427,38 @@ const CartSidebar = () => {
                 <div className="flex-1 overflow-y-auto min-h-0 flex flex-col items-center justify-center p-6 text-center">
                     {isCancelled ? (
                         <>
-                            <div className="w-20 h-20 bg-red-100 rounded-full flex items-center justify-center mb-6">
-                                <svg className="w-10 h-10 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <div className="w-20 h-20 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center mb-6">
+                                <svg className="w-10 h-10 text-red-500 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                                 </svg>
                             </div>
-                            <h3 className="text-xl font-bold text-gray-900 mb-2">Order Cancelled</h3>
-                            <p className="text-sm text-gray-500 mb-6">Order #{orderResult.orderNumber} has been cancelled</p>
+                            <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-2">Order Cancelled</h3>
+                            <p className="text-sm text-gray-500 dark:text-gray-400 mb-6">Order #{orderResult.orderNumber} has been cancelled</p>
                         </>
                     ) : (
                         <>
-                            <div className="w-20 h-20 bg-emerald-100 rounded-full flex items-center justify-center mb-4">
-                                <svg className="w-10 h-10 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <div className="w-20 h-20 bg-emerald-100 dark:bg-emerald-900/30 rounded-full flex items-center justify-center mb-4">
+                                <svg className="w-10 h-10 text-emerald-600 dark:text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                                 </svg>
                             </div>
-                            <h3 className="text-xl font-bold text-gray-900 mb-1">Order Placed!</h3>
-                            <p className="text-sm text-gray-500 mb-1">Order #{orderResult.orderNumber}</p>
-                            <p className="text-2xl font-bold text-emerald-600 mb-3">₹{orderResult.total}</p>
+                            <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-1">Order Placed!</h3>
+                            <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">Order #{orderResult.orderNumber}</p>
+                            <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400 mb-3">₹{orderResult.total}</p>
                         </>
                     )}
 
                     {/* Grace period countdown */}
                     {graceActive && (
                         <div className="w-full mb-4">
-                            <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 mb-3">
-                                <p className="text-xs font-semibold text-amber-700 mb-1">You can cancel or modify this order</p>
+                            <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-900/50 rounded-xl p-3 mb-3">
+                                <p className="text-xs font-semibold text-amber-700 dark:text-amber-400 mb-1">You can cancel or modify this order</p>
                                 <div className="flex items-center justify-center gap-1">
-                                    <span className="text-2xl font-mono font-bold text-amber-600">{graceSeconds}</span>
-                                    <span className="text-xs text-amber-500">seconds remaining</span>
+                                    <span className="text-2xl font-mono font-bold text-amber-600 dark:text-amber-400">{graceSeconds}</span>
+                                    <span className="text-xs text-amber-500 dark:text-amber-500/80">seconds remaining</span>
                                 </div>
                                 {/* Progress bar */}
-                                <div className="w-full bg-amber-200 rounded-full h-1.5 mt-2">
+                                <div className="w-full bg-amber-200 dark:bg-amber-900/40 rounded-full h-1.5 mt-2">
                                     <div
                                         className="bg-amber-500 h-1.5 rounded-full transition-all duration-1000"
                                         style={{ width: `${(graceSeconds / 90) * 100}%` }}
@@ -487,25 +487,25 @@ const CartSidebar = () => {
 
                             {/* Modify inline editor */}
                             {showModify && (
-                                <div className="bg-white border border-gray-200 rounded-xl p-3 text-left">
-                                    <p className="text-xs font-bold text-gray-500 uppercase mb-2">Edit Quantities</p>
+                                <div className="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl p-3 text-left">
+                                    <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase mb-2">Edit Quantities</p>
                                     <div className="space-y-2 max-h-40 overflow-y-auto">
                                         {modifyItems.map((item, idx) => (
                                             <div key={item.productId} className="flex items-center justify-between text-sm">
-                                                <span className="text-gray-700 truncate flex-1 mr-2">{item.name}</span>
+                                                <span className="text-gray-700 dark:text-gray-300 truncate flex-1 mr-2">{item.name}</span>
                                                 <div className="flex items-center gap-2">
                                                     <button
                                                         type="button"
                                                         onClick={() => setModifyItems((prev) => prev.map((it, i) => i === idx ? { ...it, quantity: Math.max(0, it.quantity - 1) } : it))}
-                                                        className="w-7 h-7 rounded-full bg-gray-100 text-gray-600 font-bold hover:bg-gray-200"
+                                                        className="w-7 h-7 rounded-full bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-gray-300 font-bold hover:bg-gray-200 dark:hover:bg-slate-600"
                                                     >-</button>
-                                                    <span className={`w-6 text-center font-bold ${item.quantity === 0 ? 'text-red-500' : 'text-gray-900'}`}>
+                                                    <span className={`w-6 text-center font-bold ${item.quantity === 0 ? 'text-red-500' : 'text-gray-900 dark:text-gray-100'}`}>
                                                         {item.quantity}
                                                     </span>
                                                     <button
                                                         type="button"
                                                         onClick={() => setModifyItems((prev) => prev.map((it, i) => i === idx ? { ...it, quantity: it.quantity + 1 } : it))}
-                                                        className="w-7 h-7 rounded-full bg-gray-100 text-gray-600 font-bold hover:bg-gray-200"
+                                                        className="w-7 h-7 rounded-full bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-gray-300 font-bold hover:bg-gray-200 dark:hover:bg-slate-600"
                                                     >+</button>
                                                 </div>
                                             </div>
@@ -615,8 +615,8 @@ const CartSidebar = () => {
                                             type="button"
                                             onClick={() => handleSelectAddress(addr)}
                                             className={`w-full text-left p-3 rounded-xl border-2 transition-all ${selectedAddress?.id === addr.id
-                                                ? 'border-emerald-500 bg-emerald-50'
-                                                : 'border-gray-100 bg-white hover:border-emerald-200'
+                                                ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20'
+                                                : 'border-gray-100 dark:border-slate-800 bg-white dark:bg-slate-800 hover:border-emerald-200 dark:hover:border-emerald-900'
                                                 }`}
                                         >
                                             <div className="flex items-center gap-2 mb-0.5">
@@ -630,10 +630,10 @@ const CartSidebar = () => {
                                                     </svg>
                                                 )}
                                             </div>
-                                            <p className="text-sm text-gray-900 font-medium">
+                                            <p className="text-sm text-gray-900 dark:text-gray-100 font-medium">
                                                 {addr.houseNo && `${addr.houseNo}, `}{addr.street}
                                             </p>
-                                            <p className="text-xs text-gray-500">
+                                            <p className="text-xs text-gray-500 dark:text-gray-400">
                                                 {addr.city}, {addr.state} - {addr.zipCode}
                                             </p>
                                         </button>
@@ -649,13 +649,13 @@ const CartSidebar = () => {
                             </p>
                             <div className="space-y-2">
                                 {buyNowProduct ? (
-                                    <div className="flex items-center gap-3 bg-white border border-gray-100 rounded-xl p-3 shadow-sm">
-                                        <div className="w-12 h-12 bg-gray-50 rounded flex items-center justify-center flex-shrink-0">
+                                    <div className="flex items-center gap-3 bg-white dark:bg-slate-800 border border-gray-100 dark:border-slate-700 rounded-xl p-3 shadow-sm">
+                                        <div className="w-12 h-12 bg-gray-50 dark:bg-slate-900 rounded flex items-center justify-center flex-shrink-0">
                                             <img src={buyNowProduct.image || buyNowProduct.images?.[0]} alt={buyNowProduct.name} className="w-10 h-10 object-contain" />
                                         </div>
                                         <div className="flex-1 min-w-0">
-                                            <p className="text-xs font-bold text-gray-900 truncate">{buyNowProduct.name}</p>
-                                            <p className="text-[10px] text-gray-500 mt-0.5">₹{parsePrice(buyNowProduct.price)}</p>
+                                            <p className="text-xs font-bold text-gray-900 dark:text-gray-100 truncate">{buyNowProduct.name}</p>
+                                            <p className="text-[10px] text-gray-500 dark:text-gray-400 mt-0.5">₹{parsePrice(buyNowProduct.price)}</p>
                                             
                                             {/* Buy Now Quantity Selector */}
                                             <div className="flex items-center gap-2 mt-1.5">
@@ -665,16 +665,16 @@ const CartSidebar = () => {
                                                         setBuyNowProduct({ ...buyNowProduct, quantity: newQty });
                                                         handleSelectAddress(selectedAddress, [{ productId: buyNowProduct.id, quantity: newQty }]);
                                                     }}
-                                                    className="w-6 h-6 rounded-full border border-gray-200 flex items-center justify-center text-gray-500 hover:border-emerald-500"
+                                                    className="w-6 h-6 rounded-full border border-gray-200 dark:border-slate-700 flex items-center justify-center text-gray-500 dark:text-gray-400 hover:border-emerald-500"
                                                 >-</button>
-                                                <span className="text-xs font-bold w-4 text-center">{buyNowProduct.quantity || 1}</span>
+                                                <span className="text-xs font-bold w-4 text-center dark:text-gray-200">{buyNowProduct.quantity || 1}</span>
                                                 <button
                                                     onClick={() => {
                                                         const newQty = (buyNowProduct.quantity || 1) + 1;
                                                         setBuyNowProduct({ ...buyNowProduct, quantity: newQty });
                                                         handleSelectAddress(selectedAddress, [{ productId: buyNowProduct.id, quantity: newQty }]);
                                                     }}
-                                                    className="w-6 h-6 rounded-full border border-gray-200 flex items-center justify-center text-gray-500 hover:border-emerald-500"
+                                                    className="w-6 h-6 rounded-full border border-gray-200 dark:border-slate-700 flex items-center justify-center text-gray-500 dark:text-gray-400 hover:border-emerald-500"
                                                 >+</button>
                                             </div>
                                         </div>
@@ -690,8 +690,8 @@ const CartSidebar = () => {
                                             u => u.productId === item.productId && (!u.variantId || u.variantId === item.variantId)
                                         );
                                         return (
-                                            <div key={item.id || idx} className={`flex items-center gap-3 bg-gray-50 rounded-lg p-2 ${isUnavailable ? 'opacity-50 grayscale' : ''}`}>
-                                                <div className="w-10 h-10 bg-white rounded flex items-center justify-center flex-shrink-0 relative">
+                                            <div key={item.id || idx} className={`flex items-center gap-3 bg-gray-50 dark:bg-slate-900/50 rounded-lg p-2 ${isUnavailable ? 'opacity-50 grayscale' : ''}`}>
+                                                <div className="w-10 h-10 bg-white dark:bg-slate-800 rounded flex items-center justify-center flex-shrink-0 relative">
                                                     <img src={item.image || item.images?.[0]} alt={item.name} className="w-8 h-8 object-contain" />
                                                     {isUnavailable && (
                                                         <div className="absolute inset-0 flex items-center justify-center">
@@ -700,16 +700,16 @@ const CartSidebar = () => {
                                                     )}
                                                 </div>
                                                 <div className="flex-1 min-w-0">
-                                                    <p className="text-xs font-medium text-gray-900 truncate">{item.name}</p>
+                                                    <p className="text-xs font-medium text-gray-900 dark:text-gray-100 truncate">{item.name}</p>
                                                     {item.variantLabel && (
-                                                        <p className="text-[10px] text-emerald-600 font-medium">{item.variantLabel}</p>
+                                                        <p className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium">{item.variantLabel}</p>
                                                     )}
-                                                    <p className="text-[10px] text-gray-500">
+                                                    <p className="text-[10px] text-gray-500 dark:text-gray-400">
                                                         {item.quantity} × ₹{parsePrice(item.price)}
                                                     </p>
                                                 </div>
                                                 <div className="text-right">
-                                                    <span className={`text-xs font-bold ${isUnavailable ? 'text-gray-400 line-through' : 'text-gray-900'}`}>
+                                                    <span className={`text-xs font-bold ${isUnavailable ? 'text-gray-400 dark:text-gray-600 line-through' : 'text-gray-900 dark:text-gray-100'}`}>
                                                         ₹{(parsePrice(item.price) * item.quantity).toFixed(0)}
                                                     </span>
                                                     {isUnavailable && <p className="text-[9px] text-red-500 font-bold uppercase">Out of Stock</p>}
@@ -749,35 +749,35 @@ const CartSidebar = () => {
 
 
                         {/* ─ Price Breakdown (always use server preview when available) ─ */}
-                        <div className="bg-gray-50 rounded-xl p-3 space-y-1.5">
+                        <div className="bg-gray-50 dark:bg-slate-900/50 rounded-xl p-3 space-y-1.5">
                             {preview ? (
                                 <>
                                     <div className="flex justify-between text-xs">
-                                        <span className="text-gray-500">Subtotal</span>
-                                        <span>₹{preview.subtotal.toFixed(2)}</span>
+                                        <span className="text-gray-500 dark:text-gray-400">Subtotal</span>
+                                        <span className="text-gray-900 dark:text-gray-100">₹{preview.subtotal.toFixed(2)}</span>
                                     </div>
                                     <div className="flex justify-between text-xs">
-                                        <span className="text-gray-500">Delivery</span>
-                                        <span className={preview.deliveryFee === 0 ? 'text-emerald-600 font-bold' : ''}>
+                                        <span className="text-gray-500 dark:text-gray-400">Delivery</span>
+                                        <span className={preview.deliveryFee === 0 ? 'text-emerald-600 dark:text-emerald-400 font-bold' : 'text-gray-900 dark:text-gray-100'}>
                                             {preview.deliveryFee === 0 ? 'FREE' : `₹${preview.deliveryFee}`}
                                         </span>
                                     </div>
                                     <div className="flex justify-between text-xs">
-                                        <span className="text-gray-500">Tax</span>
-                                        <span>₹{preview.tax.toFixed(2)}</span>
+                                        <span className="text-gray-500 dark:text-gray-400">Tax</span>
+                                        <span className="text-gray-900 dark:text-gray-100">₹{preview.tax.toFixed(2)}</span>
                                     </div>
-                                    <div className="flex justify-between text-sm font-bold pt-1.5 border-t border-gray-200">
-                                        <span>Total</span>
-                                        <span className="text-emerald-600">₹{preview.total.toFixed(2)}</span>
+                                    <div className="flex justify-between text-sm font-bold pt-1.5 border-t border-gray-200 dark:border-slate-700">
+                                        <span className="text-gray-900 dark:text-gray-100">Total</span>
+                                        <span className="text-emerald-600 dark:text-emerald-400">₹{preview.total.toFixed(2)}</span>
                                     </div>
                                 </>
                             ) : (
                                 <>
                                     <div className="flex justify-between text-xs">
-                                        <span className="text-gray-500">Subtotal</span>
-                                        <span>₹{subTotal.toFixed(2)}</span>
+                                        <span className="text-gray-500 dark:text-gray-400">Subtotal</span>
+                                        <span className="text-gray-900 dark:text-gray-100">₹{subTotal.toFixed(2)}</span>
                                     </div>
-                                    <div className="flex justify-between text-xs text-gray-400 italic">
+                                    <div className="flex justify-between text-xs text-gray-400 dark:text-gray-500 italic">
                                         <span>Select an address for exact totals</span>
                                     </div>
                                 </>
@@ -793,16 +793,16 @@ const CartSidebar = () => {
                                     type="button"
                                     onClick={() => { setPaymentMethod('COD'); logEvent('payment_method_selected', { method: 'COD' }).catch(() => {}); }}
                                     className={`w-full flex items-center gap-3 p-3 rounded-xl border-2 transition-all ${paymentMethod === 'COD'
-                                        ? 'border-emerald-500 bg-emerald-50'
-                                        : 'border-gray-100 bg-white hover:border-emerald-200'
+                                        ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20'
+                                        : 'border-gray-100 dark:border-slate-800 bg-white dark:bg-slate-800 hover:border-emerald-200 dark:hover:border-emerald-900'
                                         }`}
                                 >
-                                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${paymentMethod === 'COD' ? 'border-emerald-500' : 'border-gray-300'}`}>
+                                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${paymentMethod === 'COD' ? 'border-emerald-500' : 'border-gray-300 dark:border-slate-600'}`}>
                                         {paymentMethod === 'COD' && <div className="w-2.5 h-2.5 rounded-full bg-emerald-500" />}
                                     </div>
                                     <div className="flex-1 text-left">
-                                        <p className="text-sm font-medium text-gray-900">Cash on Delivery</p>
-                                        <p className="text-[10px] text-gray-500">Pay when your order arrives</p>
+                                        <p className="text-sm font-medium text-gray-900 dark:text-gray-100">Cash on Delivery</p>
+                                        <p className="text-[10px] text-gray-500 dark:text-gray-400">Pay when your order arrives</p>
                                     </div>
                                     <span className="text-lg">💵</span>
                                 </button>
@@ -812,16 +812,16 @@ const CartSidebar = () => {
                                     type="button"
                                     onClick={() => { setPaymentMethod('RAZORPAY'); logEvent('payment_method_selected', { method: 'RAZORPAY' }).catch(() => {}); }}
                                     className={`w-full flex items-center gap-3 p-3 rounded-xl border-2 transition-all ${paymentMethod === 'RAZORPAY'
-                                        ? 'border-emerald-500 bg-emerald-50'
-                                        : 'border-gray-100 bg-white hover:border-emerald-200'
+                                        ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20'
+                                        : 'border-gray-100 dark:border-slate-800 bg-white dark:bg-slate-800 hover:border-emerald-200 dark:hover:border-emerald-900'
                                         }`}
                                 >
-                                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${paymentMethod === 'RAZORPAY' ? 'border-emerald-500' : 'border-gray-300'}`}>
+                                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${paymentMethod === 'RAZORPAY' ? 'border-emerald-500' : 'border-gray-300 dark:border-slate-600'}`}>
                                         {paymentMethod === 'RAZORPAY' && <div className="w-2.5 h-2.5 rounded-full bg-emerald-500" />}
                                     </div>
                                     <div className="flex-1 text-left">
-                                        <p className="text-sm font-medium text-gray-900">Online Payment</p>
-                                        <p className="text-[10px] text-gray-500">Razorpay, UPI, Cards, Netbanking</p>
+                                        <p className="text-sm font-medium text-gray-900 dark:text-gray-100">Online Payment</p>
+                                        <p className="text-[10px] text-gray-500 dark:text-gray-400">Razorpay, UPI, Cards, Netbanking</p>
                                     </div>
                                     <span className="text-lg">💳</span>
                                 </button>
@@ -831,7 +831,7 @@ const CartSidebar = () => {
 
                     {/* ─ Place Order Button (sticky footer) ─ */}
                     {selectedAddress && (
-                        <div className="border-t border-gray-100 p-4 bg-white">
+                        <div className="border-t border-gray-100 dark:border-slate-800 p-4 bg-white dark:bg-slate-900">
                             <InteractiveHoverButton
                                 onClick={handlePlaceOrder}
                                 disabled={placing || previewLoading || !preview}
@@ -854,8 +854,8 @@ const CartSidebar = () => {
         return (
             <div className="flex-1 overflow-y-auto min-h-0 p-4 space-y-4">
                 {cart.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center h-full text-gray-500">
-                        <svg className="w-16 h-16 mb-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <div className="flex flex-col items-center justify-center h-full text-gray-500 dark:text-gray-400">
+                        <svg className="w-16 h-16 mb-4 text-gray-300 dark:text-gray-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
                         </svg>
                         <p>Your cart is empty.</p>
@@ -869,16 +869,16 @@ const CartSidebar = () => {
                 ) : (
                     Object.entries(groupedCart).map(([storeName, items]) => (
                         <div key={storeName} className="mb-4">
-                            <h4 className="text-xs font-bold uppercase text-gray-500 mb-2 px-1">{storeName}</h4>
+                            <h4 className="text-xs font-bold uppercase text-gray-500 dark:text-gray-400 mb-2 px-1">{storeName}</h4>
                             <div className="space-y-2">
                                 {items.map((item) => (
-                                    <div key={item.id} className="flex gap-3 bg-white border border-gray-100 rounded-lg p-2 shadow-sm">
-                                        <div className="w-16 h-16 bg-gray-50 rounded-md flex items-center justify-center flex-shrink-0">
+                                    <div key={item.id} className="flex gap-3 bg-white dark:bg-slate-800 border border-gray-100 dark:border-slate-700 rounded-lg p-2 shadow-sm">
+                                        <div className="w-16 h-16 bg-gray-50 dark:bg-slate-900 rounded-md flex items-center justify-center flex-shrink-0">
                                             <img src={item.image || item.images?.[0]} alt={item.name} className="w-12 h-12 object-contain" />
                                         </div>
                                         <div className="flex-1 min-w-0">
-                                            <h4 className="text-sm font-medium text-gray-900 truncate">{item.name}</h4>
-                                            <p className="text-xs text-gray-500 mt-1">₹{parsePrice(item.price)}</p>
+                                            <h4 className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{item.name}</h4>
+                                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">₹{parsePrice(item.price)}</p>
                                             {/* Custom fields badges */}
                                             {(item.selectedSize || item.variantLabel || item.userUploadUrls?.length > 0) && (
                                                 <div className="flex flex-wrap gap-1 mt-1">
@@ -900,14 +900,14 @@ const CartSidebar = () => {
                                                 </div>
                                             )}
                                             <div className="flex items-center justify-between mt-2">
-                                                <div className="flex items-center border border-gray-200 rounded">
+                                                <div className="flex items-center border border-gray-200 dark:border-slate-700 rounded">
                                                     <RippleButton
-                                                        className="px-2 py-0.5 text-gray-500 hover:bg-gray-100"
+                                                        className="px-2 py-0.5 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-slate-700"
                                                         onClick={() => updateQuantity(item.id, -1, item.variantId)}
                                                     >-</RippleButton>
-                                                    <span className="px-2 text-xs font-medium">{item.quantity}</span>
+                                                    <span className="px-2 text-xs font-medium dark:text-gray-200">{item.quantity}</span>
                                                     <RippleButton
-                                                        className="px-2 py-0.5 text-gray-500 hover:bg-gray-100"
+                                                        className="px-2 py-0.5 text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-slate-700"
                                                         onClick={() => updateQuantity(item.id, 1, item.variantId)}
                                                     >+</RippleButton>
                                                 </div>
@@ -939,9 +939,9 @@ const CartSidebar = () => {
         <div className="fixed inset-0 z-[100] overflow-hidden">
             <div className="absolute inset-0 bg-black bg-opacity-50 transition-opacity" onClick={handleClose} />
 
-            <div className="absolute inset-y-0 right-0 w-full md:max-w-sm bg-white shadow-xl flex flex-col transform transition-transform duration-300 ease-in-out translate-x-0">
+            <div className="absolute inset-y-0 right-0 w-full md:max-w-sm bg-white dark:bg-[var(--color-bg-surface)] shadow-xl flex flex-col transform transition-transform duration-300 ease-in-out translate-x-0">
                 {/* Header */}
-                <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+                <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-slate-800">
                     <div className="flex items-center gap-2">
                         {step === 'checkout' && (
                             <RippleButton
@@ -952,14 +952,14 @@ const CartSidebar = () => {
                                         setStep('cart'); setSelectedAddress(null); setPreview(null); 
                                     }
                                 }}
-                                className="p-1 hover:bg-gray-100 rounded-full"
+                                className="p-1 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-full"
                             >
-                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <svg className="w-5 h-5 text-gray-900 dark:text-gray-100" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
                                 </svg>
                             </RippleButton>
                         )}
-                        <h2 className="text-lg font-bold text-gray-900">
+                        <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">
                             {step === 'cart' && `Your Cart (${cart.length})`}
                             {step === 'checkout' && 'Checkout'}
                             {step === 'success' && 'Order Confirmed'}
@@ -967,7 +967,7 @@ const CartSidebar = () => {
                     </div>
                     <RippleButton
                         onClick={handleClose}
-                        className="p-2 -mr-2 text-gray-400 hover:text-gray-500"
+                        className="p-2 -mr-2 text-gray-400 hover:text-gray-500 dark:text-gray-500 dark:hover:text-gray-400"
                     >
                         <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -976,7 +976,7 @@ const CartSidebar = () => {
                 </div>
 
                 {error && (
-                    <div className="mx-4 mt-3 bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-4 py-3">
+                    <div className="mx-4 mt-3 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 text-sm rounded-xl px-4 py-3">
                         {error}
                     </div>
                 )}
@@ -985,35 +985,35 @@ const CartSidebar = () => {
 
                 {/* Cart footer */}
                 {step === 'cart' && cart.length > 0 && (
-                    <div className="border-t border-gray-100 p-4 bg-gray-50 space-y-2">
+                    <div className="border-t border-gray-100 dark:border-slate-800 p-4 bg-gray-50 dark:bg-slate-900/50 space-y-2">
                         <div className="flex justify-between items-center text-sm">
-                            <span className="text-gray-600">Subtotal</span>
-                            <span className="font-medium text-gray-900">₹{displaySubtotal.toFixed(2)}</span>
+                            <span className="text-gray-600 dark:text-gray-400">Subtotal</span>
+                            <span className="font-medium text-gray-900 dark:text-gray-100">₹{displaySubtotal.toFixed(2)}</span>
                         </div>
                         <div className="flex justify-between items-center text-sm">
                             <div>
-                                <span className="text-gray-600">Delivery Fee</span>
-                                <p className="text-[10px] text-emerald-600 font-medium">Free for new users!</p>
+                                <span className="text-gray-600 dark:text-gray-400">Delivery Fee</span>
+                                <p className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium">Free for new users!</p>
                             </div>
                             <div className="flex items-center gap-2">
                                 {displayDelivery === 0 ? (
                                     <>
-                                        <span className="text-gray-400 line-through text-xs">₹{DELIVERY_FEE}</span>
-                                        <span className="text-green-600 font-bold">FREE</span>
+                                        <span className="text-gray-400 dark:text-gray-600 line-through text-xs">₹{DELIVERY_FEE}</span>
+                                        <span className="text-green-600 dark:text-green-400 font-bold">FREE</span>
                                     </>
                                 ) : (
-                                    <span className="font-medium text-gray-900">₹{displayDelivery}</span>
+                                    <span className="font-medium text-gray-900 dark:text-gray-100">₹{displayDelivery}</span>
                                 )}
                             </div>
                         </div>
                         <div className="flex justify-between items-center text-sm">
-                            <span className="text-gray-600">Est. Tax</span>
-                            <span className="font-medium text-gray-900">₹{displayTax.toFixed(2)}</span>
+                            <span className="text-gray-600 dark:text-gray-400">Est. Tax</span>
+                            <span className="font-medium text-gray-900 dark:text-gray-100">₹{displayTax.toFixed(2)}</span>
                         </div>
-                        <div className="border-t border-gray-200 my-2 pt-2 flex justify-between items-center">
+                        <div className="border-t border-gray-200 dark:border-slate-700 my-2 pt-2 flex justify-between items-center">
                             <div>
-                                <span className="text-base font-bold text-gray-900">Est. Total</span>
-                                <p className="text-[10px] text-gray-400">Exact amount confirmed at checkout</p>
+                                <span className="text-base font-bold text-gray-900 dark:text-gray-100">Est. Total</span>
+                                <p className="text-[10px] text-gray-400 dark:text-gray-500">Exact amount confirmed at checkout</p>
                             </div>
                             <span className="text-xl font-bold text-ud-primary">₹{displayTotal.toFixed(2)}</span>
                         </div>

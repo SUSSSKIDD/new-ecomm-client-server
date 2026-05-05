@@ -105,7 +105,7 @@ const DeliveryParcelCard = memo(({ assignment, onAccept, onReject, onComplete })
 
     return (
         <>
-            <div className="bg-white rounded-2xl shadow-lg shadow-gray-200/50 overflow-hidden border border-gray-100">
+            <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-lg shadow-gray-200/50 dark:shadow-none overflow-hidden border border-gray-100 dark:border-slate-700">
                 {/* Header */}
                 <div className={`px-4 py-3 flex items-center justify-between ${isAccepted
                     ? 'bg-gradient-to-r from-purple-500 to-violet-600'
@@ -128,41 +128,41 @@ const DeliveryParcelCard = memo(({ assignment, onAccept, onReject, onComplete })
                 {/* Pending badge */}
                 {!isAccepted && (
                     <div className="px-4 pt-3">
-                        <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                        <div className="flex items-center gap-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-900/50 rounded-lg px-3 py-2">
                             <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
-                            <span className="text-xs font-medium text-amber-700">Waiting for your response</span>
+                            <span className="text-xs font-medium text-amber-700 dark:text-amber-400">Waiting for your response</span>
                         </div>
                     </div>
                 )}
 
                 {/* Parcel details */}
-                <div className="px-4 py-3 border-b border-gray-100">
-                    <p className="text-xs font-bold text-gray-500 uppercase mb-2">Parcel Details</p>
+                <div className="px-4 py-3 border-b border-gray-100 dark:border-slate-700">
+                    <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase mb-2">Parcel Details</p>
                     <div className="flex gap-3 text-sm">
-                        <span className="bg-purple-50 text-purple-700 px-2 py-1 rounded-lg text-xs font-medium">
+                        <span className="bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-400 px-2 py-1 rounded-lg text-xs font-medium">
                             {getCategoryLabel(parcelOrder.category)}
                         </span>
-                        <span className="bg-gray-50 text-gray-700 px-2 py-1 rounded-lg text-xs font-medium">
+                        <span className="bg-gray-50 dark:bg-slate-700 text-gray-700 dark:text-gray-300 px-2 py-1 rounded-lg text-xs font-medium">
                             {parcelOrder.weight} kg
                         </span>
                     </div>
                     {parcelOrder.pickupTime && (
-                        <div className="mt-2 flex gap-4 text-xs text-gray-500">
-                            <span>Pickup: <b className="text-gray-700">{formatDate(parcelOrder.pickupTime)} {formatTime(parcelOrder.pickupTime)}</b></span>
-                            <span>Drop: <b className="text-gray-700">{formatDate(parcelOrder.dropTime)} {formatTime(parcelOrder.dropTime)}</b></span>
+                        <div className="mt-2 flex gap-4 text-xs text-gray-500 dark:text-gray-400">
+                            <span>Pickup: <b className="text-gray-700 dark:text-gray-300">{formatDate(parcelOrder.pickupTime)} {formatTime(parcelOrder.pickupTime)}</b></span>
+                            <span>Drop: <b className="text-gray-700 dark:text-gray-300">{formatDate(parcelOrder.dropTime)} {formatTime(parcelOrder.dropTime)}</b></span>
                         </div>
                     )}
                 </div>
 
                 {/* Pickup Address */}
-                <div className="px-4 py-3 border-b border-gray-100">
-                    <p className="text-xs font-bold text-emerald-600 uppercase mb-1">Pickup Address</p>
-                    <p className="text-sm text-gray-700">
+                <div className="px-4 py-3 border-b border-gray-100 dark:border-slate-700">
+                    <p className="text-xs font-bold text-emerald-600 dark:text-emerald-400 uppercase mb-1">Pickup Address</p>
+                    <p className="text-sm text-gray-700 dark:text-gray-300">
                         {pickup.houseNo && `${pickup.houseNo}, `}
                         {pickup.street}, {pickup.city} {pickup.pincode}
                     </p>
                     {pickup.landmark && (
-                        <p className="text-xs text-gray-500 mt-0.5">Near: {pickup.landmark}</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Near: {pickup.landmark}</p>
                     )}
                     <RippleButton
                         onClick={() => openInMaps(pickup)}
@@ -177,14 +177,14 @@ const DeliveryParcelCard = memo(({ assignment, onAccept, onReject, onComplete })
                 </div>
 
                 {/* Drop Address */}
-                <div className="px-4 py-3 border-b border-gray-100">
-                    <p className="text-xs font-bold text-red-500 uppercase mb-1">Drop Address</p>
-                    <p className="text-sm text-gray-700">
+                <div className="px-4 py-3 border-b border-gray-100 dark:border-slate-700">
+                    <p className="text-xs font-bold text-red-500 dark:text-red-400 uppercase mb-1">Drop Address</p>
+                    <p className="text-sm text-gray-700 dark:text-gray-300">
                         {drop.houseNo && `${drop.houseNo}, `}
                         {drop.street}, {drop.city} {drop.pincode}
                     </p>
                     {drop.landmark && (
-                        <p className="text-xs text-gray-500 mt-0.5">Near: {drop.landmark}</p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Near: {drop.landmark}</p>
                     )}
                     <RippleButton
                         onClick={() => openInMaps(drop)}
@@ -222,7 +222,7 @@ const DeliveryParcelCard = memo(({ assignment, onAccept, onReject, onComplete })
                             <RippleButton
                                 onClick={handleNotDelivered}
                                 disabled={!!actionLoading}
-                                className="flex-1 py-2.5 border-2 border-red-200 text-red-600 rounded-xl font-bold text-sm hover:bg-red-50 transition-colors disabled:opacity-50"
+                                className="flex-1 py-2.5 border-2 border-red-200 dark:border-red-900/30 text-red-600 dark:text-red-400 rounded-xl font-bold text-sm hover:bg-red-50 dark:hover:bg-red-900/40 transition-colors disabled:opacity-50"
                             >
                                 {actionLoading === 'not_delivered' ? 'Updating...' : 'Not Delivered'}
                             </RippleButton>
@@ -241,15 +241,15 @@ const DeliveryParcelCard = memo(({ assignment, onAccept, onReject, onComplete })
             {/* PIN Verification Modal */}
             {showPinModal && (
                 <div id={`parcel-pin-modal-overlay-${parcelOrder.id}`} className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-                    <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden animate-in fade-in zoom-in duration-200">
+                    <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl w-full max-w-sm overflow-hidden animate-in fade-in zoom-in duration-200">
                         <div className="p-6">
-                            <div className="w-12 h-12 bg-purple-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                                <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <div className="w-12 h-12 bg-purple-100 dark:bg-purple-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
+                                <svg className="w-6 h-6 text-purple-600 dark:text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                                 </svg>
                             </div>
-                            <h3 className="text-lg font-bold text-gray-900 text-center mb-1">Verify Delivery PIN</h3>
-                            <p className="text-sm text-gray-500 text-center mb-6">Ask the customer for the 4-digit PIN displayed on their parcel booking screen.</p>
+                            <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 text-center mb-1">Verify Delivery PIN</h3>
+                            <p className="text-sm text-gray-500 dark:text-gray-400 text-center mb-6">Ask the customer for the 4-digit PIN displayed on their parcel booking screen.</p>
                             
                             <div className="flex justify-center gap-3 mb-6">
                                 {[0, 1, 2, 3].map((i) => (
@@ -283,8 +283,8 @@ const DeliveryParcelCard = memo(({ assignment, onAccept, onReject, onComplete })
                                                 if (prev) prev.focus();
                                             }
                                         }}
-                                        className={`w-12 h-14 text-center text-2xl font-bold bg-gray-50 border-2 rounded-xl focus:ring-2 focus:outline-none transition-all ${
-                                            pinError ? 'border-red-300 focus:ring-red-400' : 'border-gray-200 focus:ring-purple-400 focus:border-purple-400'
+                                        className={`w-12 h-14 text-center text-2xl font-bold bg-gray-50 dark:bg-slate-900 border-2 rounded-xl focus:ring-2 focus:outline-none transition-all ${
+                                            pinError ? 'border-red-300 focus:ring-red-400' : 'border-gray-200 dark:border-slate-700 focus:ring-purple-400 focus:border-purple-400'
                                         }`}
                                     />
                                 ))}
@@ -297,7 +297,7 @@ const DeliveryParcelCard = memo(({ assignment, onAccept, onReject, onComplete })
                             <div className="flex gap-2">
                                 <RippleButton
                                     onClick={() => setShowPinModal(false)}
-                                    className="flex-1 py-3 border-2 border-gray-100 text-gray-500 rounded-xl font-bold text-sm hover:bg-gray-50"
+                                    className="flex-1 py-3 border-2 border-gray-100 dark:border-slate-700 text-gray-500 dark:text-gray-400 rounded-xl font-bold text-sm hover:bg-gray-50 dark:hover:bg-slate-700"
                                 >
                                     Cancel
                                 </RippleButton>
@@ -317,12 +317,12 @@ const DeliveryParcelCard = memo(({ assignment, onAccept, onReject, onComplete })
             {/* NOT_DELIVERED Reason Modal */}
             {showReasonModal && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-                    <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden">
+                    <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl w-full max-w-sm overflow-hidden">
                         <div className="p-5">
-                            <h3 className="text-lg font-bold text-gray-900 mb-1">Why wasn't this delivered?</h3>
-                            <p className="text-sm text-gray-500 mb-4">Please provide a reason. This will be visible to the admin.</p>
+                            <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-1">Why wasn't this delivered?</h3>
+                            <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">Please provide a reason. This will be visible to the admin.</p>
                             <textarea
-                                className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-red-400 focus:border-red-400 outline-none transition-all text-sm resize-none"
+                                className="w-full px-3 py-2.5 bg-gray-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-red-400 focus:border-red-400 outline-none transition-all text-sm resize-none text-gray-900 dark:text-gray-100"
                                 rows={3}
                                 placeholder="e.g. Customer not available, wrong address, refused to accept..."
                                 value={reason}
@@ -339,7 +339,7 @@ const DeliveryParcelCard = memo(({ assignment, onAccept, onReject, onComplete })
                             <div className="flex gap-2 mt-4">
                                 <RippleButton
                                     onClick={() => setShowReasonModal(false)}
-                                    className="flex-1 py-2.5 border-2 border-gray-200 text-gray-600 rounded-xl font-bold text-sm hover:bg-gray-50 transition-colors"
+                                    className="flex-1 py-2.5 border-2 border-gray-200 dark:border-slate-700 text-gray-600 dark:text-gray-400 rounded-xl font-bold text-sm hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors"
                                 >
                                     Cancel
                                 </RippleButton>

@@ -1,18 +1,18 @@
 import { RippleButton } from '../ui/ripple-button';
 
 const DeliveryStatusToggle = ({ status, onToggle, loading }) => {
-    let badgeColor = 'bg-gray-200 text-gray-700';
+    let badgeColor = 'bg-gray-200 dark:bg-slate-700 text-gray-700 dark:text-gray-300';
     let label = 'Off Duty';
     let btnText = 'Go Online';
     let nextStatus = 'FREE';
 
     if (status === 'FREE') {
-        badgeColor = 'bg-emerald-100 text-emerald-700';
+        badgeColor = 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400';
         label = 'Available';
         btnText = 'Go Off Duty';
         nextStatus = 'DUTY_OFF';
     } else if (status === 'BUSY') {
-        badgeColor = 'bg-orange-100 text-orange-700';
+        badgeColor = 'bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-400';
         label = 'Busy - Delivering';
         btnText = 'Delivering...';
         nextStatus = null;

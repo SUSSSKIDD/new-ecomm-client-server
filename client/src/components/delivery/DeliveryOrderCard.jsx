@@ -97,7 +97,7 @@ const DeliveryOrderCard = memo(({ assignment, onAccept, onReject, onComplete }) 
 
     return (
         <>
-            <div className="bg-white rounded-2xl shadow-lg shadow-gray-200/50 overflow-hidden border border-gray-100">
+            <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-lg shadow-gray-200/50 dark:shadow-none overflow-hidden border border-gray-100 dark:border-slate-700">
                 {/* Header */}
                 <div className={`px-4 py-3 flex items-center justify-between ${isAccepted
                     ? 'bg-gradient-to-r from-emerald-500 to-teal-600'
@@ -118,25 +118,25 @@ const DeliveryOrderCard = memo(({ assignment, onAccept, onReject, onComplete }) 
                 {/* Pending badge */}
                 {!isAccepted && (
                     <div className="px-4 pt-3">
-                        <div className="flex items-center gap-2 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                        <div className="flex items-center gap-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-900/50 rounded-lg px-3 py-2">
                             <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
-                            <span className="text-xs font-medium text-amber-700">Waiting for your response</span>
+                            <span className="text-xs font-medium text-amber-700 dark:text-amber-400">Waiting for your response</span>
                         </div>
                     </div>
                 )}
 
                 {/* Items */}
-                <div className="px-4 py-3 border-b border-gray-100">
-                    <p className="text-xs font-bold text-gray-500 uppercase mb-2">
+                <div className="px-4 py-3 border-b border-gray-100 dark:border-slate-700">
+                    <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase mb-2">
                         {order.items?.length || 0} Items
                     </p>
                     <div className="space-y-1">
                         {order.items?.map((item) => (
                             <div key={item.id} className="flex justify-between text-sm">
-                                <span className="text-gray-700 truncate flex-1 mr-2">
+                                <span className="text-gray-700 dark:text-gray-300 truncate flex-1 mr-2">
                                     {item.name} × {item.quantity}
                                 </span>
-                                <span className="text-gray-900 font-medium">
+                                <span className="text-gray-900 dark:text-gray-100 font-medium">
                                     ₹{item.total}
                                 </span>
                             </div>
@@ -146,11 +146,11 @@ const DeliveryOrderCard = memo(({ assignment, onAccept, onReject, onComplete }) 
 
                 {/* Pickup Store */}
                 {assignment.primaryStore && (
-                    <div className="px-4 py-3 border-b border-gray-100">
-                        <p className="text-xs font-bold text-emerald-600 uppercase mb-1">📦 Pickup From</p>
-                        <p className="text-sm font-medium text-gray-800">{assignment.primaryStore.name}</p>
+                    <div className="px-4 py-3 border-b border-gray-100 dark:border-slate-700">
+                        <p className="text-xs font-bold text-emerald-600 dark:text-emerald-400 uppercase mb-1">📦 Pickup From</p>
+                        <p className="text-sm font-medium text-gray-800 dark:text-gray-200">{assignment.primaryStore.name}</p>
                         {assignment.primaryStore.address && (
-                            <p className="text-xs text-gray-500 mt-0.5">{assignment.primaryStore.address}</p>
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{assignment.primaryStore.address}</p>
                         )}
                         {assignment.primaryStore.lat && assignment.primaryStore.lng && (
                             <a
@@ -170,11 +170,11 @@ const DeliveryOrderCard = memo(({ assignment, onAccept, onReject, onComplete }) 
                 )}
 
                 {/* Delivery Address */}
-                <div className="px-4 py-3 border-b border-gray-100">
-                    <p className="text-xs font-bold text-red-500 uppercase mb-1">🏠 Deliver To</p>
-                    <p className="text-sm text-gray-700">
+                <div className="px-4 py-3 border-b border-gray-100 dark:border-slate-700">
+                    <p className="text-xs font-bold text-red-500 dark:text-red-400 uppercase mb-1">🏠 Deliver To</p>
+                    <p className="text-sm text-gray-700 dark:text-gray-300">
                         {order.deliveryAddress?.recipientName && (
-                            <span className="font-medium text-gray-900">{order.deliveryAddress.recipientName}<br /></span>
+                            <span className="font-medium text-gray-900 dark:text-gray-100">{order.deliveryAddress.recipientName}<br /></span>
                         )}
                         {order.deliveryAddress?.houseNo && `${order.deliveryAddress.houseNo}, `}
                         {order.deliveryAddress?.flatBuilding && `${order.deliveryAddress.flatBuilding}, `}
@@ -182,12 +182,12 @@ const DeliveryOrderCard = memo(({ assignment, onAccept, onReject, onComplete }) 
                         {order.deliveryAddress?.zipCode}
                     </p>
                     {order.deliveryAddress?.landmark && (
-                        <p className="text-xs text-gray-500 mt-1">
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                             Near: {order.deliveryAddress.landmark}
                         </p>
                     )}
                     {order.deliveryAddress?.recipientPhone && (
-                        <p className="text-xs text-gray-500 mt-1">
+                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                             Phone: {order.deliveryAddress.recipientPhone}
                         </p>
                     )}
@@ -227,7 +227,7 @@ const DeliveryOrderCard = memo(({ assignment, onAccept, onReject, onComplete }) 
                             <RippleButton
                                 onClick={handleNotDelivered}
                                 disabled={!!actionLoading}
-                                className="flex-1 py-2.5 border-2 border-red-200 text-red-600 rounded-xl font-bold text-sm hover:bg-red-50 transition-colors disabled:opacity-50"
+                                className="flex-1 py-2.5 border-2 border-red-200 dark:border-red-900/30 text-red-600 dark:text-red-400 rounded-xl font-bold text-sm hover:bg-red-50 dark:hover:bg-red-900/40 transition-colors disabled:opacity-50"
                             >
                                 {actionLoading === 'not_delivered' ? 'Updating...' : 'Not Delivered'}
                             </RippleButton>
@@ -246,15 +246,15 @@ const DeliveryOrderCard = memo(({ assignment, onAccept, onReject, onComplete }) 
             {/* PIN Verification Modal */}
             {showPinModal && (
                 <div id={`pin-modal-overlay-${order.id}`} className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-                    <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden animate-in fade-in zoom-in duration-200">
+                    <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl w-full max-w-sm overflow-hidden animate-in fade-in zoom-in duration-200">
                         <div className="p-6">
-                            <div className="w-12 h-12 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                                <svg className="w-6 h-6 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <div className="w-12 h-12 bg-emerald-100 dark:bg-emerald-900/30 rounded-full flex items-center justify-center mx-auto mb-4">
+                                <svg className="w-6 h-6 text-emerald-600 dark:text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                                 </svg>
                             </div>
-                            <h3 className="text-lg font-bold text-gray-900 text-center mb-1">Verify Delivery PIN</h3>
-                            <p className="text-sm text-gray-500 text-center mb-6">Ask the customer for the 4-digit PIN displayed on their order screen.</p>
+                            <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 text-center mb-1">Verify Delivery PIN</h3>
+                            <p className="text-sm text-gray-500 dark:text-gray-400 text-center mb-6">Ask the customer for the 4-digit PIN displayed on their order screen.</p>
                             
                             <div className="flex justify-center gap-3 mb-6">
                                 {[0, 1, 2, 3].map((i) => (
@@ -288,8 +288,8 @@ const DeliveryOrderCard = memo(({ assignment, onAccept, onReject, onComplete }) 
                                                 if (prev) prev.focus();
                                             }
                                         }}
-                                        className={`w-12 h-14 text-center text-2xl font-bold bg-gray-50 border-2 rounded-xl focus:ring-2 focus:outline-none transition-all ${
-                                            pinError ? 'border-red-300 focus:ring-red-400' : 'border-gray-200 focus:ring-emerald-400 focus:border-emerald-400'
+                                        className={`w-12 h-14 text-center text-2xl font-bold bg-gray-50 dark:bg-slate-900 border-2 rounded-xl focus:ring-2 focus:outline-none transition-all ${
+                                            pinError ? 'border-red-300 focus:ring-red-400' : 'border-gray-200 dark:border-slate-700 focus:ring-emerald-400 focus:border-emerald-400'
                                         }`}
                                     />
                                 ))}
@@ -302,7 +302,7 @@ const DeliveryOrderCard = memo(({ assignment, onAccept, onReject, onComplete }) 
                             <div className="flex gap-2">
                                 <RippleButton
                                     onClick={() => setShowPinModal(false)}
-                                    className="flex-1 py-3 border-2 border-gray-100 text-gray-500 rounded-xl font-bold text-sm hover:bg-gray-50"
+                                    className="flex-1 py-3 border-2 border-gray-100 dark:border-slate-700 text-gray-500 dark:text-gray-400 rounded-xl font-bold text-sm hover:bg-gray-50 dark:hover:bg-slate-700"
                                 >
                                     Cancel
                                 </RippleButton>
@@ -322,12 +322,12 @@ const DeliveryOrderCard = memo(({ assignment, onAccept, onReject, onComplete }) 
             {/* NOT_DELIVERED Reason Modal */}
             {showReasonModal && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-                    <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden">
+                    <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-xl w-full max-w-sm overflow-hidden">
                         <div className="p-5">
-                            <h3 className="text-lg font-bold text-gray-900 mb-1">Why wasn't this delivered?</h3>
-                            <p className="text-sm text-gray-500 mb-4">Please provide a reason. This will be visible to the admin.</p>
+                            <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 mb-1">Why wasn't this delivered?</h3>
+                            <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">Please provide a reason. This will be visible to the admin.</p>
                             <textarea
-                                className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-red-400 focus:border-red-400 outline-none transition-all text-sm resize-none"
+                                className="w-full px-3 py-2.5 bg-gray-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-xl focus:ring-2 focus:ring-red-400 focus:border-red-400 outline-none transition-all text-sm resize-none text-gray-900 dark:text-gray-100"
                                 rows={3}
                                 placeholder="e.g. Customer not available, wrong address, refused to accept..."
                                 value={reason}
@@ -344,7 +344,7 @@ const DeliveryOrderCard = memo(({ assignment, onAccept, onReject, onComplete }) 
                             <div className="flex gap-2 mt-4">
                                 <RippleButton
                                     onClick={() => setShowReasonModal(false)}
-                                    className="flex-1 py-2.5 border-2 border-gray-200 text-gray-600 rounded-xl font-bold text-sm hover:bg-gray-50 transition-colors"
+                                    className="flex-1 py-2.5 border-2 border-gray-200 dark:border-slate-700 text-gray-600 dark:text-gray-400 rounded-xl font-bold text-sm hover:bg-gray-50 dark:hover:bg-slate-700 transition-colors"
                                 >
                                     Cancel
                                 </RippleButton>

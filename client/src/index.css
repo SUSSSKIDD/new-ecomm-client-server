@@ -3,22 +3,93 @@
 @tailwind utilities;
 
 @layer base {
-
   input,
   textarea,
   select {
-    @apply text-gray-900 bg-white;
+    @apply text-[var(--color-input-text)] bg-[var(--color-input-bg)];
   }
 }
 
 :root {
   --k-font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+  
+  /* Backgrounds */
+  --color-bg-page: #f7f7f8;
+  --color-bg-surface: #ffffff;
+  --color-bg-elevated: #ffffff;
+  --color-bg-subtle: #f3f4f6;
+
+  /* Text */
+  --color-text-primary: #111827;
+  --color-text-secondary: #6b7280;
+  --color-text-muted: #9ca3af;
+
+  /* Borders */
+  --color-border: #e5e7eb;
+  --color-border-subtle: #f3f4f6;
+
+  /* Brand */
+  --color-primary: #1e40af;
+  --color-primary-light: #eff6ff;
+  --color-secondary: #fbbf24;
+
+  /* Semantic */
+  --color-success: #059669;
+  --color-success-bg: #ecfdf5;
+  --color-error: #dc2626;
+  --color-error-bg: #fef2f2;
+  --color-warning: #d97706;
+  --color-warning-bg: #fffbeb;
+  --color-info: #2563eb;
+  --color-info-bg: #eff6ff;
+
+  /* Input */
+  --color-input-bg: #ffffff;
+  --color-input-text: #111827;
+  --color-input-border: #d1d5db;
+}
+
+.dark {
+  /* Backgrounds */
+  --color-bg-page: #0f172a;
+  --color-bg-surface: #1e293b;
+  --color-bg-elevated: #334155;
+  --color-bg-subtle: #1e293b;
+
+  /* Text */
+  --color-text-primary: #f1f5f9;
+  --color-text-secondary: #94a3b8;
+  --color-text-muted: #64748b;
+
+  /* Borders */
+  --color-border: #334155;
+  --color-border-subtle: #1e293b;
+
+  /* Brand — primary stays legible, slightly lighter */
+  --color-primary: #3b82f6;
+  --color-primary-light: #1e3a5f;
+  --color-secondary: #fbbf24;
+
+  /* Semantic — muted backgrounds, keep text bright */
+  --color-success: #34d399;
+  --color-success-bg: #064e3b;
+  --color-error: #f87171;
+  --color-error-bg: #450a0a;
+  --color-warning: #fbbf24;
+  --color-warning-bg: #451a03;
+  --color-info: #60a5fa;
+  --color-info-bg: #1e3a5f;
+
+  /* Input */
+  --color-input-bg: #1e293b;
+  --color-input-text: #f1f5f9;
+  --color-input-border: #475569;
 }
 
 body {
   margin: 0;
   font-family: var(--k-font-family);
-  background-color: #f7f7f8;
+  background-color: var(--color-bg-page);
   -webkit-font-smoothing: antialiased;
 }
 

@@ -69,13 +69,13 @@ const HomeCategoryList = () => {
         );
 
     return (
-        <div className="py-6 space-y-8 bg-gray-50">
+        <div className="py-6 space-y-8 bg-gray-50 dark:bg-slate-900">
             {filteredData.map((section, idx) => {
                 const isExpanded = expandedSections.has(section.title);
                 return (
                     <div key={idx} className="container mx-auto px-4 md:px-6">
                         <div className="flex items-center justify-between mb-4">
-                            <h3 className="text-lg md:text-xl font-bold text-gray-900">{section.title}</h3>
+                            <h3 className="text-lg md:text-xl font-bold text-gray-900 dark:text-gray-100">{section.title}</h3>
                             {section.items.length > 0 && (
                                 <button 
                                     onClick={() => toggleExpand(section.title)}
@@ -92,19 +92,19 @@ const HomeCategoryList = () => {
                                 : "flex overflow-x-auto pb-4 gap-4 no-scrollbar snap-x"
                             }>
                                 {section.items.map((item, i) => (
-                                    <div
-                                        key={i}
-                                        className={`${isExpanded ? 'w-full' : 'flex-shrink-0 w-28 md:w-40'} flex flex-col items-center gap-2 group cursor-pointer`}
-                                        onClick={() => handleSubCategoryClick(section, item)}
-                                    >
-                                        <div className={`${isExpanded ? 'w-full aspect-square' : 'w-28 h-28 md:w-40 md:h-40'} rounded-xl shadow-sm border flex items-center justify-center overflow-hidden transition-all border-gray-100 group-hover:shadow-md bg-white`}>
+                                        <div
+                                            key={i}
+                                            className={`${isExpanded ? 'w-full' : 'flex-shrink-0 w-28 md:w-40'} flex flex-col items-center gap-2 group cursor-pointer`}
+                                            onClick={() => handleSubCategoryClick(section, item)}
+                                        >
+                                            <div className={`${isExpanded ? 'w-full aspect-square' : 'w-28 h-28 md:w-40 md:h-40'} rounded-xl shadow-sm border flex items-center justify-center overflow-hidden transition-all border-gray-100 dark:border-slate-800 group-hover:shadow-md bg-white dark:bg-slate-800`}>
                                             {bannerImages[section.storeType]?.[item] ? (
                                                 <img src={bannerImages[section.storeType][item]} alt={item} className="w-full h-full object-cover" />
                                             ) : (
-                                                <span className="text-4xl font-black select-none text-gray-200">{item.charAt(0)}</span>
+                                                <span className="text-4xl font-black select-none text-gray-200 dark:text-gray-700">{item.charAt(0)}</span>
                                             )}
                                         </div>
-                                        <span className={`text-[10px] md:text-sm font-medium text-center leading-tight transition-colors text-gray-700 group-hover:text-ud-primary ${isExpanded ? 'truncate w-full px-1' : ''}`}>
+                                        <span className={`text-[10px] md:text-sm font-medium text-center leading-tight transition-colors text-gray-700 dark:text-gray-400 group-hover:text-ud-primary ${isExpanded ? 'truncate w-full px-1' : ''}`}>
                                             {item}
                                         </span>
                                     </div>
