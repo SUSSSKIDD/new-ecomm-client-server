@@ -28,5 +28,29 @@ server/test_dl.jpeg
 server/download_item.sh
 server/download_media.sh
 appcommands.md
-app/user-android/app/google-services.json
-app/delivery-android/app/google-services.json
+# Android / Gradle
+**/build/
+.gradle/
+**/local.properties
+*.apk
+*.aar
+*.jks
+*.keystore
+**/google-services.json
+**/*.flat
+**/*.flat.bin
+
+# Node.js
+**/node_modules/
+dist/
+build/
+.npm
+.eslintcache
+
+# Project specific symlinks/logs
+app/node_modules
+*.log
+capacitor-cordova-android-plugins/
+**/app/src/main/assets/public/
+**/app/src/main/assets/capacitor.config.json
+**/app/src/main/assets/capacitor.plugins.json
