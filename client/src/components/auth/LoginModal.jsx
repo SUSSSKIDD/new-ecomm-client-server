@@ -1,5 +1,6 @@
 import { RippleButton } from '../ui/ripple-button';
 import { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import axios from 'axios';
 import PropTypes from 'prop-types';
@@ -8,6 +9,7 @@ const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
 const LoginModal = ({ isOpen, onClose }) => {
     const { sendOtp, verifyOtp, token, updateUser } = useAuth();
+    const navigate = useNavigate();
     const [step, setStep] = useState('phone'); // 'phone' | 'otp' | 'name'
     const [phone, setPhone] = useState('+91');
     const [otp, setOtp] = useState('');
@@ -42,12 +44,13 @@ const LoginModal = ({ isOpen, onClose }) => {
 
         const response = await verifyOtp(phone, otp);
         if (response.success) {
-            // If user has no name, show name step; otherwise close
+            // If user has no name, show name step; otherwise close and go to home
             if (!response.user?.name) {
                 setStep('name');
                 setError(null);
             } else {
                 onClose();
+                navigate('/');
             }
         } else {
             setError(response.message);
@@ -72,6 +75,7 @@ const LoginModal = ({ isOpen, onClose }) => {
             );
             updateUser({ name: res.data.name });
             onClose();
+            navigate('/');
         } catch (err) {
             setError(err.response?.data?.message || 'Failed to save name');
         } finally {
@@ -79,10 +83,27 @@ const LoginModal = ({ isOpen, onClose }) => {
         }
     };
 
-    // Start cooldown when entering OTP step
+    // Start cooldown and WebOTP when entering OTP step
     useEffect(() => {
         if (step === 'otp') {
             setResendCooldown(30);
+
+            // WebOTP API auto-capture
+            if ('OTPCredential' in window) {
+                const ac = new AbortController();
+                navigator.credentials.get({
+                    otp: { transport: ['sms'] },
+                    signal: ac.signal
+                }).then(otp => {
+                    if (otp && otp.code) {
+                        setOtp(otp.code);
+                        // Optional: auto-verify could be added here if desired
+                    }
+                }).catch(err => {
+                    console.log('WebOTP Error:', err);
+                });
+                return () => ac.abort();
+            }
         }
     }, [step]);
 

@@ -21,7 +21,7 @@ const HeaderSearch = () => {
     };
 
     return (
-        <div className="bg-white dark:bg-[var(--color-bg-surface)] pb-3 px-4 shadow-sm z-40 relative">
+        <div className="bg-white dark:bg-[var(--color-bg-surface)] pb-1.5 px-4 z-40 relative">
             <div className="container mx-auto">
                 <div className="flex items-center border border-gray-300 dark:border-slate-600 rounded-lg overflow-hidden bg-gray-50 dark:bg-slate-800 focus-within:ring-1 focus-within:ring-ud-primary transition-all relative">
 

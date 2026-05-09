@@ -42,9 +42,10 @@ export function Typewriter({
             () => {
                 if (!isDeleting) {
                     if (currentIndex < currentText.length) {
-                        setDisplayText((prev) => prev + currentText[currentIndex]);
+                        setDisplayText(currentText.slice(0, currentIndex + 1));
                         setCurrentIndex((prev) => prev + 1);
                     } else if (loop) {
+                        // Pause at the end before deleting
                         setTimeout(() => setIsDeleting(true), delay);
                     }
                 } else {
@@ -74,9 +75,9 @@ export function Typewriter({
     ]);
 
     return (
-        <span className={className}>
-            {displayText}
-            <span className="animate-pulse font-bold">{cursor}</span>
+        <span className={`${className} inline-flex items-center`}>
+            <span>{displayText}</span>
+            <span className="ml-0.5 border-l-2 border-current h-[1.2em] animate-pulse" aria-hidden="true" />
         </span>
     );
 }

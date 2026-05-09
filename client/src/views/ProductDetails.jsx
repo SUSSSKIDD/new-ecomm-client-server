@@ -190,9 +190,9 @@ const ProductDetails = () => {
 
     if (loading) {
         return (
-            <div className="h-[100dvh] w-full flex flex-col overflow-hidden overscroll-none bg-gray-50">
+            <div className="h-[100dvh] w-full flex flex-col overflow-hidden bg-gray-50">
                 <Header />
-                <div className="flex-1 w-full overflow-y-auto overscroll-none flex justify-center items-center">
+                <div className="flex-1 w-full overflow-y-auto flex justify-center items-center">
                     <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-ud-primary"></div>
                 </div>
             </div>
@@ -201,9 +201,9 @@ const ProductDetails = () => {
 
     if (error || !product) {
         return (
-            <div className="h-[100dvh] w-full flex flex-col overflow-hidden overscroll-none bg-gray-50">
+            <div className="h-[100dvh] w-full flex flex-col overflow-hidden bg-gray-50">
                 <Header />
-                <div className="flex-1 w-full overflow-y-auto overscroll-none flex flex-col justify-center items-center gap-4">
+                <div className="flex-1 w-full overflow-y-auto flex flex-col justify-center items-center gap-4">
                     <p className="text-red-500 text-lg">Failed to load product details.</p>
                     <RippleButton onClick={handleBack} className="px-4 py-2 bg-ud-primary text-white rounded-lg">
                         Go Back
@@ -222,9 +222,9 @@ const ProductDetails = () => {
     const canAddToCart = !isUploadRequired || (hasUploaded && (uploadType !== 'DESIGN_UPLOAD' || (selectedPrintProduct && selectedSize)));
 
     return (
-        <div className="h-[100dvh] w-full flex flex-col overflow-hidden overscroll-none bg-gray-50">
+        <div className="h-[100dvh] w-full flex flex-col overflow-hidden bg-gray-50">
             <Header />
-            <div className="flex-1 w-full overflow-y-auto overscroll-none min-h-0">
+            <div className="flex-1 w-full overflow-y-auto min-h-0 pb-20">
                 <div className="container mx-auto px-4 py-8">
                     <RippleButton onClick={handleBack} className="mb-4 text-gray-600 hover:text-gray-900 flex items-center gap-1">
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
@@ -237,7 +237,7 @@ const ProductDetails = () => {
                             <ImageCarousel
                                 images={product.images || []}
                                 altText={product.name}
-                                className="h-[400px]"
+                                className="h-[300px] md:h-[500px]"
                             />
                         </div>
 
@@ -415,18 +415,18 @@ const ProductDetails = () => {
                                 </div>
                             </div>
 
-                            <div className="mt-8 flex gap-4">
+                            <div className="mt-8 flex gap-3">
                                 <RippleButton
                                     disabled={product.stock <= 0 || (isUploadRequired && !canAddToCart)}
                                     onClick={handleAddToCart}
-                                    className="flex-1 py-3 px-6 bg-yellow-400 font-bold text-gray-900 rounded-lg hover:bg-yellow-500 transition-colors shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+                                    className="flex-1 py-2.5 px-4 bg-yellow-400 font-bold text-gray-900 text-sm rounded-lg hover:bg-yellow-500 transition-colors shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                     Add to Cart
                                 </RippleButton>
                                 <RippleButton
                                     disabled={product.stock <= 0 || (isUploadRequired && !canAddToCart)}
                                     onClick={handleBuyNow}
-                                    className="flex-1 py-3 px-6 bg-orange-500 font-bold text-white rounded-lg hover:bg-orange-600 transition-colors shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+                                    className="flex-1 py-2.5 px-4 bg-orange-500 font-bold text-white text-sm rounded-lg hover:bg-orange-600 transition-colors shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                     Buy Now
                                 </RippleButton>

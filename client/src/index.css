@@ -102,13 +102,15 @@ body,
   padding: 0;
   overflow: hidden;
   overscroll-behavior-y: none;
-  /* Support for notches and home indicators */
-  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
   /* Disable mobile browse behaviors */
   -webkit-tap-highlight-color: transparent;
   -webkit-touch-callout: none;
   -webkit-user-select: none;
   user-select: none;
+}
+
+* {
+  box-sizing: border-box;
 }
 
 /* Custom scrollbar hiding for horizontal scroll */

@@ -13,7 +13,7 @@ const HeaderActions = ({ cartCount, onOpenCart, onOpenProfile, onOpenLocation })
             <ThemeToggle />
             <div className="flex flex-col items-start cursor-pointer hover:text-ud-primary transition-colors group" onClick={onOpenLocation}>
                 <span className="text-[10px] uppercase font-bold text-gray-400 dark:text-gray-500">Location</span>
-                <span className="text-sm font-bold truncate max-w-[100px] sm:max-w-[150px] dark:text-[var(--color-text-primary)]">{locationText}</span>
+                <span className="text-sm font-bold truncate max-w-[80px] sm:max-w-[120px] dark:text-[var(--color-text-primary)]">{locationText}</span>
             </div>
 
             <div

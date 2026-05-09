@@ -5,7 +5,7 @@ const BottomTabBar = ({ activeTab, setActiveTab }) => {
     return (
         <div className="fixed bottom-0 left-0 right-0 z-50">
             <div className="absolute inset-0 bg-white/80 backdrop-blur-md border-t border-black/5" />
-            <div className="relative pb-6 pt-2"> {/* Added padding for iPhone Home Indicator */}
+            <div className="relative pb-[env(safe-area-inset-bottom)] pt-2"> {/* Added padding for iPhone Home Indicator */}
                 <Tabbar className="bg-transparent" innerClassName="justify-around text-xs font-medium">
                     <TabbarLink
                         active={activeTab === 'home'}

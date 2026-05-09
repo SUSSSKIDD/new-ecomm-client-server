@@ -13,6 +13,7 @@ import { Haptics, ImpactStyle } from '@capacitor/haptics';
 import { Capacitor } from '@capacitor/core';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { usePushNotifications } from './hooks/usePushNotifications';
+import { StatusBar } from '@capacitor/status-bar';
 
 const ProductDetails = lazy(() => import('./views/ProductDetails'));
 const DeliveryLogin = lazy(() => import('./components/delivery/DeliveryLogin'));
@@ -65,6 +66,9 @@ function App() {
         console.log('Network disconnected');
       }
     });
+
+    // Item 10: StatusBar Overlay
+    StatusBar.setOverlaysWebView({ overlay: true }).catch(err => console.log('StatusBar error:', err));
 
     return () => {
       backListener.remove();

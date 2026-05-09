@@ -3,26 +3,28 @@ import { Typewriter } from '../../ui/typewriter-text';
 
 const HeaderLogo = ({ onReset }) => {
     return (
-        <div className="flex items-center gap-2 cursor-pointer" onClick={onReset}>
+        <div className="flex flex-col items-center justify-center cursor-pointer" onClick={onReset}>
             <img 
                 src="/logo.png" 
                 alt="NEYOKART Logo" 
-                className="h-10 w-auto object-contain"
-                onError={(e) => {
-                    e.target.style.display = 'none';
-                    e.target.nextSibling.style.display = 'block';
-                }}
+                className="h-8 w-auto object-contain"
             />
-            <div style={{ display: 'none' }}>
-                <Typewriter
-                    text={["NEYOKART", "Groceries", "Essentials"]}
-                    speed={100}
-                    loop={true}
-                    delay={3000}
-                    className="text-2xl font-bold text-gray-900 tracking-tight"
-                    cursor="."
-                />
-            </div>
+            <Typewriter
+                text={[
+                    "Groceries",
+                    "Food",
+                    "Fashion",
+                    "Auto Service",
+                    "Home Service",
+                    "Print Factory",
+                    "Pickup and Drop"
+                ]}
+                speed={70}
+                deleteSpeed={40}
+                delay={2000}
+                loop={true}
+                className="text-[10px] font-black text-ud-primary tracking-tight leading-none mt-1"
+            />
         </div>
     );
 };

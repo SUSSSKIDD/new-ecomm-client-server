@@ -48,7 +48,7 @@ const ImageCarousel = ({ images = [], altText = '', className = '' }) => {
                 {images.map((img, idx) => (
                     <div
                         key={idx}
-                        className="w-full h-full flex items-center justify-center p-8"
+                        className="w-full h-full flex items-center justify-center p-4"
                         style={{ width: `${100 / images.length}%` }}
                     >
                         <img

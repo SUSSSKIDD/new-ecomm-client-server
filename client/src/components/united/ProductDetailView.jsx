@@ -51,7 +51,7 @@ const ProductDetailView = () => {
     };
 
     return (
-        <div className="bg-white dark:bg-slate-900 h-full flex flex-col">
+        <div className="bg-white dark:bg-slate-900 h-full min-h-0 flex flex-col">
             {/* Scrollable content */}
             <div className="flex-1 overflow-y-auto min-h-0 pb-6">
                 {/* Top Navigation */}
@@ -125,18 +125,18 @@ const ProductDetailView = () => {
             </div>
 
             {/* Always-visible CTA bar */}
-            <div className="border-t border-gray-100 dark:border-slate-800 p-4 flex gap-4 bg-white dark:bg-slate-900 shrink-0">
+            <div className="border-t border-gray-100 dark:border-slate-800 p-3 flex gap-3 bg-white dark:bg-slate-900 shrink-0">
                 <RippleButton
                     onClick={handleAddToCart}
                     disabled={stock <= 0}
-                    className="flex-1 py-3 bg-yellow-400 text-black font-bold rounded-lg hover:bg-yellow-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="flex-1 py-2.5 bg-yellow-400 text-black font-bold text-sm rounded-lg hover:bg-yellow-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                     {stock > 0 ? 'Add to Cart' : 'Out of Stock'}
                 </RippleButton>
                 <RippleButton
                     onClick={handleBuyNow}
                     disabled={stock <= 0}
-                    className="flex-1 py-3 bg-ud-primary text-white font-bold rounded-lg hover:bg-opacity-90 transition-colors shadow-lg shadow-blue-500/30 dark:shadow-none disabled:opacity-50 disabled:cursor-not-allowed"
+                    className="flex-1 py-2.5 bg-ud-primary text-white font-bold text-sm rounded-lg hover:bg-opacity-90 transition-colors shadow-lg shadow-blue-500/30 dark:shadow-none disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                     Buy Now
                 </RippleButton>

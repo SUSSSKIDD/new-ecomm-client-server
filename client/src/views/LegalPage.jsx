@@ -123,7 +123,7 @@ const LegalPage = () => {
   const navigate = useNavigate();
 
   return (
-    <div className="min-h-screen bg-gray-50 font-sans text-gray-800">
+    <div className="h-[100dvh] bg-gray-50 font-sans text-gray-800 flex flex-col overflow-hidden">
       {/* Header bar */}
       <div className="sticky top-0 z-10 bg-white border-b border-gray-200 shadow-sm">
         <div className="max-w-3xl mx-auto px-4 py-3 flex items-center gap-3">
@@ -157,7 +157,8 @@ const LegalPage = () => {
       </div>
 
       {/* Content */}
-      <div className="max-w-3xl mx-auto px-4 py-8 space-y-10">
+      <div className="flex-1 overflow-y-auto overscroll-none scroll-smooth">
+        <div className="max-w-3xl mx-auto px-4 py-8 space-y-10">
         <p className="text-xs text-gray-400 -mt-4">Last updated: March 2026</p>
 
         {sections.map(section => (
@@ -247,6 +248,7 @@ const LegalPage = () => {
 
         <div className="pt-4 pb-8 text-center text-xs text-gray-400">
           © 2026 NEYOKART. All rights reserved.
+        </div>
         </div>
       </div>
     </div>

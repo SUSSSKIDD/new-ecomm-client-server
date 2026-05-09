@@ -95,14 +95,14 @@ const SubCategoryPage = () => {
     };
 
     return (
-        <div className="h-[100dvh] w-full flex flex-col overflow-hidden overscroll-none bg-gray-50 font-sans text-gray-900">
+        <div className="h-[100dvh] w-full flex flex-col overflow-hidden bg-gray-50 font-sans text-gray-900">
             <Header />
             <CartSidebar />
             <ProfileSidebar />
 
             <div 
                 ref={scrollContainerRef}
-                className={`flex-1 w-full overflow-y-auto overscroll-none scroll-smooth flex flex-col ${selectedProduct ? 'hidden' : ''}`}
+                className={`flex-1 w-full overflow-y-auto scroll-smooth flex flex-col ${selectedProduct ? 'hidden' : ''}`}
             >
                 <div className="w-full">
                             {/* Interactive Navigation Bar */}
