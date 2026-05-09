@@ -14,10 +14,8 @@ const HeaderLogo = ({ onReset }) => {
                     "Groceries",
                     "Food",
                     "Fashion",
-                    "Auto Service",
                     "Home Service",
-                    "Print Factory",
-                    "Pickup and Drop"
+                    "Print Factory"
                 ]}
                 speed={70}
                 deleteSpeed={40}

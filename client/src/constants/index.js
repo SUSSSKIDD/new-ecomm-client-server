@@ -69,8 +69,6 @@ export const NAV_ITEMS = [
     'Grocery',
     'Pizza Town & Food Zone',
     'Fashion',
-    'Auto Service & Parts',
-    'Pickup & Drop',
     'Home Service',
     'Print Factory'
 ];
@@ -98,16 +96,7 @@ export const HOME_CATEGORIES = [
         items: []
     },
     {
-        title: "Auto Service & Parts",
-        items: []
-    },
-    {
         title: "Home Service",
-        items: []
-    },
-    {
-        title: "Pickup & Drop",
-        description: "Task-based service. Describe items to pick up and drop off.",
         items: []
     },
     {
