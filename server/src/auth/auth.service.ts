@@ -37,6 +37,12 @@ export class AuthService {
   }
 
   async sendOtp(dto: SendOtpDto) {
+    // Fixed OTP for testing
+    const testNumbers = ['+919999999999', '+918888888888'];
+    if (testNumbers.includes(dto.phone)) {
+      return { message: 'OTP sent successfully (Test Mode)' };
+    }
+
     // Rate limit: max 5 OTP requests per phone per 15 minutes
     const rlKey = `otp:rl:${dto.phone}`;
     const count = await this.cache.incr(rlKey, TTL.OTP_RATE_LIMIT);
@@ -56,7 +62,14 @@ export class AuthService {
   }
 
   async verifyOtp(dto: VerifyOtpDto) {
-    const isValid = await this.smsService.verifyOtp(dto.phone, dto.otp);
+    const testNumbers = ['+919999999999', '+918888888888'];
+    let isValid = false;
+
+    if (testNumbers.includes(dto.phone) && dto.otp === '123456') {
+      isValid = true;
+    } else {
+      isValid = await this.smsService.verifyOtp(dto.phone, dto.otp);
+    }
 
     if (!isValid) {
       throw new UnauthorizedException('Invalid OTP');
