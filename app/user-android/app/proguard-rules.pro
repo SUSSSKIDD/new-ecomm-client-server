@@ -23,3 +23,5 @@
 -keep class com.getcapacitor.** { *; }
 -keep class com.google.firebase.** { *; }
 -dontwarn com.google.firebase.**
+-keep class com.neyokart.app.MainActivity { *; }
+

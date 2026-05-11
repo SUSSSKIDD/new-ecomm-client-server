@@ -1,4 +1,4 @@
-package com.neyokart.user;
+package com.neyokart.app;
 
 import com.getcapacitor.BridgeActivity;
 
