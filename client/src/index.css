@@ -8,6 +8,18 @@
   select {
     @apply text-[var(--color-input-text)] bg-[var(--color-input-bg)];
   }
+
+  /* Override browser autofill blue background (Chrome/Safari) */
+  input:-webkit-autofill,
+  input:-webkit-autofill:hover,
+  input:-webkit-autofill:focus,
+  input:-webkit-autofill:active,
+  textarea:-webkit-autofill,
+  select:-webkit-autofill {
+    -webkit-box-shadow: 0 0 0 1000px #ffffff inset !important;
+    -webkit-text-fill-color: #111827 !important;
+    caret-color: #111827;
+  }
 }
 
 :root {

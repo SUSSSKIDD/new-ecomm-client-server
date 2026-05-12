@@ -48,7 +48,16 @@ const AdminLayout = () => {
     }
 
     return (
-        <div className="flex h-[100dvh] w-full bg-gray-100 font-sans overflow-hidden">
+        <div className="flex h-[100dvh] w-full bg-gray-100 font-sans overflow-hidden" style={{
+            colorScheme: 'light',
+            '--color-input-bg': '#ffffff',
+            '--color-input-text': '#111827',
+            '--color-input-border': '#d1d5db',
+            '--color-bg-surface': '#ffffff',
+            '--color-bg-page': '#f7f7f8',
+            '--color-text-primary': '#111827',
+            '--color-text-secondary': '#6b7280',
+        }}>
             {/* Sidebar */}
             <aside className="w-64 bg-white shadow-xl flex flex-col fixed inset-y-0 left-0 z-10">
                 <div className="p-6 border-b border-gray-100 bg-ud-primary text-white">

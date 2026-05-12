@@ -9,11 +9,17 @@ const AdminDelivery = () => {
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
 
-    // Form state
+    // Create form state
     const [showForm, setShowForm] = useState(false);
     const [formData, setFormData] = useState({ name: '', phone: '', pin: '' });
     const [formError, setFormError] = useState('');
     const [formSuccess, setFormSuccess] = useState('');
+
+    // Edit modal state
+    const [editPerson, setEditPerson] = useState(null);
+    const [editData, setEditData] = useState({ name: '', pin: '' });
+    const [editError, setEditError] = useState('');
+    const [editLoading, setEditLoading] = useState(false);
 
     const fetchData = async (signal) => {
         try {
@@ -77,6 +83,30 @@ const AdminDelivery = () => {
             setFormSuccess(`Delivery person "${name}" deleted`);
         } catch (err) {
             setFormError(err.response?.data?.message || 'Error deleting delivery person');
+        }
+    };
+
+    const openEdit = (person) => {
+        setEditPerson(person);
+        setEditData({ name: person.name, pin: '' });
+        setEditError('');
+    };
+
+    const handleEditSubmit = async (e) => {
+        e.preventDefault();
+        setEditError('');
+        setEditLoading(true);
+        try {
+            const payload = { name: editData.name };
+            if (editData.pin) payload.pin = editData.pin;
+            const res = await adminApi().patch(`/delivery/persons/${editPerson.id}`, payload);
+            setDeliveryPersons(prev => prev.map(p => p.id === editPerson.id ? { ...p, ...res.data } : p));
+            setEditPerson(null);
+            setFormSuccess(`"${editData.name}" updated`);
+        } catch (err) {
+            setEditError(err.response?.data?.message || 'Error updating delivery person');
+        } finally {
+            setEditLoading(false);
         }
     };
 
@@ -185,8 +215,9 @@ const AdminDelivery = () => {
                                             {p.isActive ? 'Active' : 'Inactive'}
                                         </span>
                                     </td>
-                                    {admin?.role === 'ADMIN' && (
+                                                    {admin?.role === 'ADMIN' && (
                                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-3">
+                                            <RippleButton onClick={() => openEdit(p)} className="text-emerald-600 hover:text-emerald-900">Edit</RippleButton>
                                             <RippleButton onClick={() => toggleStatus(p.id, p.isActive)} className="text-blue-600 hover:text-blue-900">Toggle Status</RippleButton>
                                             <RippleButton onClick={() => handleDelete(p.id, p.name)} className="text-red-600 hover:text-red-900">Delete</RippleButton>
                                         </td>
@@ -195,6 +226,55 @@ const AdminDelivery = () => {
                             ))}
                         </tbody>
                     </table>
+                </div>
+            )}
+            {/* Edit Modal */}
+            {editPerson && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+                    <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
+                        <h2 className="text-lg font-bold text-gray-900 mb-4">Edit — {editPerson.name}</h2>
+                        {editError && <div className="bg-red-50 text-red-700 p-3 rounded mb-4 text-sm">{editError}</div>}
+                        <form onSubmit={handleEditSubmit} className="space-y-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
+                                <input
+                                    required
+                                    type="text"
+                                    value={editData.name}
+                                    onChange={e => setEditData({ ...editData, name: e.target.value })}
+                                    className="w-full border border-gray-300 rounded-lg p-2.5 text-gray-900 focus:outline-none focus:ring-2 focus:ring-ud-primary"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">New PIN <span className="text-gray-400 font-normal">(leave blank to keep current)</span></label>
+                                <input
+                                    type="text"
+                                    maxLength={4}
+                                    pattern="\d{4}"
+                                    placeholder="••••"
+                                    value={editData.pin}
+                                    onChange={e => setEditData({ ...editData, pin: e.target.value.replace(/\D/g, '').slice(0, 4) })}
+                                    className="w-full border border-gray-300 rounded-lg p-2.5 text-gray-900 font-mono tracking-widest text-lg focus:outline-none focus:ring-2 focus:ring-ud-primary"
+                                />
+                            </div>
+                            <div className="flex gap-3 pt-2">
+                                <RippleButton
+                                    type="submit"
+                                    disabled={editLoading}
+                                    className="flex-1 bg-ud-primary text-white py-2.5 rounded-lg font-semibold disabled:opacity-50"
+                                >
+                                    {editLoading ? 'Saving…' : 'Save Changes'}
+                                </RippleButton>
+                                <RippleButton
+                                    type="button"
+                                    onClick={() => setEditPerson(null)}
+                                    className="flex-1 bg-gray-100 text-gray-700 py-2.5 rounded-lg font-semibold hover:bg-gray-200"
+                                >
+                                    Cancel
+                                </RippleButton>
+                            </div>
+                        </form>
+                    </div>
                 </div>
             )}
         </div>
