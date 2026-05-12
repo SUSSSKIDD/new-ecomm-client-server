@@ -111,23 +111,32 @@ const Header = ({ isSearchVisible = true }) => {
                 />
             </div>
 
-            {/* 2. Search Bar Row (hide-on-scroll) */}
+            {/* 2. Search Bar Row (hide-on-scroll) — GPU-composited only, zero layout recalc */}
             <div
-                className="overflow-hidden transition-[max-height,opacity] duration-300 ease-in-out"
                 style={{
-                    maxHeight: isSearchVisible ? '120px' : '0px',
-                    opacity: isSearchVisible ? 1 : 0,
-                    willChange: 'max-height, opacity',
-                    pointerEvents: isSearchVisible ? 'auto' : 'none',
+                    display: 'grid',
+                    gridTemplateRows: isSearchVisible ? '1fr' : '0fr',
+                    transition: 'grid-template-rows 250ms ease',
                 }}
             >
-                <div className="pb-2">
-                    <HeaderSearch />
-                    <HeaderNav
-                        navItems={NAV_ITEMS}
-                        selectedCategory={selectedCategory}
-                        onSelectCategory={handleCategorySelect}
-                    />
+                <div style={{ overflow: 'hidden' }}>
+                    <div
+                        style={{
+                            opacity: isSearchVisible ? 1 : 0,
+                            transition: 'opacity 200ms ease',
+                            willChange: 'opacity',
+                            pointerEvents: isSearchVisible ? 'auto' : 'none',
+                        }}
+                    >
+                        <div className="pb-2">
+                            <HeaderSearch />
+                            <HeaderNav
+                                navItems={NAV_ITEMS}
+                                selectedCategory={selectedCategory}
+                                onSelectCategory={handleCategorySelect}
+                            />
+                        </div>
+                    </div>
                 </div>
             </div>
             

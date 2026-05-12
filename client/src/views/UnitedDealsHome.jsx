@@ -11,8 +11,8 @@ import ProfileSidebar from '../components/united/ProfilePage';
 import ParcelBooking from './ParcelBooking';
 import Footer from '../components/united/Footer';
 
-const SCROLL_THRESHOLD = 10;
-const HIDE_AFTER_PX = 60;
+const SCROLL_THRESHOLD = 15;
+const HIDE_AFTER_PX = 80;
 
 const UnitedDealsHome = () => {
     const { toastMessage, selectedProduct, selectedCategory } = useCategory();
@@ -20,6 +20,7 @@ const UnitedDealsHome = () => {
     const [isSearchVisible, setIsSearchVisible] = useState(true);
     const lastScrollY = useRef(0);
     const rafId = useRef(null);
+    const cooldownRef = useRef(false);
     const scrollContainerRef = useRef(null);
 
     useEffect(() => {
@@ -42,13 +43,18 @@ const UnitedDealsHome = () => {
             if (!el) return;
             const currentY = el.scrollTop;
             const delta = currentY - lastScrollY.current;
+            lastScrollY.current = currentY;
             if (Math.abs(delta) < SCROLL_THRESHOLD) return;
+            if (cooldownRef.current) return;
             if (delta > 0 && currentY > HIDE_AFTER_PX) {
                 setIsSearchVisible(false);
+                cooldownRef.current = true;
+                setTimeout(() => { cooldownRef.current = false; }, 300);
             } else if (delta < 0) {
                 setIsSearchVisible(true);
+                cooldownRef.current = true;
+                setTimeout(() => { cooldownRef.current = false; }, 300);
             }
-            lastScrollY.current = currentY;
         });
     }, []);
 
