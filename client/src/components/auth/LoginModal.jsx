@@ -161,7 +161,7 @@ const LoginModal = ({ isOpen, onClose }) => {
                                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-medium">+91</span>
                                     <input
                                         type="tel"
-                                        className="w-full pl-12 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-ud-primary focus:border-ud-primary outline-none transition-all font-medium text-lg tracking-wide group-hover:border-gray-300"
+                                        className="w-full pl-12 pr-4 py-3 bg-gray-50 dark:bg-slate-700 border border-gray-200 dark:border-slate-600 rounded-xl focus:ring-2 focus:ring-ud-primary focus:border-ud-primary outline-none transition-all font-medium text-lg tracking-wide text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-slate-400 group-hover:border-gray-300"
                                         placeholder="Enter mobile number"
                                         value={phone.replace('+91', '')}
                                         onChange={(e) => {
@@ -209,7 +209,7 @@ const LoginModal = ({ isOpen, onClose }) => {
                             <div className="flex justify-center">
                                 <input
                                     type="text"
-                                    className="w-full text-center text-3xl tracking-[0.5em] py-4 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-ud-primary outline-none font-bold text-gray-800 transition-all focus:bg-white placeholder-gray-300"
+                                    className="w-full text-center text-3xl tracking-[0.5em] py-4 bg-gray-50 dark:bg-slate-700 border border-gray-200 dark:border-slate-600 rounded-xl focus:ring-2 focus:ring-ud-primary outline-none font-bold text-gray-900 dark:text-white transition-all focus:bg-white dark:focus:bg-slate-600 placeholder-gray-300 dark:placeholder-slate-500"
                                     placeholder="••••••"
                                     value={otp}
                                     onChange={(e) => setOtp(e.target.value)}
