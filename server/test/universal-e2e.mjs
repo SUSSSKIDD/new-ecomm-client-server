@@ -1522,6 +1522,67 @@ await step('Verify temp product DELETED after store deletion', async () => {
 });
 
 // ══════════════════════════════════════════════════════════════════════
+//  Phase 13.6: Price Staleness & Refresh
+// ══════════════════════════════════════════════════════════════════════
+
+console.log('\n🔷 Phase 13.6: Price Staleness & Refresh');
+
+await step('Clear cart before price staleness test', async () => {
+  await api.delete('/cart', auth(userToken));
+});
+
+let testProductId;
+let initialPrice = 150;
+let newPrice = 175;
+
+await step('Add item to cart for price update test', async () => {
+  const s = stores['GROCERY'];
+  testProductId = s.productIds[0];
+  const r = await api.post('/cart/items', { productId: testProductId, quantity: 2 }, auth(userToken));
+  assert(r.status === 200 || r.status === 201, `Failed to add to cart: ${r.status}`);
+  
+  // Verify it is in cart with initial price
+  const cartRes = await api.get('/cart', auth(userToken));
+  assert(cartRes.status === 200, `Failed to get cart: ${cartRes.status}`);
+  const item = cartRes.data.items?.find(i => i.productId === testProductId);
+  assert(item, 'Product not found in cart');
+  assert(item.price === initialPrice, `Expected price ${initialPrice}, got ${item.price}`);
+});
+
+await step('Update product price in database', async () => {
+  const s = stores['GROCERY'];
+  const fd = new FormData();
+  fd.append('price', String(newPrice));
+  const r = await api.patch(`/products/${testProductId}`, fd, auth(s.managerToken));
+  assert(r.status === 200 || r.status === 204, `Failed to update product price: ${r.status}`);
+});
+
+await step('Verify cart reflects updated product price', async () => {
+  const r = await api.get('/cart', auth(userToken));
+  assert(r.status === 200, `Failed to get cart: ${r.status}`);
+  const item = r.data.items?.find(i => i.productId === testProductId);
+  assert(item, 'Product not found in cart');
+  assert(item.price === newPrice, `Expected updated price ${newPrice}, got ${item.price}`);
+});
+
+await step('Verify PATCH /cart/items/:productId returns updated price', async () => {
+  const r = await api.patch(`/cart/items/${testProductId}`, { quantity: 3 }, auth(userToken));
+  assert(r.status === 200, `Failed to update quantity: ${r.status}`);
+  const item = r.data.items?.find(i => i.productId === testProductId);
+  assert(item, 'Product not found in cart');
+  assert(item.price === newPrice, `Expected updated price ${newPrice} in PATCH response, got ${item.price}`);
+  assert(item.quantity === 3, `Expected quantity 3, got ${item.quantity}`);
+});
+
+await step('Restore product price', async () => {
+  const s = stores['GROCERY'];
+  const fd = new FormData();
+  fd.append('price', String(initialPrice));
+  const r = await api.patch(`/products/${testProductId}`, fd, auth(s.managerToken));
+  assert(r.status === 200 || r.status === 204, `Failed to restore product price: ${r.status}`);
+});
+
+// ══════════════════════════════════════════════════════════════════════
 //  Phase 14: Cleanup — Orders, Parcels, Redis Pool/Queue, DB entities
 // ══════════════════════════════════════════════════════════════════════
 

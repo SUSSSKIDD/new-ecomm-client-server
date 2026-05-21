@@ -29,14 +29,32 @@ export class CartService {
     return `${CartService.CART_PREFIX}${userId}`;
   }
 
-  /**
-   * Get the user's cart. Returns an empty cart if none exists.
-   */
   async getCart(userId: string): Promise<Cart> {
     const cart = await this.cache.get<Cart>(this.cartKey(userId));
-    if (!cart) {
+    if (!cart || cart.items.length === 0) {
       return { userId, items: [], updatedAt: new Date().toISOString() };
     }
+
+    // Refresh price/name snapshots from DB
+    const productIds = [...new Set(cart.items.map(i => i.productId))];
+    const products = await this.prisma.product.findMany({
+      where: { id: { in: productIds } },
+      include: { variants: { where: { isActive: true } } },
+    });
+    const productMap = new Map(products.map(p => [p.id, p]));
+
+    cart.items = cart.items.map(item => {
+      const product = productMap.get(item.productId);
+      if (!product) return item;
+      const variant = (product.variants as any[])?.find(v => v.id === item.variantId);
+      return {
+        ...item,
+        price: variant ? variant.price : product.price,
+        name: product.name,
+        taxRate: product.taxRate ?? 0,
+      };
+    });
+
     return cart;
   }
 

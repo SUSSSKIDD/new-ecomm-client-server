@@ -103,7 +103,18 @@ export const CartProvider = ({ children }) => {
                 showToast(`${product.name} Quantity Updated!`);
                 if (token) {
                     const query = itemVariantId ? `?variantId=${itemVariantId}` : '';
-                    clientApi().patch(`/cart/items/${product.id}${query}`, { quantity: newQty }).catch(() => { });
+                    clientApi().patch(`/cart/items/${product.id}${query}`, { quantity: newQty })
+                        .then(res => {
+                            const updated = res.data?.items?.find(i => i.productId === product.id && i.variantId === itemVariantId);
+                            if (updated) {
+                                setCart(prev => prev.map(i =>
+                                    i.id === product.id && i.variantId === itemVariantId
+                                        ? { ...i, price: updated.price, taxRate: updated.taxRate ?? i.taxRate }
+                                        : i
+                                ));
+                            }
+                        })
+                        .catch(() => { });
                 }
                 return prevCart.map(item =>
                     item.id === product.id && item.variantId === itemVariantId ? { ...item, quantity: newQty, ...(customFields || {}) } : item
@@ -125,7 +136,18 @@ export const CartProvider = ({ children }) => {
             if (customFields?.printProductId) apiPayload.printProductId = customFields.printProductId;
             if (customFields?.variantId) apiPayload.variantId = customFields.variantId;
             if (token) {
-                clientApi().post('/cart/items', apiPayload).catch(() => { });
+                clientApi().post('/cart/items', apiPayload)
+                    .then(res => {
+                        const serverItem = res.data?.items?.find(i => i.productId === product.id && i.variantId === apiPayload.variantId);
+                        if (serverItem) {
+                            setCart(prev => prev.map(i =>
+                                i.id === product.id && i.variantId === (apiPayload.variantId ?? undefined)
+                                    ? { ...i, price: serverItem.price, taxRate: serverItem.taxRate ?? i.taxRate }
+                                    : i
+                            ));
+                        }
+                    })
+                    .catch(() => { });
             }
             return [...prevCart, { ...product, quantity: 1, category: itemCategory, ...customFields, storeType: product.store?.storeType, storeTypeName: product.store?.name }];
         });
@@ -137,7 +159,19 @@ export const CartProvider = ({ children }) => {
                 const newQuantity = Math.max(1, item.quantity + delta);
                 if (token) {
                     const query = variantId ? `?variantId=${variantId}` : '';
-                    clientApi().patch(`/cart/items/${productId}${query}`, { quantity: newQuantity }).catch(() => { });
+                    clientApi().patch(`/cart/items/${productId}${query}`, { quantity: newQuantity })
+                        .then(res => {
+                            // Refresh price from server response
+                            const updated = res.data?.items?.find(i => i.productId === productId && i.variantId === variantId);
+                            if (updated) {
+                                setCart(prev => prev.map(i =>
+                                    i.id === productId && i.variantId === variantId
+                                        ? { ...i, price: updated.price, taxRate: updated.taxRate ?? i.taxRate }
+                                        : i
+                                ));
+                            }
+                        })
+                        .catch(() => { });
                 }
                 return { ...item, quantity: newQuantity };
             }

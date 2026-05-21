@@ -3,7 +3,7 @@
  *
  * This script is a wrapper around 'universal-e2e.mjs'.
  * It automates the infrastructure setup for a local, isolated, and non-conflicting test run.
- * It now also covers testing multi-category carts and split orders.
+ * It now also covers testing multi-category carts, split orders, and cart price refresh / staleness.
  */
 
 import axios from 'axios';
