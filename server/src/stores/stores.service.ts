@@ -110,6 +110,7 @@ export class StoresService {
     const stores = await this.getAllStoresFromCache();
 
     let nearby = stores
+      .filter((s) => s.lat && s.lng && (s.lat !== 0 || s.lng !== 0))
       .map((s) => ({
         ...s,
         distance:
