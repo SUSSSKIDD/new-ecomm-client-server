@@ -85,30 +85,6 @@ until docker compose -f $DOCKER_COMPOSE_FILE exec -T redis-bull redis-cli ping |
 done
 echo "  ✅ redis-bull healthy"
 
-# ── Step 0b: Run pending DB migrations ──────────────────────────────────────
-# Reads DIRECT_URL from .env (bypasses PgBouncer — required for DDL statements).
-# Iterates migration dirs in order; skips already-applied ones via _prisma_migrations.
-echo "[0b/6] Applying pending DB migrations..."
-DB_URL=$(grep '^DIRECT_URL=' $APP_DIR/.env | cut -d= -f2-)
-if [ -z "$DB_URL" ]; then
-  DB_URL=$(grep '^DATABASE_URL=' $APP_DIR/.env | cut -d= -f2-)
-fi
-MIGRATIONS_DIR="$APP_DIR/server/prisma/migrations"
-for migration_dir in $(ls -d $MIGRATIONS_DIR/*/  2>/dev/null | sort); do
-  migration_name=$(basename "$migration_dir")
-  sql_file="$migration_dir/migration.sql"
-  [ -f "$sql_file" ] || continue
-  already_applied=$(psql "$DB_URL" -tAc "SELECT 1 FROM _prisma_migrations WHERE migration_name='$migration_name' LIMIT 1" 2>/dev/null || echo "")
-  if [ "$already_applied" = "1" ]; then
-    echo "  ✓ $migration_name (already applied)"
-  else
-    echo "  → Applying $migration_name ..."
-    psql "$DB_URL" -f "$sql_file" && \
-      psql "$DB_URL" -c "INSERT INTO _prisma_migrations(id, checksum, migration_name, started_at, finished_at, applied_steps_count) VALUES(gen_random_uuid(), 'manual', '$migration_name', now(), now(), 1) ON CONFLICT DO NOTHING" && \
-      echo "  ✅ $migration_name applied" || \
-      { echo "❌ Migration $migration_name failed. Aborting."; exit 1; }
-  fi
-done
 
 # 1. Build new slot images in parallel using BuildKit
 # --no-cache removed: BuildKit layer cache cuts repeat build time significantly.
