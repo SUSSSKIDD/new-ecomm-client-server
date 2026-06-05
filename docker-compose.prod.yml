@@ -12,8 +12,10 @@ x-server-common: &server-common
   build:
     context: ./server
   image: neyokart-server:latest
-  env_file:
-    - .env
+  # env_file declared on server-blue/server-green directly, NOT here.
+  # Putting it in the anchor causes Docker Compose to validate it for ALL services
+  # (including redis) at parse time, which breaks `docker compose up -d redis redis-bull`
+  # when .env doesn't exist yet on a fresh VPS.
   environment:
     <<: *redis-env
     PORT: "3000"
@@ -130,6 +132,8 @@ services:
   # ── BLUE ──────────────────────────────────────────────────────────────────────
   server-blue:
     <<: *server-common
+    env_file:
+      - .env
     container_name: neyokart-server-blue
     ports:
       - "3001:3000"
@@ -145,6 +149,8 @@ services:
   # ── GREEN ─────────────────────────────────────────────────────────────────────
   server-green:
     <<: *server-common
+    env_file:
+      - .env
     container_name: neyokart-server-green
     ports:
       - "3002:3000"

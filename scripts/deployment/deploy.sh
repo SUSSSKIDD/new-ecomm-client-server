@@ -9,6 +9,15 @@ APP_DIR="/opt/neyokart"
 DOCKER_COMPOSE_FILE="$APP_DIR/docker-compose.prod.yml"
 STATE_FILE="$APP_DIR/active_color.txt"
 
+# .env must exist — it holds all production secrets.
+# CI/CD never creates or overwrites it. Create once on the VPS:
+#   nano /opt/neyokart/.env   (fill in DATABASE_URL, JWT_SECRET, etc.)
+if [ ! -f "$APP_DIR/.env" ]; then
+    echo "❌ /opt/neyokart/.env is missing. SSH into the VPS and create it:"
+    echo "   nano /opt/neyokart/.env"
+    exit 1
+fi
+
 # Default to blue if no state exists
 if [ ! -f "$STATE_FILE" ]; then
     echo "blue" > "$STATE_FILE"
