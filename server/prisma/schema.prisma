@@ -276,6 +276,7 @@ model DeliveryPerson {
   @@index([status])
   @@index([phone])
   @@index([status, isActive])
+  @@index([createdAt(sort: Desc)])
 }
 
 model OrderAssignment {
@@ -292,6 +293,7 @@ model OrderAssignment {
   @@index([deliveryPersonId])
   @@index([orderId])
   @@index([deliveryPersonId, completedAt])
+  @@index([assignedAt(sort: Desc)])
 }
 
 model Order {
@@ -452,6 +454,7 @@ model ParcelAssignment {
   @@index([deliveryPersonId])
   @@index([parcelOrderId])
   @@index([deliveryPersonId, completedAt])
+  @@index([assignedAt(sort: Desc)])
 }
 
 model CustomSubcategory {

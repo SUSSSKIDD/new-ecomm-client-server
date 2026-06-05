@@ -57,6 +57,7 @@ export class LedgerService {
         return this.prisma.paymentLedger.findMany({
             where,
             orderBy: { date: 'desc' },
+            take: 500,
             include: { store: { select: { name: true, storeCode: true } } },
         });
     }

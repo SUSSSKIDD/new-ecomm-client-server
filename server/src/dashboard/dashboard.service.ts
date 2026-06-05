@@ -1,12 +1,20 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
+import { RedisCacheService } from '../common/services/redis-cache.service';
 import { OrderStatus, PaymentStatus } from '@prisma/client';
 
 @Injectable()
 export class DashboardService {
-    constructor(private prisma: PrismaService) { }
+    constructor(
+        private prisma: PrismaService,
+        private cache: RedisCacheService,
+    ) { }
 
     async getStoreStats(storeId: string) {
+        const cacheKey = `dashboard:store:${storeId}`;
+        const cached = await this.cache.get<any>(cacheKey);
+        if (cached) return cached;
+
         const today = new Date();
         today.setHours(0, 0, 0, 0);
 
@@ -67,7 +75,7 @@ export class DashboardService {
             return acc;
         }, {} as Record<string, number>);
 
-        return {
+        const result = {
             storeName: store?.name,
             storeCode: store?.storeCode,
             totalOrders,
@@ -78,9 +86,17 @@ export class DashboardService {
             totalProducts,
             lowStockProducts,
         };
+
+        // Cache for 60s — dashboard is read-heavy, slight staleness is fine
+        await this.cache.set(cacheKey, result, 60);
+        return result;
     }
 
     async getDeliveryStats(deliveryPersonId: string) {
+        const cacheKey = `dashboard:rider:${deliveryPersonId}`;
+        const cached = await this.cache.get<any>(cacheKey);
+        if (cached) return cached;
+
         const today = new Date();
         today.setHours(0, 0, 0, 0);
 
@@ -111,7 +127,7 @@ export class DashboardService {
                 ? Math.round((totalRides / allAssignments) * 100)
                 : 0;
 
-        return {
+        const result = {
             name: person?.name,
             totalRides,
             totalEarnings,
@@ -119,5 +135,8 @@ export class DashboardService {
             todayEarnings,
             completionRate: `${completionRate}%`,
         };
+
+        await this.cache.set(cacheKey, result, 60);
+        return result;
     }
 }

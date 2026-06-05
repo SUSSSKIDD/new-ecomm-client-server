@@ -125,20 +125,17 @@ export class StoresController {
 
   // ── Admin CRUD ──────────────────────────────────────────────────
 
-  @Get('export/catalog/csv')
+  @Get('export/catalog/xlsx')
   @ApiBearerAuth()
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Roles('ADMIN')
-  @ApiOperation({ summary: 'Export all products grouped by store as CSV (Admin)' })
-  async exportCatalogCsv(
-    @Query('storeId') storeId: string | undefined,
-    @Res() res: Response,
-  ) {
-    const csv = await this.storesService.exportCatalogCsv(storeId);
+  @ApiOperation({ summary: 'Export all products as Excel with one sheet per store (Admin)' })
+  async exportCatalogXlsx(@Res() res: Response) {
+    const buffer = await this.storesService.exportCatalogXlsx();
     const date = new Date().toISOString().slice(0, 10);
-    res.header('Content-Type', 'text/csv');
-    res.header('Content-Disposition', `attachment; filename="catalog_${date}.csv"`);
-    res.send(csv);
+    res.header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.header('Content-Disposition', `attachment; filename="catalog_${date}.xlsx"`);
+    res.send(buffer);
   }
 
   @Get()

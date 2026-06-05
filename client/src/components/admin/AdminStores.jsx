@@ -116,17 +116,17 @@ const AdminStores = () => {
     const handleExport = async () => {
         try {
             const token = localStorage.getItem('ud_admin_token');
-            const res = await fetch(`${API_URL}/stores/export/catalog/csv`, {
+            const res = await fetch(`${API_URL}/stores/export/catalog/xlsx`, {
                 headers: { Authorization: `Bearer ${token}` }
             });
             if (!res.ok) throw new Error('Export failed');
-            
+
             const blob = await res.blob();
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
             const date = new Date().toISOString().slice(0, 10);
             a.href = url;
-            a.download = `catalog_export_${date}.csv`;
+            a.download = `catalog_${date}.xlsx`;
             document.body.appendChild(a);
             a.click();
             window.URL.revokeObjectURL(url);
@@ -146,7 +146,7 @@ const AdminStores = () => {
                         onClick={handleExport}
                         className="bg-gray-200 text-gray-800 px-4 py-2 rounded hover:bg-gray-300"
                     >
-                        Export Catalog CSV
+                        Export Catalog Excel
                     </RippleButton>
                     {admin?.role === 'ADMIN' && (
                         <RippleButton

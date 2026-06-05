@@ -4,6 +4,7 @@ import {
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
+import ExcelJS from 'exceljs';
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma.service';
 import { RedisCacheService } from '../common/services/redis-cache.service';
@@ -365,18 +366,9 @@ export class StoresService {
     }
   }
 
-  async exportCatalogCsv(storeId?: string): Promise<string> {
-    const escape = (val: any): string => {
-      if (val === null || val === undefined) return '';
-      const s = String(val).replace(/"/g, '""');
-      return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s}"` : s;
-    };
-
+  async exportCatalogXlsx(): Promise<Buffer> {
     const products = await this.prisma.product.findMany({
-      where: {
-        ...(storeId ? { storeId } : {}),
-        isActive: true,
-      },
+      where: { isActive: true },
       select: {
         name: true,
         price: true,
@@ -385,7 +377,7 @@ export class StoresService {
         category: true,
         subCategory: true,
         taxRate: true,
-        store: { select: { name: true } },
+        store: { select: { id: true, name: true } },
         variants: {
           where: { isActive: true },
           select: { label: true, price: true, storePrice: true, mrp: true },
@@ -395,22 +387,74 @@ export class StoresService {
       orderBy: [{ storeId: 'asc' }, { category: 'asc' }, { name: 'asc' }],
     });
 
-    const headers = ['Store Name', 'Category', 'Sub Category', 'Product Name', 'Variant', 'Price', 'MRP', 'Tax Rate (%)', 'Store Price'];
-    const rows: string[] = [headers.join(',')];
+    const HEADERS = ['Store Name', 'Category', 'Sub Category', 'Product Name', 'Variant', 'Price (₹)', 'MRP (₹)', 'Tax Rate (%)', 'Store Price (₹)'];
+
+    const toRows = (p: typeof products[number], storeName: string) => {
+      const base = [storeName, p.category, p.subCategory ?? '', p.name];
+      if (p.variants.length > 0) {
+        return p.variants.map((v) => [...base, v.label, v.price, v.mrp ?? '', p.taxRate, v.storePrice ?? '']);
+      }
+      return [[...base, '', p.price, p.mrp ?? '', p.taxRate, p.storePrice ?? '']];
+    };
+
+    const addSheet = (wb: ExcelJS.Workbook, name: string, rows: any[][]) => {
+      const sheet = wb.addWorksheet(name.slice(0, 31)); // Excel sheet name max 31 chars
+      sheet.addRow(HEADERS);
+
+      // Header style
+      const headerRow = sheet.getRow(1);
+      headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+      headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2563EB' } };
+      headerRow.alignment = { vertical: 'middle', horizontal: 'center' };
+      headerRow.height = 20;
+
+      for (const row of rows) {
+        sheet.addRow(row);
+      }
+
+      // Auto-fit column widths
+      sheet.columns.forEach((col) => {
+        let maxLen = 10;
+        col.eachCell?.({ includeEmpty: false }, (cell) => {
+          const len = String(cell.value ?? '').length;
+          if (len > maxLen) maxLen = len;
+        });
+        col.width = Math.min(maxLen + 2, 50);
+      });
+
+      // Alternate row shading
+      sheet.eachRow((row, idx) => {
+        if (idx > 1 && idx % 2 === 0) {
+          row.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF3F4F6' } };
+        }
+      });
+    };
+
+    const wb = new ExcelJS.Workbook();
+    wb.creator = 'Neyokart';
+    wb.created = new Date();
+
+    // Group products by store
+    const byStore = new Map<string, { name: string; rows: any[][] }>();
+    const allRows: any[][] = [];
 
     for (const p of products) {
-      const storeName = p.store?.name ?? '';
-      const base = [escape(storeName), escape(p.category), escape(p.subCategory), escape(p.name)];
-
-      if (p.variants.length > 0) {
-        for (const v of p.variants) {
-          rows.push([...base, escape(v.label), escape(v.price), escape(v.mrp ?? ''), escape(p.taxRate), escape(v.storePrice ?? '')].join(','));
-        }
-      } else {
-        rows.push([...base, '', escape(p.price), escape(p.mrp ?? ''), escape(p.taxRate), escape(p.storePrice ?? '')].join(','));
-      }
+      const storeName = p.store?.name ?? 'Unknown';
+      const storeId = p.store?.id ?? 'unknown';
+      if (!byStore.has(storeId)) byStore.set(storeId, { name: storeName, rows: [] });
+      const productRows = toRows(p, storeName);
+      byStore.get(storeId)!.rows.push(...productRows);
+      allRows.push(...productRows);
     }
 
-    return rows.join('\n');
+    // All data sheet first
+    addSheet(wb, 'All Products', allRows);
+
+    // One sheet per store
+    for (const { name, rows } of byStore.values()) {
+      addSheet(wb, name, rows);
+    }
+
+    return wb.xlsx.writeBuffer() as unknown as Promise<Buffer>;
   }
 }
