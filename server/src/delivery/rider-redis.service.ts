@@ -298,4 +298,44 @@ export class RiderRedisService implements OnModuleDestroy {
       await this.client.del(`rider:eligible:${orderId}`);
     } catch { }
   }
+
+  // ═══════════════════════════════════════════════════════════════
+  // Delivery PIN rate limiting (per order, 10-minute lockout after 3 wrong attempts)
+  // ═══════════════════════════════════════════════════════════════
+
+  private pinAttemptKey(orderId: string): string {
+    return `pin:attempts:${orderId}`;
+  }
+
+  /** Returns current wrong-attempt count for this order's PIN. 0 if no record. */
+  async getPinAttempts(orderId: string): Promise<number> {
+    if (!this.client) return 0;
+    try {
+      const val = await this.client.get(this.pinAttemptKey(orderId));
+      return val ? parseInt(val, 10) : 0;
+    } catch {
+      return 0;
+    }
+  }
+
+  /** Increment wrong-attempt counter; sets/refreshes a 10-minute TTL. Returns new count. */
+  async incrementPinAttempts(orderId: string): Promise<number> {
+    if (!this.client) return 0;
+    try {
+      const key = this.pinAttemptKey(orderId);
+      const count = await this.client.incr(key);
+      await this.client.expire(key, 10 * 60); // 10 minutes
+      return count;
+    } catch {
+      return 0;
+    }
+  }
+
+  /** Clear PIN attempt counter after successful delivery completion. */
+  async clearPinAttempts(orderId: string): Promise<void> {
+    if (!this.client) return;
+    try {
+      await this.client.del(this.pinAttemptKey(orderId));
+    } catch { }
+  }
 }

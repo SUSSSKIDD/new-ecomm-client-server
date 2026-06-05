@@ -451,7 +451,7 @@ export class ProductsService {
     const newUrls = await this.storage.uploadMany(files);
 
     try {
-      const updated = await this.prisma.$transaction(async (tx) => {
+      const updated = await this.prisma.directTx(async (tx) => {
         // Re-read inside transaction for atomic check
         const product = await tx.product.findUnique({ where: { id } });
         if (!product) {

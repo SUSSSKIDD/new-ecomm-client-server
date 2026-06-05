@@ -174,42 +174,53 @@ export class DeliverySseService implements OnModuleInit, OnModuleDestroy {
     );
   }
 
-  /** Notify ALL connected riders that an order has been claimed (remove from their UI). */
-  broadcastOrderClaimed(excludeRiderId: string | null, orderId: string): void {
+  /**
+   * Notify eligible riders that an order has been claimed (remove from their UI).
+   * Only notifies riders who were actually shown this order — O(eligible) not O(all connections).
+   * eligibleRiderIds: the set stored in Redis at broadcast time; pass [] if unknown.
+   */
+  broadcastOrderClaimed(excludeRiderId: string | null, orderId: string, eligibleRiderIds: string[]): void {
     const message: SSEMessage = {
       type: 'ORDER_CLAIMED',
       data: { orderId },
     };
     const payload = JSON.stringify(message);
 
-    const targetIds: string[] = [];
-    for (const [riderId, entry] of this.connections) {
-      if (riderId === excludeRiderId) continue;
-      targetIds.push(riderId);
+    const targets = eligibleRiderIds.filter((id) => id !== excludeRiderId);
+    let sent = 0;
+    for (const riderId of targets) {
+      const entry = this.connections.get(riderId);
+      if (!entry) continue;
       try {
         entry.subject.next({ data: payload });
         entry.lastActivity = Date.now();
+        sent++;
       } catch (err) {
         this.logger.error(`SSE claimed broadcast failed for rider ${riderId}: ${err.message}`);
         this.unregister(riderId);
       }
     }
 
-    // Publish for other instances (all connected riders minus the claimer)
-    if (targetIds.length > 0) {
-      this.publish(targetIds, payload);
+    // Publish for other instances (filtered to remote-only by publish())
+    if (targets.length > 0) {
+      this.publish(targets, payload);
     }
 
     this.logger.log(
-      `Broadcast ORDER_CLAIMED (${orderId}) to ${targetIds.length} connected riders`,
+      `Broadcast ORDER_CLAIMED (${orderId}) to ${sent}/${targets.length} eligible riders`,
     );
   }
 
-  /** Publish SSE event to Redis for cross-instance delivery. */
+  /** Publish SSE event to Redis for cross-instance delivery.
+   *  Excludes riders already connected locally — they received the event directly,
+   *  and the subscriber on this instance would deliver it a second time otherwise.
+   */
   private publish(targetIds: string[], payload: string): void {
     if (!this.publisher) return;
+    const remoteIds = targetIds.filter((id) => !this.connections.has(id));
+    if (remoteIds.length === 0) return;
     this.publisher
-      .publish(DeliverySseService.CHANNEL, JSON.stringify({ targetIds, payload }))
+      .publish(DeliverySseService.CHANNEL, JSON.stringify({ targetIds: remoteIds, payload }))
       .catch((err) => {
         this.logger.error(`Pub/Sub publish error: ${err.message}`);
       });

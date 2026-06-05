@@ -8,7 +8,7 @@ import { PrismaService } from '../prisma.service';
 import { RedisCacheService } from '../common/services/redis-cache.service';
 import { RiderRedisService } from './rider-redis.service';
 import { CreateDeliveryPersonDto } from './dto/create-delivery-person.dto';
-import { DeliveryPersonStatus } from '@prisma/client';
+import { DeliveryPersonStatus, OrderStatus } from '@prisma/client';
 import { TTL } from '../common/redis/ttl.config.js';
 import * as bcrypt from 'bcryptjs';
 import { UserSseService } from '../sse/user-sse.service';
@@ -74,21 +74,30 @@ export class DeliveryService {
         return person;
     }
 
-    /** List all delivery persons (capped at 500). */
-    async findAllPersons() {
-        return this.prisma.deliveryPerson.findMany({
-            take: 500,
-            orderBy: { createdAt: 'desc' },
-            select: {
-                id: true,
-                name: true,
-                phone: true,
-                status: true,
-                isActive: true,
-                createdAt: true,
-                _count: { select: { assignments: true } },
-            },
-        });
+    /** List all delivery persons (paginated). */
+    async findAllPersons(page = 1, limit = 50) {
+        const skip = (page - 1) * limit;
+        const [data, total] = await Promise.all([
+            this.prisma.deliveryPerson.findMany({
+                skip,
+                take: limit,
+                orderBy: { createdAt: 'desc' },
+                select: {
+                    id: true,
+                    name: true,
+                    phone: true,
+                    status: true,
+                    isActive: true,
+                    createdAt: true,
+                    _count: { select: { assignments: true } },
+                },
+            }),
+            this.prisma.deliveryPerson.count(),
+        ]);
+        return {
+            data,
+            meta: { page, limit, total, totalPages: Math.ceil(total / limit) },
+        };
     }
 
     /** List all delivery persons with distance from a store. */
@@ -325,18 +334,17 @@ export class DeliveryService {
                 where: { id: personId },
                 data: { status: DeliveryPersonStatus.BUSY },
             }),
-            // Mark order as SHIPPED when rider picks it up
             this.prisma.order.update({
                 where: { id: orderId },
                 data: { status: 'SHIPPED' },
             }),
         ]);
 
-        const updatedOrder = await this.prisma.order.update({
+        const updatedOrder = await this.prisma.order.findUnique({
             where: { id: orderId },
             include: { user: { select: { id: true } } },
-            data: { status: 'SHIPPED' },
         });
+        if (!updatedOrder) throw new NotFoundException(`Order ${orderId} not found after accept`);
 
         // Trigger parent status re-sync if applicable
         if (updatedOrder.parentOrderId) {
@@ -368,17 +376,16 @@ export class DeliveryService {
                 where: { id: personId },
                 data: { status: DeliveryPersonStatus.BUSY },
             }),
-            // Mark parcel as PICKED_UP
             this.prisma.parcelOrder.update({
                 where: { id: parcelOrderId },
                 data: { status: 'PICKED_UP' },
             }),
         ]);
 
-        const updatedParcel = await this.prisma.parcelOrder.update({
+        const updatedParcel = await this.prisma.parcelOrder.findUnique({
             where: { id: parcelOrderId },
-            data: { status: 'PICKED_UP' },
         });
+        if (!updatedParcel) throw new NotFoundException(`Parcel ${parcelOrderId} not found after accept`);
 
         // Notify user of parcel pickup
         this.userSseService.notify(updatedParcel.userId, {
@@ -451,8 +458,8 @@ export class DeliveryService {
 
     async completeDelivery(personId: string, orderId: string, result: 'DELIVERED' | 'NOT_DELIVERED', deliveryPin?: string, reason?: string) {
         // Prevent race condition on completion (Atomic guard)
-        const lockKey = `lock:complete:${orderId}`;
-        const lockAcquired = await this.riderRedis.acquireLock(lockKey, personId, 30); // 30s lock
+        // acquireLock prepends "lock:order:" internally, so the key is lock:order:complete:<orderId>
+        const lockAcquired = await this.riderRedis.acquireLock(`complete:${orderId}`, personId, 30);
         if (!lockAcquired) {
             throw new BadRequestException('Request already in progress for this order');
         }
@@ -478,9 +485,23 @@ export class DeliveryService {
             if (!deliveryPin) {
                 throw new BadRequestException('A delivery PIN is required to complete this delivery.');
             }
-            if (order.deliveryPin && order.deliveryPin !== deliveryPin) {
-                throw new BadRequestException('Invalid delivery PIN provided by customer');
+
+            const attempts = await this.riderRedis.getPinAttempts(orderId);
+            if (attempts >= 3) {
+                throw new BadRequestException('Too many incorrect PIN attempts. Try again in 10 minutes.');
             }
+
+            if (order.deliveryPin && order.deliveryPin !== deliveryPin) {
+                await this.riderRedis.incrementPinAttempts(orderId);
+                const remaining = 2 - attempts;
+                throw new BadRequestException(
+                    remaining > 0
+                        ? `Invalid delivery PIN. ${remaining} attempt${remaining === 1 ? '' : 's'} remaining.`
+                        : 'Invalid delivery PIN. No more attempts — try again in 10 minutes.',
+                );
+            }
+
+            await this.riderRedis.clearPinAttempts(orderId);
         }
 
         const now = new Date();
@@ -527,14 +548,13 @@ export class DeliveryService {
 
         return { orderId, result, completed: true };
         } finally {
-            // Clean up lock (optional but good practice)
-            // riderRedis doesn't have a direct releaseLock but TTL handles it
+            await this.riderRedis.releaseLock(`complete:${orderId}`, personId);
         }
     }
 
     /**
      * Sync parent order status derived from children's statuses.
-     * NOTE: Keep in sync with OrdersService.syncParentStatus() — duplicated to avoid circular dependency.
+     * Uses OrderStatus enum — kept in sync with OrdersService.syncParentStatus().
      */
     private async syncParentOrderStatus(parentOrderId: string): Promise<void> {
         const children = await this.prisma.order.findMany({
@@ -544,22 +564,20 @@ export class DeliveryService {
         if (children.length === 0) return;
 
         const statuses = children.map((c) => c.status);
+        const activeStatuses = statuses.filter((s) => s !== OrderStatus.CANCELLED);
 
-        // Separate cancelled from active children
-        const activeStatuses = statuses.filter((s) => s !== 'CANCELLED');
-
-        let parentStatus: string;
-        if (activeStatuses.length === 0) parentStatus = 'CANCELLED';
-        else if (activeStatuses.every((s) => s === 'DELIVERED')) parentStatus = 'DELIVERED';
-        else if (activeStatuses.some((s) => s === 'SHIPPED')) parentStatus = 'SHIPPED';
-        else if (activeStatuses.some((s) => s === 'ORDER_PICKED')) parentStatus = 'ORDER_PICKED';
-        else parentStatus = 'CONFIRMED';
+        let parentStatus: OrderStatus;
+        if (activeStatuses.length === 0) parentStatus = OrderStatus.CANCELLED;
+        else if (activeStatuses.every((s) => s === OrderStatus.DELIVERED)) parentStatus = OrderStatus.DELIVERED;
+        else if (activeStatuses.some((s) => s === OrderStatus.SHIPPED)) parentStatus = OrderStatus.SHIPPED;
+        else if (activeStatuses.some((s) => s === OrderStatus.ORDER_PICKED)) parentStatus = OrderStatus.ORDER_PICKED;
+        else parentStatus = OrderStatus.CONFIRMED;
 
         const updatedParent = await this.prisma.order.update({
             where: { id: parentOrderId },
             data: {
-                status: parentStatus as any,
-                ...(parentStatus === 'DELIVERED' ? { deliveredAt: new Date() } : {}),
+                status: parentStatus,
+                ...(parentStatus === OrderStatus.DELIVERED ? { deliveredAt: new Date() } : {}),
             },
         });
 

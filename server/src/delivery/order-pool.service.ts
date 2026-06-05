@@ -176,11 +176,18 @@ export class OrderPoolService {
     } else {
       const assignment = await this.prisma.orderAssignment.findUnique({
         where: { orderId },
+        select: { id: true, acceptedAt: true, deliveryPersonId: true },
       });
       if (assignment && !assignment.acceptedAt) {
-        this.logger.log(`Manual order assignment for ${orderId} timed out. Reverting to unassigned.`);
-        await this.prisma.orderAssignment.delete({ where: { id: assignment.id } });
-        // NOTE: No broadcastOrder() here - manual assignment requires manual re-trigger if failed
+        this.logger.log(`Manual order assignment for ${orderId} timed out. Freeing rider and re-broadcasting.`);
+        await this.prisma.$transaction([
+          this.prisma.orderAssignment.delete({ where: { id: assignment.id } }),
+          this.prisma.deliveryPerson.update({
+            where: { id: assignment.deliveryPersonId },
+            data: { status: DeliveryPersonStatus.FREE },
+          }),
+        ]);
+        await this.broadcastOrder(orderId);
       }
     }
   }
@@ -198,13 +205,22 @@ export class OrderPoolService {
 
   /**
    * Get available orders for a rider (REST fallback for SSE reconnection).
-   * Uses MGET for single round-trip instead of N sequential calls.
+   * Filters to only orders where this riderId is in the eligible set.
    */
-  async getAvailableOrdersForRider(_riderId: string): Promise<any[]> {
+  async getAvailableOrdersForRider(riderId: string): Promise<any[]> {
     const orderIds = await this.riderRedis.getPoolOrderIds();
     if (orderIds.length === 0) return [];
 
-    const snapshots = await this.riderRedis.getOrderSnapshots(orderIds);
+    // Filter to orders this specific rider is eligible to claim
+    const eligibilityChecks = await Promise.all(
+      orderIds.map((id) =>
+        this.riderRedis.getEligibleRiders(id).then((riders) => (riders.includes(riderId) ? id : null)),
+      ),
+    );
+    const eligibleOrderIds = eligibilityChecks.filter((id): id is string => id !== null);
+    if (eligibleOrderIds.length === 0) return [];
+
+    const snapshots = await this.riderRedis.getOrderSnapshots(eligibleOrderIds);
     return snapshots.filter(Boolean);
   }
 

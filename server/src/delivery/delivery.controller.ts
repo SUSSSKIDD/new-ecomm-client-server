@@ -6,6 +6,7 @@ import {
   Delete,
   Body,
   Param,
+  Query,
   Req,
   Sse,
   UseGuards,
@@ -80,9 +81,15 @@ export class DeliveryController {
   @ApiBearerAuth()
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Roles('ADMIN', 'STORE_MANAGER')
-  @ApiOperation({ summary: 'List all delivery persons' })
-  findAllPersons() {
-    return this.deliveryService.findAllPersons();
+  @ApiOperation({ summary: 'List all delivery persons (paginated)' })
+  findAllPersons(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.deliveryService.findAllPersons(
+      page ? Math.max(1, parseInt(page, 10)) : 1,
+      limit ? Math.min(100, Math.max(1, parseInt(limit, 10))) : 50,
+    );
   }
 
   @Patch('persons/:id')

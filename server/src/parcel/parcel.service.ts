@@ -334,7 +334,7 @@ export class ParcelService {
         );
 
         // Notify all connected riders to remove from their UI
-        this.sseService.broadcastOrderClaimed('', id);
+        this.sseService.broadcastOrderClaimed('', id, []);
 
         this.logger.log(`Parcel ${parcel.parcelNumber} CANCELLED — pool + riders cleaned up`);
         return cancelled;

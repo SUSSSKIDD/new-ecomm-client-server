@@ -4,7 +4,8 @@
 x-redis-env: &redis-env
   REDIS_URL: redis://redis:6379
   RIDER_REDIS_URL: redis://redis:6379
-  BULL_REDIS_HOST: redis
+  # BullMQ gets its own Redis instance to isolate heavy job traffic from SSE/cache/claiming
+  BULL_REDIS_HOST: redis-bull
   BULL_REDIS_PORT: "6379"
 
 x-server-common: &server-common
@@ -20,6 +21,8 @@ x-server-common: &server-common
     UPLOAD_PATH: /app/uploads
   depends_on:
     redis:
+      condition: service_healthy
+    redis-bull:
       condition: service_healthy
   volumes:
     - /opt/neyokart/uploads:/app/uploads
@@ -99,6 +102,31 @@ services:
     networks:
       - app
 
+  # Dedicated Redis for BullMQ — isolates heavy job queue I/O from SSE/cache/claiming
+  redis-bull:
+    image: redis:7-alpine
+    container_name: neyokart-redis-bull
+    command: redis-server --appendonly yes --maxmemory 128mb --maxmemory-policy noeviction
+    volumes:
+      - neyokart_redis_bull_data:/data
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 160m
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: "5m"
+        max-file: "3"
+    networks:
+      - app
+
   # ── BLUE ──────────────────────────────────────────────────────────────────────
   server-blue:
     <<: *server-common
@@ -135,3 +163,4 @@ networks:
 
 volumes:
   neyokart_redis_data:
+  neyokart_redis_bull_data:
