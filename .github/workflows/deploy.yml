@@ -64,10 +64,28 @@ jobs:
     runs-on: ubuntu-latest
 
     services:
+      # Main Redis — SSE pub/sub, cart cache, rider eligible sets, distributed locks
       redis:
         image: redis:7-alpine
         ports:
           - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 5
+
+      # BullMQ Redis — isolated from app Redis (mirrors SCALE-06 prod separation)
+      redis-bull:
+        image: redis:7-alpine
+        ports:
+          - 6380:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 5
+
       postgres:
         image: postgres:15-alpine
         env:
@@ -111,10 +129,12 @@ jobs:
         env:
           DATABASE_URL: postgresql://postgres:password123@localhost:5432/neyokart_test
           DIRECT_URL: postgresql://postgres:password123@localhost:5432/neyokart_test
+          # App Redis (SSE, cache, claiming)
           REDIS_URL: redis://localhost:6379
           RIDER_REDIS_URL: redis://localhost:6379
+          # BullMQ Redis (isolated — mirrors SCALE-06 prod config)
           BULL_REDIS_HOST: localhost
-          BULL_REDIS_PORT: 6379
+          BULL_REDIS_PORT: "6380"
           JWT_SECRET: "ci-cd-test-secret-key-12345"
           SUPER_ADMIN_PHONE: "+917785945524"
           SUPER_ADMIN_PIN: "5015"
@@ -124,6 +144,10 @@ jobs:
           RAZORPAY_TEST_KEY_ID: ${{ secrets.RAZORPAY_TEST_KEY_ID }}
           MSG91_AUTH_KEY: mock_key
           MAX_DELIVERY_RADIUS_KM: 14
+          FREE_DELIVERY_THRESHOLD: "199"
+          # Disable HTTP throttler so E2E order creation (5+ orders per store type) isn't rate-limited.
+          # PIN rate-limiting (BUG-13) uses Redis directly and is unaffected by this flag.
+          THROTTLE_DISABLED: "true"
         run: |
           cd server
           node --enable-source-maps dist/src/main.js &

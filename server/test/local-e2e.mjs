@@ -3,7 +3,15 @@
  *
  * This script is a wrapper around 'universal-e2e.mjs'.
  * It automates the infrastructure setup for a local, isolated, and non-conflicting test run.
- * It now also covers testing multi-category carts, split orders, and cart price refresh / staleness.
+ * Coverage includes: multi-category carts, split orders, cart price staleness,
+ * COD 30-second cancel window (BUG-03), delivery PIN rate limiting (BUG-13),
+ * manual assign BUSY-rider rejection (BUG-09), cursor pagination (SCALE-05),
+ * and rider list pagination (SCALE-08).
+ *
+ * Note: In the test environment, BullMQ uses the same Redis instance as the app
+ * (localhost:6380). Production uses a dedicated redis-bull container (SCALE-06 fix).
+ * THROTTLE_DISABLED=true is set so rate-limit tests that verify lockout behaviour
+ * use the Redis-based approach (BUG-13 PIN lock) rather than the HTTP throttler.
  */
 
 import axios from 'axios';

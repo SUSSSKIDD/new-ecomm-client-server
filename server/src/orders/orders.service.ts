@@ -24,8 +24,8 @@ import {
   FulfillmentPreview,
   AllocationPreview,
 } from './interfaces/order-preview.interface';
-import { OrderStatus, PaymentMethod, PaymentStatus, Prisma } from '@prisma/client';
-import { randomBytes } from 'crypto';
+import { DeliveryPersonStatus, OrderStatus, PaymentMethod, PaymentStatus, Prisma } from '@prisma/client';
+import { randomBytes, randomInt } from 'crypto';
 import { TTL } from '../common/redis/ttl.config.js';
 
 import { DeliverySseService } from '../sse/delivery-sse.service';
@@ -59,7 +59,6 @@ export class OrdersService {
     );
   }
 
-  private static readonly GRACE_PERIOD_MS = 90_000; // 90 seconds
   private static readonly CACHE_LIMITS = [10, 20, 50];
   private static readonly CACHE_MAX_PAGES = 5;
 
@@ -78,16 +77,19 @@ export class OrdersService {
     this.cache.delMany(keys).catch(() => {});
   }
 
+  private static readonly CANCEL_GRACE_MS = 30_000; // 30 seconds for COD confirmed orders
+
   /**
-   * Compute canCancel / canModify / graceExpiresAt for an order.
-   * Confirmed orders are now immutable.
+   * Compute canCancel for an order.
+   * PENDING orders: always cancellable.
+   * CONFIRMED orders (COD auto-confirm): cancellable within 30 seconds of confirmedAt.
    */
   private computeGraceFields(order: { status: string; confirmedAt?: Date | null }) {
-    return {
-      canCancel: order.status === 'PENDING',
-      canModify: false,
-      graceExpiresAt: null,
-    };
+    if (order.status === 'CONFIRMED' && order.confirmedAt) {
+      const elapsed = Date.now() - new Date(order.confirmedAt).getTime();
+      return { canCancel: elapsed < OrdersService.CANCEL_GRACE_MS };
+    }
+    return { canCancel: order.status === 'PENDING' };
   }
 
   /**
@@ -104,7 +106,7 @@ export class OrdersService {
    * Generate a 4-digit delivery PIN (0000-9999).
    */
   private generateDeliveryPin(): string {
-    return Math.floor(1000 + Math.random() * 9000).toString();
+    return randomInt(1000, 10000).toString();
   }
 
   /**
@@ -567,7 +569,7 @@ export class OrdersService {
     const orderNumber = this.generateOrderNumber();
     const deliveryPin = this.generateDeliveryPin();
 
-    return this.prisma.$transaction(async (tx) => {
+    return this.prisma.directTx(async (tx) => {
       await this.stockService.adjustStock(tx, orderItems, 'decrement');
 
       return tx.order.create({
@@ -667,7 +669,7 @@ export class OrdersService {
     const parentOrderNumber = this.generateOrderNumber();
     const deliveryPin = this.generateDeliveryPin();
 
-    return this.prisma.$transaction(async (tx) => {
+    return this.prisma.directTx(async (tx) => {
       // Batch decrement stock for ALL items across all stores
       await this.stockService.adjustStock(tx, allItems, 'decrement');
 
@@ -1003,9 +1005,22 @@ export class OrdersService {
       ps === PaymentStatus.PAID ? PaymentStatus.REFUNDED : PaymentStatus.FAILED;
 
     if (order.isParent) {
-      // Cascade cancel all non-terminal child orders
-      await this.prisma.$transaction(async (tx) => {
-        for (const child of order.childOrders) {
+      // Cascade cancel all non-terminal child orders.
+      // Re-read children inside the transaction to avoid acting on stale status
+      // (a child could have transitioned to DELIVERED between the outer findUnique and here).
+      await this.prisma.directTx(async (tx) => {
+        const freshChildren = await tx.order.findMany({
+          where: { parentOrderId: orderId },
+          select: {
+            id: true,
+            status: true,
+            paymentStatus: true,
+            items: {
+              select: { productId: true, quantity: true, storeId: true, id: true, name: true, price: true, total: true, orderId: true },
+            },
+          },
+        });
+        for (const child of freshChildren) {
           if (child.status === OrderStatus.CANCELLED || child.status === OrderStatus.DELIVERED) continue;
           if (child.items.length > 0) {
             await this.stockService.adjustStock(tx, child.items, 'increment');
@@ -1029,7 +1044,7 @@ export class OrdersService {
       });
     } else {
       // Single-store or child order cancel
-      await this.prisma.$transaction(async (tx) => {
+      await this.prisma.directTx(async (tx) => {
         if (order.items.length > 0) {
           await this.stockService.adjustStock(tx, order.items, 'increment');
         }
@@ -1057,153 +1072,12 @@ export class OrdersService {
       include: { items: true, childOrders: { include: { items: true } } },
     });
 
+    this.userSseService.notify(userId, {
+      type: 'ORDER_STATUS_UPDATED',
+      data: { orderId, status: OrderStatus.CANCELLED },
+    });
+
     return { ...cancelledOrder, ...this.computeGraceFields({ status: OrderStatus.CANCELLED, confirmedAt: order.confirmedAt }) };
-  }
-
-  /**
-   * Modify order items within the 90-second grace period.
-   * Restores old stock, validates + decrements new stock, recalculates totals.
-   */
-  async modifyOrder(
-    userId: string,
-    orderId: string,
-    modifications: { productId: string; quantity: number }[],
-  ) {
-    const order = await this.prisma.order.findUnique({
-      where: { id: orderId },
-      select: {
-        id: true,
-        userId: true,
-        orderNumber: true,
-        status: true,
-        confirmedAt: true,
-        deliveryFee: true,
-        isParent: true,
-        parentOrderId: true,
-        items: {
-          select: { id: true, productId: true, name: true, price: true, quantity: true, total: true, taxRate: true, storeId: true, orderId: true },
-        },
-      },
-    });
-
-    if (!order || order.userId !== userId) {
-      throw new NotFoundException('Order not found');
-    }
-
-    // Parent orders cannot be modified directly — modify individual child orders
-    if (order.isParent) {
-      throw new BadRequestException(
-        'Cannot modify a multi-store order directly. Modify individual sub-orders instead.',
-      );
-    }
-
-    // Grace period check — use parent's confirmedAt for child orders
-    const graceSource = order.parentOrderId
-      ? await this.prisma.order.findUnique({
-          where: { id: order.parentOrderId },
-          select: { confirmedAt: true },
-        })
-      : order;
-    const grace = this.computeGraceFields({ status: order.status, confirmedAt: graceSource?.confirmedAt });
-    if (!grace.canModify) {
-      throw new BadRequestException(
-        'Grace period expired. Order can no longer be modified.',
-      );
-    }
-
-    // Build a map of requested changes: productId -> newQuantity
-    const modMap = new Map(modifications.map((m) => [m.productId, m.quantity]));
-
-    // Validate all modification productIds exist in the order
-    for (const productId of modMap.keys()) {
-      if (!order.items.find((i) => i.productId === productId)) {
-        throw new BadRequestException(
-          `Product ${productId} is not in this order`,
-        );
-      }
-    }
-
-    // Must keep at least one item
-    const remainingItems = order.items.filter((i) => {
-      const newQty = modMap.get(i.productId);
-      return newQty === undefined ? true : newQty > 0;
-    });
-    if (remainingItems.length === 0 && order.items.every((i) => modMap.has(i.productId))) {
-      throw new BadRequestException(
-        'Cannot remove all items. Cancel the order instead.',
-      );
-    }
-
-    const updatedOrder = await this.prisma.$transaction(async (tx) => {
-      // 1. Restore stock for ALL current items (simpler than computing deltas)
-      await this.stockService.adjustStock(tx, order.items, 'increment');
-
-      // 2. Compute new items list
-      const newItems = order.items
-        .map((item) => {
-          const newQty = modMap.has(item.productId) ? modMap.get(item.productId)! : item.quantity;
-          return { ...item, quantity: newQty, total: item.price * newQty };
-        })
-        .filter((item) => item.quantity > 0);
-
-      // 3. Decrement stock for new quantities
-      await this.stockService.adjustStock(tx, newItems, 'decrement');
-
-      // 4. Delete removed items
-      const removedIds = order.items
-        .filter((item) => modMap.has(item.productId) && modMap.get(item.productId) === 0)
-        .map((item) => item.id);
-      if (removedIds.length > 0) {
-        await tx.orderItem.deleteMany({ where: { id: { in: removedIds } } });
-      }
-
-      // 5. Update quantities for remaining items
-      for (const newItem of newItems) {
-        const oldItem = order.items.find((i) => i.productId === newItem.productId);
-        if (oldItem && (oldItem.quantity !== newItem.quantity)) {
-          await tx.orderItem.update({
-            where: { id: oldItem.id },
-            data: { quantity: newItem.quantity, total: newItem.total },
-          });
-        }
-      }
-
-      // 6. Recalculate totals using per-item taxRate snapshot from OrderItem
-      const subtotal = newItems.reduce((sum, item) => sum + item.total, 0);
-      const tax = newItems.reduce((acc, oi) => {
-        const rate = oi.taxRate ?? 0;
-        return acc + Math.round(oi.total * (rate / 100) * 100) / 100;
-      }, 0);
-      const deliveryFee = subtotal >= this.freeDeliveryThreshold ? 0 : this.deliveryFee;
-      const total = Math.round((subtotal + deliveryFee + tax) * 100) / 100;
-
-      return tx.order.update({
-        where: { id: orderId },
-        data: { subtotal, deliveryFee, tax, total },
-        include: { items: true },
-      });
-    });
-
-    // If child order, sync parent totals
-    if (order.parentOrderId) {
-      const siblings = await this.prisma.order.findMany({
-        where: { parentOrderId: order.parentOrderId },
-        select: { subtotal: true, deliveryFee: true, tax: true, total: true },
-      });
-      const parentSubtotal = siblings.reduce((s, c) => s + c.subtotal, 0);
-      const parentDeliveryFee = siblings.reduce((s, c) => s + c.deliveryFee, 0);
-      const parentTax = siblings.reduce((s, c) => s + c.tax, 0);
-      const parentTotal = siblings.reduce((s, c) => s + c.total, 0);
-      await this.prisma.order.update({
-        where: { id: order.parentOrderId },
-        data: { subtotal: parentSubtotal, deliveryFee: parentDeliveryFee, tax: parentTax, total: parentTotal },
-      });
-    }
-
-    this.invalidateOrderCache(userId, orderId);
-
-    this.logger.log(`Order ${order.orderNumber} modified within grace period`);
-    return { ...updatedOrder, ...this.computeGraceFields({ ...updatedOrder, confirmedAt: graceSource?.confirmedAt ?? order.confirmedAt }) };
   }
 
   /**
@@ -1298,36 +1172,29 @@ export class OrdersService {
       status,
       sortBy = 'createdAt',
       sortOrder = 'desc',
+      cursor,
     } = query;
-    const skip = (page - 1) * limit;
 
-    const where: Prisma.OrderWhereInput = {
-      items: { some: { storeId } },
-    };
-    if (status) {
-      where.status = status;
-    }
+    const where: Prisma.OrderWhereInput = { items: { some: { storeId } } };
+    if (status) where.status = status;
+
+    const include = {
+      items: true,
+      user: { select: { name: true, phone: true } },
+      assignment: { include: { deliveryPerson: { select: { id: true, name: true, phone: true } } } },
+    } as const;
+    const orderBy = [{ [sortBy]: sortOrder }, { id: 'asc' as const }];
 
     const [orders, total] = await Promise.all([
-      this.prisma.order.findMany({
-        skip,
-        take: Number(limit),
-        where,
-        orderBy: { [sortBy]: sortOrder },
-        include: {
-          items: true,
-          user: { select: { name: true, phone: true } },
-          assignment: {
-            include: {
-              deliveryPerson: { select: { id: true, name: true, phone: true } },
-            },
-          },
-        },
-      }),
+      cursor
+        ? this.prisma.order.findMany({ where, orderBy, include, cursor: { id: cursor }, skip: 1, take: Number(limit) })
+        : this.prisma.order.findMany({ where, orderBy, include, skip: (page - 1) * limit, take: Number(limit) }),
       this.prisma.order.count({ where }),
     ]);
 
-    return paginate(orders, total, page, limit);
+    const result = paginate(orders, total, page, limit);
+    const nextCursor = orders.length === Number(limit) ? orders[orders.length - 1].id : null;
+    return { ...result, nextCursor };
   }
   async findAllAdmin(query: OrderQueryDto) {
     const {
@@ -1336,47 +1203,36 @@ export class OrdersService {
       status,
       sortBy = 'createdAt',
       sortOrder = 'desc',
+      cursor,
     } = query;
-    const skip = (page - 1) * limit;
 
-    const where: Prisma.OrderWhereInput = {
-      parentOrderId: null, // Show parent/standalone only, not child orders
-    };
-    if (status) {
-      where.status = status;
-    }
+    const where: Prisma.OrderWhereInput = { parentOrderId: null };
+    if (status) where.status = status;
 
-    const [orders, total] = await Promise.all([
-      this.prisma.order.findMany({
-        skip,
-        take: Number(limit),
-        where,
-        orderBy: { [sortBy]: sortOrder },
+    const include = {
+      items: true,
+      user: { select: { name: true, phone: true } },
+      assignment: { include: { deliveryPerson: { select: { id: true, name: true, phone: true } } } },
+      childOrders: {
         include: {
           items: true,
-          user: { select: { name: true, phone: true } },
-          assignment: {
-            include: {
-              deliveryPerson: { select: { id: true, name: true, phone: true } },
-            },
-          },
-          childOrders: {
-            include: {
-              items: true,
-              assignment: {
-                include: {
-                  deliveryPerson: { select: { id: true, name: true, phone: true } },
-                },
-              },
-            },
-            orderBy: { orderNumber: 'asc' },
-          },
+          assignment: { include: { deliveryPerson: { select: { id: true, name: true, phone: true } } } },
         },
-      }),
+        orderBy: { orderNumber: 'asc' as const },
+      },
+    };
+    const orderBy = [{ [sortBy]: sortOrder }, { id: 'asc' as const }];
+
+    const [orders, total] = await Promise.all([
+      cursor
+        ? this.prisma.order.findMany({ where, orderBy, include, cursor: { id: cursor }, skip: 1, take: Number(limit) })
+        : this.prisma.order.findMany({ where, orderBy, include, skip: (page - 1) * limit, take: Number(limit) }),
       this.prisma.order.count({ where }),
     ]);
 
-    return paginate(orders, total, page, limit);
+    const result = paginate(orders, total, page, limit);
+    const nextCursor = orders.length === Number(limit) ? orders[orders.length - 1].id : null;
+    return { ...result, nextCursor };
   }
 
   async exportCsv(role: string, userStoreId?: string, startDate?: string, endDate?: string, queryStoreId?: string) {
@@ -1530,7 +1386,7 @@ export class OrdersService {
 
     // If admin cancels, restore stock atomically (same logic as user cancel)
     if (status === OrderStatus.CANCELLED) {
-      const cancelledOrder = await this.prisma.$transaction(async (tx) => {
+      const cancelledOrder = await this.prisma.directTx(async (tx) => {
         await this.stockService.adjustStock(tx, order.items, 'increment');
 
         return tx.order.update({
@@ -1666,15 +1522,34 @@ export class OrdersService {
       throw new BadRequestException('Order already has a delivery assignment');
     }
 
+    // Verify rider is active and FREE before assigning
+    const rider = await this.prisma.deliveryPerson.findUnique({
+      where: { id: deliveryPersonId },
+      select: { id: true, name: true, isActive: true, status: true },
+    });
+    if (!rider) throw new NotFoundException('Delivery person not found');
+    if (!rider.isActive || rider.status !== DeliveryPersonStatus.FREE) {
+      throw new BadRequestException(
+        `Rider "${rider.name}" is not available (status: ${rider.status}, active: ${rider.isActive}). Only FREE active riders can be assigned.`,
+      );
+    }
+
     // 1. Remove from broadcast pool
     await this.orderPoolService.removeOrder(orderId).catch(() => { });
 
-    // 2. Create pending assignment
+    // 2. Create assignment + set rider BUSY atomically
+    await this.prisma.$transaction([
+      this.prisma.deliveryPerson.update({
+        where: { id: deliveryPersonId },
+        data: { status: DeliveryPersonStatus.BUSY },
+      }),
+    ]);
+
     const assignment = await this.prisma.orderAssignment.create({
       data: {
         orderId,
         deliveryPersonId,
-        acceptedAt: null, // Rider must accept
+        acceptedAt: null, // Rider must accept to confirm
       },
       include: {
         order: {
@@ -1694,7 +1569,7 @@ export class OrdersService {
     // - Notify the specific rider of their new assignment
     this.deliverySseService.notifyNewOrder(deliveryPersonId, assignment.order);
     // - Tell ALL other riders to hide this order from 'Available Orders' if it was broadcasted
-    this.deliverySseService.broadcastOrderClaimed(null, orderId);
+    this.deliverySseService.broadcastOrderClaimed(null, orderId, []); // manual assign — no eligible set
 
     // 4. Schedule timeout (wait 5 mins for acceptance, else revert to pool)
     await this.orderPoolService.scheduleManualTimeout(orderId);

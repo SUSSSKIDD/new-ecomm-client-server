@@ -64,7 +64,7 @@ export class OrderClaimService {
 
     try {
       // Layer 2: Prisma interactive transaction
-      const result = await this.prisma.$transaction(async (tx) => {
+      const result = await this.prisma.directTx(async (tx) => {
         const entity = await config.findEntity(tx);
         if (!entity) throw new NotFoundException(`${entityLabel} not found`);
         if (!config.validStatuses.includes(entity.status)) {
@@ -99,8 +99,9 @@ export class OrderClaimService {
         data: { orderId: entityId, orderNumber: result.orderNumber },
       });
 
-      // Notify ALL other connected riders to remove from their UI
-      this.sseService.broadcastOrderClaimed(riderId, entityId);
+      // Notify eligible riders to remove this order from their UI (O(eligible) not O(all))
+      const eligibleRiderIds = await this.riderRedis.getEligibleRiders(entityId);
+      this.sseService.broadcastOrderClaimed(riderId, entityId, eligibleRiderIds);
 
       await this.safeCleanup(`setIdempotency(${entityId})`, () =>
         this.riderRedis.setIdempotency(entityId, riderId),

@@ -33,6 +33,43 @@ fi
 echo "Current Active: $ACTIVE_COLOR ($OLD_PORT)"
 echo "Deploying to:   $NEW_COLOR ($NEW_PORT)"
 
+# ── Step 0: Ensure infrastructure services are running ──────────────────────
+# Runs on EVERY deploy. Safe because:
+#   - Named volumes (neyokart_redis_data, neyokart_redis_bull_data) are independent
+#     of their containers. Data is NEVER deleted by `docker compose up`.
+#   - Only `docker compose down -v` or `docker volume rm` deletes volume data —
+#     neither command appears anywhere in this script.
+#   - If containers are already running and config is unchanged → no-op.
+#   - If a container was stopped (e.g. OOM kill) → restarts it, volume remounted.
+#   - If config changed (e.g. new Redis image) → recreates container, same volume.
+#   - First-ever deploy on a fresh VPS → creates containers + empty volumes.
+echo "[0/6] Ensuring infrastructure services (redis, redis-bull)..."
+docker compose -f $DOCKER_COMPOSE_FILE up -d redis redis-bull
+
+echo "  Waiting for redis to be healthy..."
+REDIS_RETRIES=0
+until docker compose -f $DOCKER_COMPOSE_FILE exec -T redis redis-cli ping | grep -q PONG; do
+    REDIS_RETRIES=$((REDIS_RETRIES+1))
+    if [ $REDIS_RETRIES -ge 15 ]; then
+        echo "❌ redis failed to become healthy after 15s. Aborting."
+        exit 1
+    fi
+    sleep 1
+done
+echo "  ✅ redis healthy"
+
+echo "  Waiting for redis-bull to be healthy..."
+BULL_RETRIES=0
+until docker compose -f $DOCKER_COMPOSE_FILE exec -T redis-bull redis-cli ping | grep -q PONG; do
+    BULL_RETRIES=$((BULL_RETRIES+1))
+    if [ $BULL_RETRIES -ge 15 ]; then
+        echo "❌ redis-bull failed to become healthy after 15s. Aborting."
+        exit 1
+    fi
+    sleep 1
+done
+echo "  ✅ redis-bull healthy"
+
 # 1. Build new slot images in parallel using BuildKit
 # --no-cache removed: BuildKit layer cache cuts repeat build time significantly.
 # DOCKER_BUILDKIT=1 enables parallel stage execution within each Dockerfile.

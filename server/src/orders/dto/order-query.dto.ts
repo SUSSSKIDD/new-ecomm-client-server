@@ -1,4 +1,4 @@
-import { IsOptional, IsInt, Min, Max, IsEnum, IsIn } from 'class-validator';
+import { IsOptional, IsInt, Min, Max, IsEnum, IsIn, IsString, IsUUID } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { OrderStatus } from '@prisma/client';
@@ -33,4 +33,14 @@ export class OrderQueryDto {
   @IsOptional()
   @IsIn(['asc', 'desc'])
   sortOrder?: 'asc' | 'desc' = 'desc';
+
+  /**
+   * Cursor-based pagination — pass the `nextCursor` from the previous response.
+   * When provided, `page` is ignored. Enables O(1) deep pagination regardless of dataset size.
+   */
+  @ApiPropertyOptional({ description: 'ID of the last order from previous page (cursor pagination)' })
+  @IsOptional()
+  @IsString()
+  @IsUUID()
+  cursor?: string;
 }

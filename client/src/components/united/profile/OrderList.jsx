@@ -159,7 +159,7 @@ const OrderList = ({ onBack }) => {
         try {
             await api(token).post(`/orders/${orderId}/cancel`);
             setOrders((prev) => prev.map((o) =>
-                o.id === orderId ? { ...o, status: 'CANCELLED', canCancel: false, canModify: false } : o
+                o.id === orderId ? { ...o, status: 'CANCELLED', canCancel: false } : o
             ));
         } catch (err) {
             setCancelError(err.response?.data?.message || 'Failed to cancel order');

@@ -33,6 +33,7 @@ export interface NearbyStore extends CachedStore {
 export class StoresService {
   private readonly logger = new Logger(StoresService.name);
   private static readonly STORES_CACHE_KEY = 'stores:all';
+  private static readonly STORES_GEO_KEY = 'stores:geo';
   private static readonly STORES_CACHE_TTL = TTL.STORES;
 
   private readonly maxDeliveryRadiusKm: number;
@@ -50,9 +51,7 @@ export class StoresService {
 
   /** Get all active stores from cache (or DB fallback). */
   async getAllStoresFromCache(): Promise<CachedStore[]> {
-    const cached = await this.cache.get<CachedStore[]>(
-      StoresService.STORES_CACHE_KEY,
-    );
+    const cached = await this.cache.get<CachedStore[]>(StoresService.STORES_CACHE_KEY);
     if (cached) return cached;
 
     const stores = await this.prisma.store.findMany({
@@ -60,38 +59,82 @@ export class StoresService {
       select: { id: true, name: true, pincode: true, lat: true, lng: true },
     });
 
-    await this.cache.set(
-      StoresService.STORES_CACHE_KEY,
-      stores,
-      StoresService.STORES_CACHE_TTL,
-    );
+    await this.cache.set(StoresService.STORES_CACHE_KEY, stores, StoresService.STORES_CACHE_TTL);
+
+    // Rebuild geo index so GEOSEARCH-based proximity works without Node.js Haversine
+    await this.rebuildGeoIndex(stores);
+
     return stores;
   }
 
+  private async rebuildGeoIndex(stores: CachedStore[]): Promise<void> {
+    await this.cache.del(StoresService.STORES_GEO_KEY);
+    const withCoords = stores.filter((s) => s.lat && s.lng && (s.lat !== 0 || s.lng !== 0));
+    await Promise.all(
+      withCoords.map((s) => this.cache.geoAdd(StoresService.STORES_GEO_KEY, s.lng, s.lat, s.id)),
+    );
+  }
+
   private async invalidateCache(): Promise<void> {
-    await this.cache.del(StoresService.STORES_CACHE_KEY);
+    await Promise.all([
+      this.cache.del(StoresService.STORES_CACHE_KEY),
+      this.cache.del(StoresService.STORES_GEO_KEY),
+    ]);
   }
 
   // ── Serviceability ──────────────────────────────────────────────
 
-  /** Check if user location is within delivery radius of any store. */
-  async checkServiceability(lat: number, lng: number, pincode?: string) {
-    const stores = await this.getAllStoresFromCache();
+  /**
+   * Map store IDs returned by GEOSEARCH to full CachedStore objects.
+   * Falls back to Haversine scan if geo key is empty (cold Redis, post-flush).
+   */
+  private async resolveNearbyByGeo(
+    lat: number,
+    lng: number,
+    radiusKm: number,
+    pincode?: string,
+  ): Promise<NearbyStore[]> {
+    const nearbyIds = await this.cache.geoSearchRadius(
+      StoresService.STORES_GEO_KEY, lng, lat, radiusKm, 50, 'km',
+    );
 
-    let nearby: NearbyStore[] = stores
-      .map((s) => ({
-        ...s,
-        distance:
-          Math.round(haversineDistance(lat, lng, s.lat, s.lng) * 10) / 10,
-      }))
-      .filter((s) => s.distance <= this.maxDeliveryRadiusKm)
+    const allStores = await this.getAllStoresFromCache();
+
+    if (nearbyIds.length > 0) {
+      const storeMap = new Map(allStores.map((s) => [s.id, s]));
+      const nearby = nearbyIds
+        .map((id) => storeMap.get(id))
+        .filter((s): s is CachedStore => s != null)
+        .map((s) => ({
+          ...s,
+          distance: Math.round(haversineDistance(lat, lng, s.lat, s.lng) * 10) / 10,
+        }));
+      if (nearby.length > 0) return nearby;
+    }
+
+    // Fallback: geo key empty (cold start / Redis flush) — in-memory Haversine
+    const nearby = allStores
+      .filter((s) => s.lat && s.lng && (s.lat !== 0 || s.lng !== 0))
+      .map((s) => ({ ...s, distance: Math.round(haversineDistance(lat, lng, s.lat, s.lng) * 10) / 10 }))
+      .filter((s) => s.distance <= radiusKm)
       .sort((a, b) => a.distance - b.distance);
 
-    // Alternative matching if pincode is provided and no nearby stores found via GPS
     if (nearby.length === 0 && pincode) {
-      const pinMatches = stores
-        .filter(s => s.pincode === pincode)
-        .map(s => ({ ...s, distance: 0 }));
+      return allStores.filter((s) => s.pincode === pincode).map((s) => ({ ...s, distance: 0 }));
+    }
+    return nearby;
+  }
+
+  /** Check if user location is within delivery radius of any store. */
+  async checkServiceability(lat: number, lng: number, pincode?: string) {
+    let nearby = await this.resolveNearbyByGeo(lat, lng, this.maxDeliveryRadiusKm, pincode);
+
+    // Pincode fallback if GPS finds nothing
+    if (nearby.length === 0 && pincode) {
+      const allStores = await this.getAllStoresFromCache();
+      const pinMatches = allStores
+        .filter((s) => s.pincode === pincode)
+        .map((s) => ({ ...s, distance: 0 }));
       if (pinMatches.length > 0) nearby = pinMatches;
     }
 
@@ -103,29 +146,9 @@ export class StoresService {
     };
   }
 
-  /** Get stores within a specific radius, sorted by distance. 
-   * Used for product visibility (typically 10km) and serviceability checks.
-   */
+  /** Get stores within a specific radius, sorted by distance. */
   async findNearbyStores(lat: number, lng: number, pincode?: string, radiusKm: number = 10): Promise<NearbyStore[]> {
-    const stores = await this.getAllStoresFromCache();
-
-    let nearby = stores
-      .filter((s) => s.lat && s.lng && (s.lat !== 0 || s.lng !== 0))
-      .map((s) => ({
-        ...s,
-        distance:
-          Math.round(haversineDistance(lat, lng, s.lat, s.lng) * 10) / 10,
-      }))
-      .filter((s) => s.distance <= radiusKm)
-      .sort((a, b) => a.distance - b.distance);
-
-    if (nearby.length === 0 && pincode) {
-      nearby = stores
-        .filter(s => s.pincode === pincode)
-        .map(s => ({ ...s, distance: 0 }));
-    }
-
-    return nearby;
+    return this.resolveNearbyByGeo(lat, lng, radiusKm, pincode);
   }
 
   // ── CRUD ────────────────────────────────────────────────────────
@@ -237,7 +260,7 @@ export class StoresService {
       select: { id: true, images: true },
     });
 
-    await this.prisma.$transaction(async (tx) => {
+    await this.prisma.directTx(async (tx) => {
       // 1. Delete all products related to the store
       await tx.product.deleteMany({ where: { storeId: id } });
       // 2. Delete the store itself

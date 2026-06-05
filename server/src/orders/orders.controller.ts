@@ -17,6 +17,8 @@ import {
   Res,
 } from '@nestjs/common';
 import { map, Observable } from 'rxjs';
+import { Throttle } from '@nestjs/throttler';
+import { ConfigurableThrottlerGuard } from '../auth/guards/configurable-throttler.guard';
 import { UserSseService } from '../sse/user-sse.service';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -37,7 +39,6 @@ import {
 } from './dto/create-order.dto';
 import { OrderQueryDto } from './dto/order-query.dto';
 import { ExportQueryDto } from './dto/export-query.dto';
-import { ModifyOrderDto } from './dto/modify-order.dto';
 
 interface AuthenticatedRequest extends Request {
   user: { sub: string; phone: string; role: string; storeId?: string };
@@ -74,6 +75,8 @@ export class OrdersController {
   }
 
   @Post()
+  @UseGuards(ConfigurableThrottlerGuard)
+  @Throttle({ default: { ttl: 60_000, limit: 5 } })
   @ApiOperation({ summary: 'Create order from cart' })
   @ApiHeader({
     name: 'idempotency-key',
@@ -117,16 +120,6 @@ export class OrdersController {
     @Param('id', ParseUUIDPipe) id: string,
   ) {
     return this.ordersService.cancel(req.user.sub, id);
-  }
-
-  @Patch(':id/modify')
-  @ApiOperation({ summary: 'Modify order items within 90s grace period' })
-  async modify(
-    @Req() req: AuthenticatedRequest,
-    @Param('id', ParseUUIDPipe) id: string,
-    @Body() dto: ModifyOrderDto,
-  ) {
-    return this.ordersService.modifyOrder(req.user.sub, id, dto.items);
   }
 
   @Get('admin/store')

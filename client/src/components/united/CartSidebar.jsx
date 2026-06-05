@@ -341,31 +341,27 @@ const CartSidebar = () => {
         }
     };
 
-    // ── Grace period state ──
-    const [graceSeconds, setGraceSeconds] = useState(0);
+    // ── Cancel state ──
     const [cancelling, setCancelling] = useState(false);
-    const [modifying, setModifying] = useState(false);
-    const [modifyItems, setModifyItems] = useState([]);
-    const [showModify, setShowModify] = useState(false);
-    const graceTimer = useRef(null);
+    const [cancelSecondsLeft, setCancelSecondsLeft] = useState(null);
+    const cancelCountdownRef = useRef(null);
 
-    // Start grace countdown when order succeeds
+    // Start a 30-second countdown when a COD order is confirmed (confirmedAt set)
     useEffect(() => {
-        if (step === 'success' && orderResult?.graceExpiresAt) {
-            const tick = () => {
-                const remaining = Math.max(0, Math.ceil((new Date(orderResult.graceExpiresAt).getTime() - Date.now()) / 1000));
-                setGraceSeconds(remaining);
-                if (remaining <= 0 && graceTimer.current) {
-                    clearInterval(graceTimer.current);
-                    graceTimer.current = null;
-                }
-            };
-            tick();
-            graceTimer.current = setInterval(tick, 1000);
-            setModifyItems(orderResult.items?.map((i) => ({ ...i })) || []);
-            return () => { if (graceTimer.current) clearInterval(graceTimer.current); };
+        if (!orderResult?.canCancel || !orderResult?.confirmedAt) {
+            setCancelSecondsLeft(null);
+            return;
         }
-    }, [step, orderResult]);
+        const tick = () => {
+            const elapsed = Date.now() - new Date(orderResult.confirmedAt).getTime();
+            const remaining = Math.max(0, Math.ceil((30000 - elapsed) / 1000));
+            setCancelSecondsLeft(remaining);
+            if (remaining === 0) clearInterval(cancelCountdownRef.current);
+        };
+        tick();
+        cancelCountdownRef.current = setInterval(tick, 1000);
+        return () => clearInterval(cancelCountdownRef.current);
+    }, [orderResult?.canCancel, orderResult?.confirmedAt]);
 
     const handleCancelOrder = useCallback(async () => {
         if (!orderResult) return;
@@ -373,37 +369,13 @@ const CartSidebar = () => {
         setError('');
         try {
             await http.post(`/orders/${orderResult.id}/cancel`);
-            setOrderResult((prev) => ({ ...prev, status: 'CANCELLED', canCancel: false, canModify: false }));
-            if (graceTimer.current) { clearInterval(graceTimer.current); graceTimer.current = null; }
-            setGraceSeconds(0);
+            setOrderResult((prev) => ({ ...prev, status: 'CANCELLED', canCancel: false }));
         } catch (err) {
             setError(err.response?.data?.message || 'Failed to cancel order');
         } finally {
             setCancelling(false);
         }
     }, [orderResult, token]);
-
-    const handleModifyOrder = useCallback(async () => {
-        if (!orderResult) return;
-        setModifying(true);
-        setError('');
-        try {
-            const items = modifyItems
-                .map((i) => ({ productId: i.productId, quantity: i.quantity }))
-                .filter((i) => {
-                    const orig = orderResult.items.find((o) => o.productId === i.productId);
-                    return !orig || orig.quantity !== i.quantity;
-                });
-            if (items.length === 0) { setShowModify(false); setModifying(false); return; }
-            const res = await http.patch(`/orders/${orderResult.id}/modify`, { items });
-            setOrderResult((prev) => ({ ...prev, ...res.data }));
-            setShowModify(false);
-        } catch (err) {
-            setError(err.response?.data?.message || 'Failed to modify order');
-        } finally {
-            setModifying(false);
-        }
-    }, [orderResult, modifyItems, token]);
 
     // ── Group cart items by storeType ──
     const groupedCart = useMemo(() => {
@@ -421,7 +393,6 @@ const CartSidebar = () => {
         // ── SUCCESS ──
         if (step === 'success' && orderResult) {
             const isCancelled = orderResult.status === 'CANCELLED';
-            const graceActive = graceSeconds > 0 && !isCancelled;
 
             return (
                 <div className="flex-1 overflow-y-auto min-h-0 flex flex-col items-center justify-center p-6 text-center">
@@ -448,92 +419,23 @@ const CartSidebar = () => {
                         </>
                     )}
 
-                    {/* Grace period countdown */}
-                    {graceActive && (
+                    {/* Cancel button — PENDING (no timer) or CONFIRMED COD within 30s */}
+                    {orderResult.canCancel && !isCancelled && (cancelSecondsLeft === null || cancelSecondsLeft > 0) && (
                         <div className="w-full mb-4">
-                            <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-900/50 rounded-xl p-3 mb-3">
-                                <p className="text-xs font-semibold text-amber-700 dark:text-amber-400 mb-1">You can cancel or modify this order</p>
-                                <div className="flex items-center justify-center gap-1">
-                                    <span className="text-2xl font-mono font-bold text-amber-600 dark:text-amber-400">{graceSeconds}</span>
-                                    <span className="text-xs text-amber-500 dark:text-amber-500/80">seconds remaining</span>
-                                </div>
-                                {/* Progress bar */}
-                                <div className="w-full bg-amber-200 dark:bg-amber-900/40 rounded-full h-1.5 mt-2">
-                                    <div
-                                        className="bg-amber-500 h-1.5 rounded-full transition-all duration-1000"
-                                        style={{ width: `${(graceSeconds / 90) * 100}%` }}
-                                    />
-                                </div>
-                            </div>
-
-                            {/* Cancel / Modify buttons */}
-                            {!showModify && (
-                                <div className="flex gap-2">
-                                    <RippleButton
-                                        onClick={handleCancelOrder}
-                                        disabled={cancelling}
-                                        className="flex-1 py-2.5 bg-red-500 text-white text-sm font-bold rounded-xl hover:bg-red-600 disabled:opacity-50 transition-colors"
-                                    >
-                                        {cancelling ? 'Cancelling...' : 'Cancel Order'}
-                                    </RippleButton>
-                                    <RippleButton
-                                        onClick={() => setShowModify(true)}
-                                        className="flex-1 py-2.5 bg-blue-500 text-white text-sm font-bold rounded-xl hover:bg-blue-600 transition-colors"
-                                    >
-                                        Modify Order
-                                    </RippleButton>
-                                </div>
-                            )}
-
-                            {/* Modify inline editor */}
-                            {showModify && (
-                                <div className="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl p-3 text-left">
-                                    <p className="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase mb-2">Edit Quantities</p>
-                                    <div className="space-y-2 max-h-40 overflow-y-auto">
-                                        {modifyItems.map((item, idx) => (
-                                            <div key={item.productId} className="flex items-center justify-between text-sm">
-                                                <span className="text-gray-700 dark:text-gray-300 truncate flex-1 mr-2">{item.name}</span>
-                                                <div className="flex items-center gap-2">
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => setModifyItems((prev) => prev.map((it, i) => i === idx ? { ...it, quantity: Math.max(0, it.quantity - 1) } : it))}
-                                                        className="w-7 h-7 rounded-full bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-gray-300 font-bold hover:bg-gray-200 dark:hover:bg-slate-600"
-                                                    >-</button>
-                                                    <span className={`w-6 text-center font-bold ${item.quantity === 0 ? 'text-red-500' : 'text-gray-900 dark:text-gray-100'}`}>
-                                                        {item.quantity}
-                                                    </span>
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => setModifyItems((prev) => prev.map((it, i) => i === idx ? { ...it, quantity: it.quantity + 1 } : it))}
-                                                        className="w-7 h-7 rounded-full bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-gray-300 font-bold hover:bg-gray-200 dark:hover:bg-slate-600"
-                                                    >+</button>
-                                                </div>
-                                            </div>
-                                        ))}
-                                    </div>
-                                    {modifyItems.every((i) => i.quantity === 0) && (
-                                        <p className="text-xs text-red-500 mt-2">Cannot remove all items. Use cancel instead.</p>
-                                    )}
-                                    <div className="flex gap-2 mt-3">
-                                        <button
-                                            type="button"
-                                            onClick={() => { setShowModify(false); setModifyItems(orderResult.items?.map((i) => ({ ...i })) || []); }}
-                                            className="flex-1 py-2 text-sm font-semibold text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200"
-                                        >Back</button>
-                                        <RippleButton
-                                            onClick={handleModifyOrder}
-                                            disabled={modifying || modifyItems.every((i) => i.quantity === 0)}
-                                            className="flex-1 py-2 bg-blue-500 text-white text-sm font-bold rounded-lg hover:bg-blue-600 disabled:opacity-50"
-                                        >
-                                            {modifying ? 'Saving...' : 'Save Changes'}
-                                        </RippleButton>
-                                    </div>
-                                </div>
+                            <RippleButton
+                                onClick={handleCancelOrder}
+                                disabled={cancelling}
+                                className="w-full py-2.5 bg-red-500 text-white text-sm font-bold rounded-xl hover:bg-red-600 disabled:opacity-50 transition-colors"
+                            >
+                                {cancelling ? 'Cancelling...' : cancelSecondsLeft !== null ? `Cancel Order (${cancelSecondsLeft}s)` : 'Cancel Order'}
+                            </RippleButton>
+                            {cancelSecondsLeft !== null && (
+                                <p className="text-[10px] text-gray-400 mt-1 text-center">Cancel window closes in {cancelSecondsLeft}s</p>
                             )}
                         </div>
                     )}
 
-                    {!graceActive && !isCancelled && (
+                    {(!orderResult.canCancel || cancelSecondsLeft === 0) && !isCancelled && (
                         <p className="text-xs text-gray-400 mb-4">Your order will be delivered shortly</p>
                     )}
 
