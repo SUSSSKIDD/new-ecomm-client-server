@@ -23,13 +23,21 @@ export class LocalStorageService implements OnModuleInit {
         'image/jpg',
     ];
 
-    constructor(private readonly config: ConfigService) {
+    constructor(config: ConfigService) {
         this.uploadsDir = config.get<string>('UPLOADS_DIR', path.join(process.cwd(), 'uploads'));
         this.baseUrl = config.get<string>('MEDIA_BASE_URL', 'http://localhost:3000');
     }
 
     async onModuleInit() {
-        for (const sub of ['products', 'user-designs', 'print-product-images', 'subcategories']) {
+        const storeTypes = ['GROCERY', 'PIZZA_TOWN', 'AUTO_SERVICE', 'AUTO_PARTS_SHOP', 'DROP_IN_FACTORY', 'HEALTH_SERVICE', 'HOME_SERVICE'];
+        const dirs = [
+            'products',
+            'user-designs',
+            'print-product-images',
+            'subcategories',
+            ...storeTypes.map((t) => `subcategories-${t}`),
+        ];
+        for (const sub of dirs) {
             await fs.mkdir(path.join(this.uploadsDir, sub), { recursive: true });
         }
         this.logger.log(`Local storage ready at ${this.uploadsDir}`);
