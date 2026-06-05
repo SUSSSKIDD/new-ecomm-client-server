@@ -180,9 +180,11 @@ jobs:
 
       - name: Copy source to VPS
         run: |
-          rsync -az --delete \
+          rsync -az \
             -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -o ConnectTimeout=30" \
-            server/ client/ scripts/ docker-compose.prod.yml \
+            --exclude='node_modules' \
+            --exclude='.git' \
+            server client scripts docker-compose.prod.yml \
             ${{ secrets.VPS_USER }}@${{ secrets.VPS_IP }}:/opt/neyokart/
 
       - name: Deploy on VPS
