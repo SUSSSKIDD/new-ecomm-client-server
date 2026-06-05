@@ -238,6 +238,9 @@ model PaymentLedger {
 
   @@index([storeId])
   @@index([transactionId])
+  @@index([date(sort: Desc)])
+  @@index([createdAt(sort: Desc)])
+  @@index([storeId, date(sort: Desc)])
 }
 
 model StoreInventory {
@@ -330,6 +333,10 @@ model Order {
   @@index([razorpayOrderId])
   @@index([status])
   @@index([parentOrderId])
+  @@index([paymentStatus])
+  @@index([createdAt(sort: Desc)])
+  @@index([updatedAt(sort: Desc)])
+  @@index([status, createdAt(sort: Desc)])
 }
 
 model SmsTemplate {
