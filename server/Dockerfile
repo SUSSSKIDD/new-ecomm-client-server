@@ -1,6 +1,6 @@
 # ─── Stage 1: deps ────────────────────────────────────────────────────────────
 # Install ALL deps (including devDependencies needed for build) and cache them.
-FROM node:20-alpine AS deps
+FROM node:22-alpine AS deps
 
 WORKDIR /app
 
@@ -29,7 +29,7 @@ COPY . .
 RUN npm run build
 
 # ─── Stage 3: production ──────────────────────────────────────────────────────
-FROM node:20-alpine AS runner
+FROM node:22-alpine AS runner
 
 WORKDIR /app
 

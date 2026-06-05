@@ -18,6 +18,12 @@ if [ ! -f "$APP_DIR/.env" ]; then
     exit 1
 fi
 
+# Ensure uploads directory exists and is writable by the container user (uid 1001 = nodeuser).
+# Docker mounts /opt/neyokart/uploads → /app/uploads inside the container.
+# If the host dir is missing or root-owned, the app crashes with EACCES on startup.
+mkdir -p "$APP_DIR/uploads"
+chown -R 1001:1001 "$APP_DIR/uploads" 2>/dev/null || true
+
 # Default to blue if no state exists
 if [ ! -f "$STATE_FILE" ]; then
     echo "blue" > "$STATE_FILE"
