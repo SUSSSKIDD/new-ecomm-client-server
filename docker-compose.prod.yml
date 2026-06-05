@@ -20,7 +20,7 @@ x-server-common: &server-common
     <<: *redis-env
     PORT: "3000"
     NODE_ENV: production
-    UPLOAD_PATH: /app/uploads
+    UPLOADS_DIR: /app/uploads
   depends_on:
     redis:
       condition: service_healthy
