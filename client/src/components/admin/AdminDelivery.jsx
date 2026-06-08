@@ -27,7 +27,7 @@ const AdminDelivery = () => {
             const [delRes] = await Promise.all([
                 adminApi().get('/delivery/persons', { signal }),
             ]);
-            setDeliveryPersons(delRes.data);
+            setDeliveryPersons(Array.isArray(delRes.data) ? delRes.data : (delRes.data?.data ?? []));
         } catch (err) {
             if (err.name !== 'CanceledError') {
                 console.error(err);
