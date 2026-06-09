@@ -380,7 +380,7 @@ export class StoresService {
         store: { select: { id: true, name: true } },
         variants: {
           where: { isActive: true },
-          select: { label: true, price: true, storePrice: true, mrp: true },
+          select: { label: true, price: true, storePrice: true, mrp: true, taxRate: true },
           orderBy: { price: 'asc' },
         },
       },
@@ -392,7 +392,7 @@ export class StoresService {
     const toRows = (p: typeof products[number], storeName: string) => {
       const base = [storeName, p.category, p.subCategory ?? '', p.name];
       if (p.variants.length > 0) {
-        return p.variants.map((v) => [...base, v.label, v.price, v.mrp ?? '', p.taxRate, v.storePrice ?? '']);
+        return p.variants.map((v) => [...base, v.label, v.price, v.mrp ?? '', v.taxRate ?? p.taxRate, v.storePrice ?? '']);
       }
       return [[...base, '', p.price, p.mrp ?? '', p.taxRate, p.storePrice ?? '']];
     };

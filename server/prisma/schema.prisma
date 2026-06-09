@@ -167,6 +167,7 @@ model ProductVariant {
   stock     Int      @default(0)
   images    String[]
   isActive  Boolean  @default(true)
+  taxRate   Float?   // If set, overrides product-level taxRate for this variant
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

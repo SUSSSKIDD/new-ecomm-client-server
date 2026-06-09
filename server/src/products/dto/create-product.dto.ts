@@ -20,6 +20,7 @@ export class CreateVariantDto {
   @IsOptional() @Type(() => Number) @IsNumber() mrp?: number;
   @Type(() => Number) @IsNumber() stock: number;
   @IsOptional() @IsArray() @IsString({ each: true }) images?: string[];
+  @IsOptional() @Type(() => Number) @IsNumber() @Min(0) @Max(100) taxRate?: number;
 }
 
 export class CreateProductDto {
