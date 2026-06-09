@@ -1894,9 +1894,11 @@ await step('[FEAT-01] PATCH variant taxRate update persists', async () => {
 });
 
 // ── FEAT-02: Multiple image upload ────────────────────────────────────
-// Valid 1×1 PNG — minimal bytes that sharp can decode without error.
-const TINY_PNG_B64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwADhQGAWjR9awAAAABJRU5ErkJggg==';
-const tinyImgBuf = Buffer.from(TINY_PNG_B64, 'base64');
+// Generate a real 1×1 JPEG using sharp (same lib the server uses) so it passes sharp processing.
+const { default: _sharp } = await import('sharp');
+const tinyImgBuf = await _sharp({
+  create: { width: 1, height: 1, channels: 3, background: { r: 128, g: 128, b: 128 } },
+}).jpeg({ quality: 50 }).toBuffer();
 
 let multiImgProductId;
 
@@ -1906,8 +1908,8 @@ await step('[FEAT-02] Create product with 2 images', async () => {
   fd.append('price', '50');
   fd.append('category', CATEGORIES_PER_TYPE['GROCERY']);
   fd.append('stock', '10');
-  fd.append('images', new Blob([tinyImgBuf], { type: 'image/png' }), 'img1.png');
-  fd.append('images', new Blob([tinyImgBuf], { type: 'image/png' }), 'img2.png');
+  fd.append('images', new Blob([tinyImgBuf], { type: 'image/jpeg' }), 'img1.jpg');
+  fd.append('images', new Blob([tinyImgBuf], { type: 'image/jpeg' }), 'img2.jpg');
   const r = await api.post('/products', fd, auth(groceryStore.managerToken));
   assert(r.status === 201 || r.status === 200, `${r.status}: ${JSON.stringify(r.data?.message)}`);
   multiImgProductId = r.data.id;
@@ -1919,7 +1921,7 @@ await step('[FEAT-02] Create product with 2 images', async () => {
 await step('[FEAT-02] Add 1 more image via PATCH (3 total)', async () => {
   if (!multiImgProductId) { console.log('    ⚠️ Skipping'); return; }
   const fd = new FormData();
-  fd.append('images', new Blob([tinyImgBuf], { type: 'image/png' }), 'img3.png');
+  fd.append('images', new Blob([tinyImgBuf], { type: 'image/jpeg' }), 'img3.jpg');
   const r = await api.patch(`/products/${multiImgProductId}`, fd, auth(groceryStore.managerToken));
   assert(r.status === 200 || r.status === 204, `${r.status}: ${JSON.stringify(r.data?.message)}`);
   if (r.data?.images) {
@@ -1931,7 +1933,7 @@ await step('[FEAT-02] Add 1 more image via PATCH (3 total)', async () => {
 await step('[FEAT-02] Exceeding MAX_IMAGES (3) returns 400', async () => {
   if (!multiImgProductId) { console.log('    ⚠️ Skipping'); return; }
   const fd = new FormData();
-  fd.append('images', new Blob([tinyImgBuf], { type: 'image/png' }), 'extra.png');
+  fd.append('images', new Blob([tinyImgBuf], { type: 'image/jpeg' }), 'extra.jpg');
   const r = await api.patch(`/products/${multiImgProductId}`, fd, auth(groceryStore.managerToken));
   assert(r.status === 400, `Expected 400 when exceeding MAX_IMAGES, got ${r.status}`);
   console.log(`    MAX_IMAGES correctly enforced: ${r.data?.message}`);
