@@ -130,12 +130,12 @@ const CartSidebar = () => {
     const isFreeDelivery = subTotal >= FREE_DELIVERY_THRESHOLD;
     const deliveryFee = isFreeDelivery ? 0 : DELIVERY_FEE;
     
-    // Per-item tax estimate: price × qty × (taxRate / 100)
+    // Per-item tax estimate: flat ₹ per unit (taxRate = ₹ amount, not %)
     const tax = buyNowProduct
-        ? Math.round(parsePrice(buyNowProduct.price) * (buyNowProduct.quantity || 1) * ((buyNowProduct.taxRate || 0) / 100) * 100) / 100
+        ? Math.round((buyNowProduct.taxRate || 0) * (buyNowProduct.quantity || 1) * 100) / 100
         : cart.reduce((totalTax, item) => {
             const rate = item.taxRate ?? 0;
-            const itemTax = Math.round(parsePrice(item.price) * item.quantity * (rate / 100) * 100) / 100;
+            const itemTax = Math.round(rate * item.quantity * 100) / 100;
             return totalTax + itemTax;
         }, 0);
 
