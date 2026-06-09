@@ -514,19 +514,52 @@ export class ProductsService {
     return updated;
   }
 
-  async addVariant(productId: string, dto: any) {
-    const product = await this.findOne(productId);
+  async addVariantWithImages(productId: string, dto: any, files: Express.Multer.File[]) {
+    await this.findOne(productId);
+    const { price, mrp, storePrice, stock, taxRate, ...rest } = dto;
+    const cleanDto: any = {
+      ...rest,
+      price: price !== undefined ? Number(price) : undefined,
+      mrp: mrp ? Number(mrp) : undefined,
+      storePrice: storePrice ? Number(storePrice) : undefined,
+      stock: stock !== undefined ? Number(stock) : undefined,
+      taxRate: taxRate !== undefined && taxRate !== '' ? Number(taxRate) : undefined,
+    };
+    let images: string[] = [];
+    if (files.length > 0) {
+      images = await this.storage.uploadMany(files.slice(0, ProductsService.MAX_IMAGES));
+    }
     const variant = await (this.prisma as any).productVariant.create({
-      data: { ...dto, productId }
+      data: { ...cleanDto, productId, images }
     });
     await this.cache.bumpVersion('products');
     return variant;
   }
 
-  async updateVariant(variantId: string, dto: any) {
+  async updateVariantWithImages(variantId: string, dto: any, files: Express.Multer.File[]) {
+    const existing = await (this.prisma as any).productVariant.findUniqueOrThrow({ where: { id: variantId } });
+    const { price, mrp, storePrice, stock, taxRate, clearTaxRate, ...rest } = dto;
+    const cleanDto: any = {
+      ...rest,
+      price: price !== undefined ? Number(price) : undefined,
+      mrp: mrp !== undefined ? (mrp ? Number(mrp) : null) : undefined,
+      storePrice: storePrice !== undefined ? (storePrice ? Number(storePrice) : null) : undefined,
+      stock: stock !== undefined ? Number(stock) : undefined,
+      taxRate: clearTaxRate === 'true' ? null
+        : taxRate !== undefined && taxRate !== '' ? Number(taxRate) : undefined,
+    };
+    // Remove undefined keys so Prisma doesn't overwrite unchanged fields
+    Object.keys(cleanDto).forEach(k => cleanDto[k] === undefined && delete cleanDto[k]);
+
+    let images = existing.images || [];
+    if (files.length > 0) {
+      const newUrls = await this.storage.uploadMany(files);
+      images = [...images, ...newUrls].slice(0, ProductsService.MAX_IMAGES);
+      cleanDto.images = images;
+    }
     const variant = await (this.prisma as any).productVariant.update({
       where: { id: variantId },
-      data: dto
+      data: cleanDto,
     });
     await this.cache.bumpVersion('products');
     return variant;

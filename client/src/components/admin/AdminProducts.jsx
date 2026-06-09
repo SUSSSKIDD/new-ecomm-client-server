@@ -5,6 +5,27 @@ import { useAdminAuth } from '../../hooks/useAdminAuth';
 import { adminApi, API_URL } from '../../lib/api';
 import { STORE_CATEGORY_SUBCATEGORIES } from '../../constants';
 
+// Shows thumbnails for an array of File objects selected via file input
+const ImagePreview = ({ files, onRemove }) => {
+    if (!files || files.length === 0) return null;
+    return (
+        <div className="flex gap-2 mt-2 flex-wrap">
+            {files.map((file, idx) => (
+                <div key={idx} className="relative w-16 h-16 rounded overflow-hidden border border-gray-200 flex-shrink-0">
+                    <img src={URL.createObjectURL(file)} alt="" className="w-full h-full object-cover" />
+                    {onRemove && (
+                        <button
+                            type="button"
+                            onClick={() => onRemove(idx)}
+                            className="absolute top-0 right-0 bg-black/60 text-white text-xs w-4 h-4 flex items-center justify-center leading-none"
+                        >×</button>
+                    )}
+                </div>
+            ))}
+        </div>
+    );
+};
+
 const GstSelect = ({ value, onChange, placeholder = 'GST', className = '' }) => (
     <input type="number" min="0" max="100" step="1" value={value} onChange={onChange} placeholder={placeholder}
         className={`border border-gray-300 rounded px-2 py-1 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-ud-primary ${className}`} />
@@ -32,10 +53,10 @@ const ProductModal = ({ product, onClose, onSaved, admin }) => {
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState('');
     const [hasVariants, setHasVariants] = useState(false);
-    const [variants, setVariants] = useState([{ label: '', price: '', mrp: '', storePrice: '', stock: '', taxRate: '', image: null }]);
+    const [variants, setVariants] = useState([{ label: '', price: '', mrp: '', storePrice: '', stock: '', taxRate: '', images: [] }]);
 
     const addVariant = () =>
-        setVariants(v => [...v, { label: '', price: '', mrp: '', storePrice: '', stock: '', taxRate: '', image: null }]);
+        setVariants(v => [...v, { label: '', price: '', mrp: '', storePrice: '', stock: '', taxRate: '', images: [] }]);
 
     const removeVariant = (i) =>
         setVariants(v => v.filter((_, idx) => idx !== i));
@@ -75,7 +96,7 @@ const ProductModal = ({ product, onClose, onSaved, admin }) => {
             }));
             fd.append('variantsJson', JSON.stringify(variantMeta));
             variants.forEach((v, i) => {
-                if (v.image) fd.append(`variantImage_${i}`, v.image);
+                (v.images || []).slice(0, 3).forEach(f => fd.append(`variantImage_${i}`, f));
             });
         } else {
             fd.append('stock', Number(form.stock));
@@ -210,10 +231,14 @@ const ProductModal = ({ product, onClose, onSaved, admin }) => {
                                                 <GstSelect value={v.taxRate} onChange={e => updateVariant(i, 'taxRate', e.target.value)} placeholder="GST % (inherit)" className="w-full" />
                                             </div>
                                             <div>
-                                                <label className="text-xs text-gray-500 block mb-1">Image (optional)</label>
-                                                <input type="file" accept="image/*"
-                                                    onChange={e => updateVariant(i, 'image', e.target.files[0])}
+                                                <label className="text-xs text-gray-500 block mb-1">Images (max 3, optional)</label>
+                                                <input type="file" multiple accept="image/*"
+                                                    onChange={e => updateVariant(i, 'images', Array.from(e.target.files).slice(0, 3))}
                                                     className="text-xs w-full" />
+                                                <ImagePreview
+                                                    files={v.images}
+                                                    onRemove={rmIdx => updateVariant(i, 'images', v.images.filter((_, fi) => fi !== rmIdx))}
+                                                />
                                             </div>
                                         </div>
                                     ))}
@@ -244,6 +269,7 @@ const ProductModal = ({ product, onClose, onSaved, admin }) => {
                             <label className="block text-sm font-medium text-gray-700 mb-1">Images (max 3)</label>
                             <input type="file" multiple accept="image/*" onChange={e => setImages(Array.from(e.target.files))}
                                 className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-ud-primary/10 file:text-ud-primary hover:file:bg-ud-primary/20 text-gray-900" />
+                            <ImagePreview files={images} onRemove={idx => setImages(prev => prev.filter((_, i) => i !== idx))} />
                         </div>
                     )}
                     <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
@@ -261,22 +287,23 @@ const ProductModal = ({ product, onClose, onSaved, admin }) => {
 
 const VariantsModal = ({ product, onClose, onRefresh }) => {
     const [variants, setVariants] = useState(product.variants || []);
-    const [newVar, setNewVar] = useState({ label: '', price: '', mrp: '', storePrice: '', stock: '', taxRate: '' });
+    const [newVar, setNewVar] = useState({ label: '', price: '', mrp: '', storePrice: '', stock: '', taxRate: '', images: [] });
     const [editingId, setEditingId] = useState(null);
-    const [editForm, setEditForm] = useState({ label: '', price: '', mrp: '', storePrice: '', stock: '', taxRate: '' });
+    const [editForm, setEditForm] = useState({ label: '', price: '', mrp: '', storePrice: '', stock: '', taxRate: '', images: [] });
 
     const handleAdd = async () => {
         try {
-            const res = await adminApi().post(`/products/${product.id}/variants`, {
-                label: newVar.label,
-                price: Number(newVar.price),
-                mrp: newVar.mrp ? Number(newVar.mrp) : undefined,
-                storePrice: newVar.storePrice ? Number(newVar.storePrice) : undefined,
-                stock: Number(newVar.stock),
-                taxRate: newVar.taxRate !== '' ? Number(newVar.taxRate) : undefined,
-            });
+            const fd = new FormData();
+            fd.append('label', newVar.label);
+            fd.append('price', String(Number(newVar.price)));
+            if (newVar.mrp) fd.append('mrp', String(Number(newVar.mrp)));
+            if (newVar.storePrice) fd.append('storePrice', String(Number(newVar.storePrice)));
+            fd.append('stock', String(Number(newVar.stock)));
+            if (newVar.taxRate !== '') fd.append('taxRate', String(Number(newVar.taxRate)));
+            (newVar.images || []).slice(0, 3).forEach(f => fd.append('images', f));
+            const res = await adminApi().post(`/products/${product.id}/variants`, fd);
             setVariants([...variants, res.data]);
-            setNewVar({ label: '', price: '', mrp: '', storePrice: '', stock: '', taxRate: '' });
+            setNewVar({ label: '', price: '', mrp: '', storePrice: '', stock: '', taxRate: '', images: [] });
             onRefresh();
         } catch (err) {
             alert(err.response?.data?.message || 'Failed to add variant');
@@ -285,19 +312,21 @@ const VariantsModal = ({ product, onClose, onRefresh }) => {
 
     const handleEditStart = (v) => {
         setEditingId(v.id);
-        setEditForm({ label: v.label, price: v.price, mrp: v.mrp || '', storePrice: v.storePrice || '', stock: v.stock, taxRate: v.taxRate != null ? String(v.taxRate) : '' });
+        setEditForm({ label: v.label, price: v.price, mrp: v.mrp || '', storePrice: v.storePrice || '', stock: v.stock, taxRate: v.taxRate != null ? String(v.taxRate) : '', images: [] });
     };
 
     const handleSave = async (id) => {
         try {
-            const res = await adminApi().patch(`/products/${product.id}/variants/${id}`, {
-                label: editForm.label,
-                price: Number(editForm.price),
-                mrp: editForm.mrp ? Number(editForm.mrp) : null,
-                storePrice: editForm.storePrice ? Number(editForm.storePrice) : null,
-                stock: Number(editForm.stock),
-                taxRate: editForm.taxRate !== '' ? Number(editForm.taxRate) : null,
-            });
+            const fd = new FormData();
+            fd.append('label', editForm.label);
+            fd.append('price', String(Number(editForm.price)));
+            fd.append('mrp', editForm.mrp ? String(Number(editForm.mrp)) : '');
+            fd.append('storePrice', editForm.storePrice ? String(Number(editForm.storePrice)) : '');
+            fd.append('stock', String(Number(editForm.stock)));
+            if (editForm.taxRate !== '') fd.append('taxRate', String(Number(editForm.taxRate)));
+            else fd.append('clearTaxRate', 'true');
+            (editForm.images || []).slice(0, 3).forEach(f => fd.append('images', f));
+            const res = await adminApi().patch(`/products/${product.id}/variants/${id}`, fd);
             setVariants(variants.map(v => v.id === id ? res.data : v));
             setEditingId(null);
             onRefresh();
@@ -341,6 +370,16 @@ const VariantsModal = ({ product, onClose, onRefresh }) => {
                                                 <input type="number" value={editForm.stock} onChange={e => setEditForm(f => ({ ...f, stock: e.target.value }))} className="px-2 py-1 text-sm border rounded text-gray-900" placeholder="Stock" />
                                                 <GstSelect value={editForm.taxRate} onChange={e => setEditForm(f => ({ ...f, taxRate: e.target.value }))} placeholder="GST (inherit)" />
                                             </div>
+                                            <div>
+                                                <label className="text-xs text-gray-500 block mb-1">Add Images (max 3 total)</label>
+                                                <input type="file" multiple accept="image/*"
+                                                    onChange={e => setEditForm(f => ({ ...f, images: Array.from(e.target.files).slice(0, 3) }))}
+                                                    className="text-xs w-full" />
+                                                <ImagePreview
+                                                    files={editForm.images}
+                                                    onRemove={idx => setEditForm(f => ({ ...f, images: f.images.filter((_, i) => i !== idx) }))}
+                                                />
+                                            </div>
                                             <div className="flex gap-2">
                                                 <button onClick={() => handleSave(v.id)} className="bg-ud-primary text-white px-3 py-1 text-xs rounded">Save</button>
                                                 <button onClick={() => setEditingId(null)} className="bg-gray-200 text-gray-700 px-3 py-1 text-xs rounded">Cancel</button>
@@ -348,20 +387,23 @@ const VariantsModal = ({ product, onClose, onRefresh }) => {
                                         </div>
                                     ) : (
                                         <div className="flex justify-between items-start">
-                                            <div className="flex gap-3">
-                                                <div className="w-12 h-12 bg-gray-200 rounded overflow-hidden flex-shrink-0">
-                                                    {v.images?.[0] ? (
-                                                        <img src={v.images[0]} className="w-full h-full object-cover" alt="" />
-                                                    ) : (
-                                                        <div className="w-full h-full flex items-center justify-center text-[10px] text-gray-400">No Image</div>
+                                            <div className="flex gap-2 flex-1 min-w-0">
+                                                {/* Image strip — show all variant images */}
+                                                <div className="flex gap-1 flex-shrink-0">
+                                                    {v.images?.length > 0 ? v.images.map((img, imgIdx) => (
+                                                        <div key={imgIdx} className="w-12 h-12 bg-gray-200 rounded overflow-hidden">
+                                                            <img src={img} className="w-full h-full object-cover" alt="" />
+                                                        </div>
+                                                    )) : (
+                                                        <div className="w-12 h-12 bg-gray-200 rounded flex items-center justify-center text-[10px] text-gray-400">No Image</div>
                                                     )}
                                                 </div>
-                                                <div>
+                                                <div className="min-w-0">
                                                     <p className="font-bold text-sm text-gray-800">{v.label}</p>
-                                                    <p className="text-xs text-gray-500">₹{v.price} {v.mrp ? `(MRP: ₹${v.mrp})` : ''} {v.storePrice ? `• Store: ₹${v.storePrice}` : ''} • {v.stock} in stock • GST: {v.taxRate != null ? `${v.taxRate}%` : 'inherited'}</p>
+                                                    <p className="text-xs text-gray-500">₹{v.price} {v.mrp ? `(MRP: ₹${v.mrp})` : ''} {v.storePrice ? `• Store: ₹${v.storePrice}` : ''} • {v.stock} in stock • GST: {v.taxRate != null ? `₹${v.taxRate}` : 'inherited'}</p>
                                                 </div>
                                             </div>
-                                            <div className="flex gap-2">
+                                            <div className="flex gap-2 flex-shrink-0 ml-2">
                                                 <button onClick={() => handleEditStart(v)} className="text-ud-primary text-xs hover:underline">Edit</button>
                                                 <button onClick={() => handleDelete(v.id)} className="text-red-500 text-xs hover:underline">Delete</button>
                                             </div>
@@ -380,6 +422,16 @@ const VariantsModal = ({ product, onClose, onRefresh }) => {
                             <input type="number" placeholder="Store Price (Optional)" value={newVar.storePrice} onChange={e => setNewVar(v => ({ ...v, storePrice: e.target.value }))} className="px-2 py-1 text-sm border rounded text-gray-900" />
                             <input type="number" placeholder="Stock" value={newVar.stock} onChange={e => setNewVar(v => ({ ...v, stock: e.target.value }))} className="px-2 py-1 text-sm border rounded text-gray-900" />
                             <GstSelect value={newVar.taxRate} onChange={e => setNewVar(v => ({ ...v, taxRate: e.target.value }))} placeholder="GST (inherit)" />
+                        </div>
+                        <div className="mb-2">
+                            <label className="text-xs text-gray-500 block mb-1">Images (max 3, optional)</label>
+                            <input type="file" multiple accept="image/*"
+                                onChange={e => setNewVar(v => ({ ...v, images: Array.from(e.target.files).slice(0, 3) }))}
+                                className="text-xs w-full" />
+                            <ImagePreview
+                                files={newVar.images}
+                                onRemove={idx => setNewVar(v => ({ ...v, images: v.images.filter((_, i) => i !== idx) }))}
+                            />
                         </div>
                         <RippleButton onClick={handleAdd} disabled={!newVar.label || !newVar.price || !newVar.stock} className="w-full bg-ud-primary text-white py-2 text-sm rounded disabled:opacity-50">Add Variant</RippleButton>
                     </div>

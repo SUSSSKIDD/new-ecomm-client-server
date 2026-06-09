@@ -211,22 +211,29 @@ export class ProductsController {
   @ApiBearerAuth()
   @UseGuards(AuthGuard('jwt'), RolesGuard, StoreGuard)
   @Roles('ADMIN', 'STORE_MANAGER')
+  @UseInterceptors(FilesInterceptor('images', 3, MULTER_IMAGE_OPTIONS))
   @ApiOperation({ summary: 'Add a variant to a product' })
-  addVariant(@Param('id', ParseUUIDPipe) id: string, @Body() dto: any) {
-    return this.productsService.addVariant(id, dto);
+  addVariant(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body() dto: any,
+    @UploadedFiles() files: Express.Multer.File[],
+  ) {
+    return this.productsService.addVariantWithImages(id, dto, files || []);
   }
 
   @Patch(':id/variants/:variantId')
   @ApiBearerAuth()
   @UseGuards(AuthGuard('jwt'), RolesGuard, StoreGuard)
   @Roles('ADMIN', 'STORE_MANAGER')
+  @UseInterceptors(FilesInterceptor('images', 3, MULTER_IMAGE_OPTIONS))
   @ApiOperation({ summary: 'Update a variant' })
   updateVariant(
     @Param('id', ParseUUIDPipe) id: string,
     @Param('variantId', ParseUUIDPipe) variantId: string,
     @Body() dto: any,
+    @UploadedFiles() files: Express.Multer.File[],
   ) {
-    return this.productsService.updateVariant(variantId, dto);
+    return this.productsService.updateVariantWithImages(variantId, dto, files || []);
   }
 
   @Delete(':id/variants/:variantId')
