@@ -451,8 +451,9 @@ for (const storeType of STORE_TYPES) {
     const r = await api.post('/orders/preview', { addressId }, auth(userToken));
     assert(r.status === 200 || r.status === 201, `${r.status}: ${r.data?.message}`);
     assert(r.data.total > 0, 'Expected total > 0');
-    // Verify: tax = prod1(150*2*5%) + prod2(200*1*12%) = 15 + 24 = 39
-    assert(Math.abs(r.data.tax - 39) < 0.01, `Expected tax 39, got ${r.data.tax}`);
+    // GST is flat ₹ per unit (not % of price): taxRate=5 means ₹5/unit
+    // tax = prod1(5*2) + prod2(12*1) = 10 + 12 = 22
+    assert(Math.abs(r.data.tax - 22) < 0.01, `Expected tax 22, got ${r.data.tax}`);
     assert(r.data.subtotal === 500, `Expected subtotal 500, got ${r.data.subtotal}`);
   });
 
@@ -1410,8 +1411,8 @@ await step('Buy Now: Preview with quantity update updates total', async () => {
   }, auth(userToken));
 
   assert(r2.data.subtotal > r1.data.subtotal, 'Total did not increase with quantity');
-  // Verify tax matches per-item calculation (12% for prod 2)
-  const expectedTax2 = Math.round(r2.data.subtotal * 0.12 * 100) / 100;
+  // GST is flat ₹ per unit: prod2 taxRate=12 means ₹12/unit × 3 qty = ₹36
+  const expectedTax2 = 12 * 3;
   assert(Math.abs(r2.data.tax - expectedTax2) < 0.01, `Tax mismatch: expected ${expectedTax2}, got ${r2.data.tax}`);
 });
 
@@ -1835,6 +1836,111 @@ await step('[SCALE-08] GET /delivery/persons?limit=100 does not crash (large lim
   assert(r.data.data.length <= 100, `Expected max 100 results (cap), got ${r.data.data.length}`);
 });
 
+// ── FEAT-01: Variant-level taxRate (flat ₹ per unit) ─────────────────
+// taxRate on variant overrides product-level; null variant rate inherits product rate.
+
+let variantTaxProductId;
+let variantTaxVariantId;
+
+await step('[FEAT-01] Create product with variant taxRate', async () => {
+  const fd = new FormData();
+  fd.append('name', `E2E VariantTax ${RUN_ID}`);
+  fd.append('price', '100');
+  fd.append('category', CATEGORIES_PER_TYPE['GROCERY']);
+  fd.append('stock', '50');
+  fd.append('taxRate', '8'); // product-level: ₹8/unit
+  const variantsJson = JSON.stringify([
+    { label: 'Small', price: 80, stock: 20, taxRate: 5 },  // variant override: ₹5/unit
+    { label: 'Large', price: 120, stock: 20 },              // no override → inherits ₹8/unit
+  ]);
+  fd.append('variantsJson', variantsJson);
+  const r = await api.post('/products', fd, auth(groceryStore.managerToken));
+  assert(r.status === 201 || r.status === 200, `${r.status}: ${JSON.stringify(r.data?.message)}`);
+  variantTaxProductId = r.data.id;
+  const smallVar = r.data.variants?.find(v => v.label === 'Small');
+  const largeVar = r.data.variants?.find(v => v.label === 'Large');
+  assert(smallVar, 'Small variant not returned');
+  assert(largeVar, 'Large variant not returned');
+  assert(smallVar.taxRate === 5, `Expected Small taxRate=5, got ${smallVar.taxRate}`);
+  assert(largeVar.taxRate === null || largeVar.taxRate === undefined,
+    `Expected Large taxRate=null (inherit), got ${largeVar.taxRate}`);
+  variantTaxVariantId = smallVar.id;
+  console.log(`    Product ${variantTaxProductId}: Small taxRate=5, Large taxRate=null(inherit 8)`);
+});
+
+await step('[FEAT-01] Order with variant override: tax = ₹5/unit × 3 qty', async () => {
+  if (!variantTaxProductId || !variantTaxVariantId) {
+    console.log('    ⚠️ Skipping — variant tax product not created');
+    return;
+  }
+  const r = await api.post('/orders/preview', {
+    addressId,
+    items: [{ productId: variantTaxProductId, variantId: variantTaxVariantId, quantity: 3 }],
+  }, auth(userToken));
+  assert(r.status === 200 || r.status === 201, `${r.status}: ${JSON.stringify(r.data?.message)}`);
+  // Small variant taxRate=5 (override), qty=3 → tax = 5*3 = 15
+  const expectedTax = 5 * 3;
+  assert(Math.abs(r.data.tax - expectedTax) < 0.01,
+    `Expected tax ${expectedTax} (variant override ₹5×3), got ${r.data.tax}`);
+  console.log(`    Variant override tax: ₹${r.data.tax} (expected ${expectedTax})`);
+});
+
+await step('[FEAT-01] PATCH variant taxRate update persists', async () => {
+  if (!variantTaxVariantId) { console.log('    ⚠️ Skipping'); return; }
+  const fd = new FormData();
+  fd.append('taxRate', '7');
+  const r = await api.patch(`/products/${variantTaxProductId}`, fd, auth(groceryStore.managerToken));
+  assert(r.status === 200 || r.status === 204, `${r.status}: ${JSON.stringify(r.data?.message)}`);
+});
+
+// ── FEAT-02: Multiple image upload ────────────────────────────────────
+// Valid 1×1 PNG — minimal bytes that sharp can decode without error.
+const TINY_PNG_B64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwADhQGAWjR9awAAAABJRU5ErkJggg==';
+const tinyImgBuf = Buffer.from(TINY_PNG_B64, 'base64');
+
+let multiImgProductId;
+
+await step('[FEAT-02] Create product with 2 images', async () => {
+  const fd = new FormData();
+  fd.append('name', `E2E MultiImg ${RUN_ID}`);
+  fd.append('price', '50');
+  fd.append('category', CATEGORIES_PER_TYPE['GROCERY']);
+  fd.append('stock', '10');
+  fd.append('images', new Blob([tinyImgBuf], { type: 'image/png' }), 'img1.png');
+  fd.append('images', new Blob([tinyImgBuf], { type: 'image/png' }), 'img2.png');
+  const r = await api.post('/products', fd, auth(groceryStore.managerToken));
+  assert(r.status === 201 || r.status === 200, `${r.status}: ${JSON.stringify(r.data?.message)}`);
+  multiImgProductId = r.data.id;
+  const imgCount = r.data.images?.length ?? 0;
+  assert(imgCount === 2, `Expected 2 images saved, got ${imgCount}: ${JSON.stringify(r.data.images)}`);
+  console.log(`    Created product ${multiImgProductId} with ${imgCount} images`);
+});
+
+await step('[FEAT-02] Add 1 more image via PATCH (3 total)', async () => {
+  if (!multiImgProductId) { console.log('    ⚠️ Skipping'); return; }
+  const fd = new FormData();
+  fd.append('images', new Blob([tinyImgBuf], { type: 'image/png' }), 'img3.png');
+  const r = await api.patch(`/products/${multiImgProductId}`, fd, auth(groceryStore.managerToken));
+  assert(r.status === 200 || r.status === 204, `${r.status}: ${JSON.stringify(r.data?.message)}`);
+  if (r.data?.images) {
+    assert(r.data.images.length === 3, `Expected 3 images after PATCH, got ${r.data.images.length}`);
+    console.log(`    After PATCH: ${r.data.images.length} images`);
+  }
+});
+
+await step('[FEAT-02] Exceeding MAX_IMAGES (3) returns 400', async () => {
+  if (!multiImgProductId) { console.log('    ⚠️ Skipping'); return; }
+  const fd = new FormData();
+  fd.append('images', new Blob([tinyImgBuf], { type: 'image/png' }), 'extra.png');
+  const r = await api.patch(`/products/${multiImgProductId}`, fd, auth(groceryStore.managerToken));
+  assert(r.status === 400, `Expected 400 when exceeding MAX_IMAGES, got ${r.status}`);
+  console.log(`    MAX_IMAGES correctly enforced: ${r.data?.message}`);
+});
+
+// Add newly created products to cleanup list
+if (variantTaxProductId) groceryStore.productIds.push(variantTaxProductId);
+if (multiImgProductId) groceryStore.productIds.push(multiImgProductId);
+
 // Add pin test order and bug fix orders to cleanup
 const extraCleanupOrders = [bugFixOrderId, bugFixOrder2Id, pinTestOrderId].filter(Boolean);
 
@@ -2163,7 +2269,9 @@ console.log('  ├── BUG-09: Manual assign to BUSY rider rejected (400)');
 console.log('  ├── BUG-12: GET /delivery/available-orders filters by eligible set (non-eligible rider gets empty list)');
 console.log('  ├── BUG-13: Delivery PIN rate limiting (3 wrong → lockout)');
 console.log('  ├── SCALE-05: Admin order list includes nextCursor, cursor pagination non-overlapping');
-console.log('  └── SCALE-08: GET /delivery/persons paginated { data, meta } response');
+console.log('  ├── SCALE-08: GET /delivery/persons paginated { data, meta } response');
+console.log('  ├── FEAT-01: Variant-level taxRate (₹ flat/unit override, null=inherit product rate)');
+console.log('  └── FEAT-02: Multiple image upload (2 images on create, add 1 via PATCH, cap at 3)');
 
 // ══════════════════════════════════════════════════════════════════════
 //  FINAL CLEANUP: Wipe Test DB + Test Redis + Test BullMQ

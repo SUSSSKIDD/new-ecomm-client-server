@@ -115,6 +115,7 @@ export class ProductsService {
             create: variantsWithImages
           } : undefined,
         },
+        include: { variants: true },
       });
 
       this.logger.log(

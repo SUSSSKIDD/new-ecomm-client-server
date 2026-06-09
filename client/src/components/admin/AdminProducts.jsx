@@ -85,10 +85,8 @@ const ProductModal = ({ product, onClose, onSaved, admin }) => {
         if (form.description) fd.append('description', form.description);
         if (form.mrp) fd.append('mrp', Number(form.mrp));
         if (form.storePrice) fd.append('storePrice', Number(form.storePrice));
-        if (images) {
-            for (let i = 0; i < Math.min(images.length, 3); i++) {
-                fd.append('images', images[i]);
-            }
+        if (images && images.length > 0) {
+            images.slice(0, 3).forEach(file => fd.append('images', file));
         }
 
         try {
@@ -244,7 +242,7 @@ const ProductModal = ({ product, onClose, onSaved, admin }) => {
                     {!(!product && hasVariants) && (
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-1">Images (max 3)</label>
-                            <input type="file" multiple accept="image/*" onChange={e => setImages(e.target.files)}
+                            <input type="file" multiple accept="image/*" onChange={e => setImages(Array.from(e.target.files))}
                                 className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-ud-primary/10 file:text-ud-primary hover:file:bg-ud-primary/20 text-gray-900" />
                         </div>
                     )}

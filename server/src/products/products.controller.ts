@@ -34,22 +34,11 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { StoreGuard } from '../auth/guards/store.guard';
 
 const MULTER_IMAGE_OPTIONS = {
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+  limits: { fileSize: 5 * 1024 * 1024, files: 10 }, // 5MB per file, max 10 files
   fileFilter: (_req: any, file: Express.Multer.File, cb: any) => {
-    if (
-      ['image/jpeg', 'image/png', 'image/webp', 'image/jpg'].includes(
-        file.mimetype,
-      )
-    ) {
-      cb(null, true);
-    } else {
-      cb(
-        new Error(
-          `Invalid file type: ${file.mimetype}. Only JPEG, PNG, WebP allowed.`,
-        ),
-        false,
-      );
-    }
+    const allowed = ['image/jpeg', 'image/png', 'image/webp', 'image/jpg'];
+    // cb(null, false) skips the file silently; cb(new Error) aborts the entire request
+    cb(null, allowed.includes(file.mimetype));
   },
 };
 
@@ -135,9 +124,10 @@ export class ProductsController {
     @UploadedFiles() allFiles: Express.Multer.File[],
     @Req() req: any,
   ) {
-    const productImages = allFiles.filter(f => f.fieldname === 'images');
+    const files = allFiles || [];
+    const productImages = files.filter(f => f.fieldname === 'images');
     const variantImageMap: Record<number, Express.Multer.File[]> = {};
-    allFiles
+    files
       .filter(f => f.fieldname.startsWith('variantImage_'))
       .forEach(f => {
         const idx = parseInt(f.fieldname.split('_')[1], 10);
