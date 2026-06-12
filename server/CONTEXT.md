@@ -71,29 +71,29 @@ graph TB
     end
 
     %% Routing Flows
-    UA -->|HTTPS: /app & Dashboards| NGINX
-    UA -->|SSE Stream: Live order/rider events| NGINX
-    NGINX -->|Serve Static SPA Assets| Static
-    NGINX -->|Direct serving: /uploads/*| Media
-    NGINX -->|Reverse Proxy API: /api/*| NestJS
+    UA -->|"HTTPS: /app and Dashboards"| NGINX
+    UA -->|"SSE Stream: Live order/rider events"| NGINX
+    NGINX -->|"Serve Static SPA Assets"| Static
+    NGINX -->|"Direct serving: /uploads/*"| Media
+    NGINX -->|"Reverse Proxy API: /api/*"| NestJS
 
     %% NestJS Modules Connection
     NestJS --> Modules
 
     %% Cache & Storage
-    CartMod <-->|Redis Session Carts (7d TTL)| Redis
-    DelivMod <-->|Rider pools, Claim locks, Live GPS| Redis
-    SSEMod -->|Rider/User Broadcast Events| Redis
-    ProdMod -->|Store uploaded & optimized WebP images| Media
+    CartMod <-->|"Redis Session Carts (7d TTL)"| Redis
+    DelivMod <-->|"Rider pools, Claim locks, Live GPS"| Redis
+    SSEMod -->|"Rider/User Broadcast Events"| Redis
+    ProdMod -->|"Store uploaded & optimized WebP images"| Media
 
     %% Database Connection
-    NestJS -->|Prisma ORM Queries| PgBouncer
-    PgBouncer -->|Pooled Connections| Postgres
+    NestJS -->|"Prisma ORM Queries"| PgBouncer
+    PgBouncer -->|"Pooled Connections"| Postgres
 
     %% External Communications
-    PayMod <-->|Create Orders / Verify Signatures| Razorpay
-    Razorpay -->|Post-payment webhook callbacks| NGINX
-    SMSMod -->|Send OTPs & Transactional Alerts| MSG91
+    PayMod <-->|"Create Orders / Verify Signatures"| Razorpay
+    Razorpay -->|"Post-payment webhook callbacks"| NGINX
+    SMSMod -->|"Send OTPs & Transactional Alerts"| MSG91
 ```
 
 ## Project Structure
