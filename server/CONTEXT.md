@@ -94,6 +94,7 @@ graph TB
     PayMod <-->|"Create Orders / Verify Signatures"| Razorpay
     Razorpay -->|"Post-payment webhook callbacks"| NGINX
     SMSMod -->|"Send OTPs & Transactional Alerts"| MSG91
+```
 
 ## Core System Flow & Sequence Diagram
 
