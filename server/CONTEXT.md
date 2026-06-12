@@ -94,6 +94,68 @@ graph TB
     PayMod <-->|"Create Orders / Verify Signatures"| Razorpay
     Razorpay -->|"Post-payment webhook callbacks"| NGINX
     SMSMod -->|"Send OTPs & Transactional Alerts"| MSG91
+
+## Core System Flow & Sequence Diagram
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Customer as Customer (App)
+    participant Client as Frontend (React)
+    participant API as Backend (NestJS)
+    participant Redis as Redis Cache
+    participant DB as Postgres (DB)
+    actor Rider as Delivery Rider (App)
+
+    %% Order Preview
+    Customer->>Client: Add Items to Cart
+    Client->>API: POST /cart/items
+    API->>Redis: Update Cart (7d TTL)
+    Customer->>Client: Navigate to Checkout & Click Preview
+    Client->>API: POST /orders/preview { addressId }
+    API->>DB: Fetch stores & stock levels
+    API->>API: Run Two-Phase Smart Allocation Check
+    API-->>Client: Return Allocation JSON (Single/Multi-store breakdown)
+    Client-->>Customer: Display Order Summary
+
+    %% Order Placement
+    Customer->>Client: Click Place Order (COD/Razorpay)
+    Client->>API: POST /orders { idempotencyKey, paymentMethod }
+    alt Single-Store
+        API->>DB: Deduct stock from single store & create Order
+    else Multi-Store Split
+        API->>DB: Create parent Order & N child Orders (atomic transaction)
+    end
+    API->>Redis: Clear User Cart
+    API-->>Client: Return Order Details & IDs
+    
+    %% Delivery Broadcast & Claiming
+    loop For each child order / single-store order
+        API->>API: AutoAssignService / order-pool triggers broadcast
+        API->>Redis: Lock order & register in available pool
+        API->>Rider: Push SSE event (NEW_AVAILABLE_ORDER)
+        Note over Rider: Rider views order in available dashboard
+        Rider->>Client: Click Claim Order
+        Client->>API: POST /delivery/orders/:id/claim
+        API->>Redis: Attempt atomic lock claim
+        alt Claim Successful (First to claim)
+            API->>DB: Update order assignment (ASSIGNED) & Rider Status (BUSY)
+            API->>Redis: Update pool status
+            API-->>Rider: SSE (CLAIM_CONFIRMED)
+        else Claim Failed (Too late)
+            API-->>Rider: Error (Order already claimed)
+        end
+    end
+
+    %% Delivery Completion
+    Rider->>Customer: Arrives & requests delivery PIN
+    Customer-->>Rider: Provides 4-digit PIN
+    Rider->>Client: Enter PIN & Click Complete Delivery
+    Client->>API: POST /delivery/orders/:id/complete { deliveryPin }
+    API->>DB: Validate PIN & set status = DELIVERED
+    API->>DB: Set Rider Status = FREE
+    API->>Redis: Release rider presence lock
+    API-->>Rider: Delivery Completed Successfully
 ```
 
 ## Project Structure
