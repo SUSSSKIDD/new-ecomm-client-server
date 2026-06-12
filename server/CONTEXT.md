@@ -28,6 +28,74 @@ NEYOKART is a hyper-local grocery delivery platform with a React frontend and Ne
 | Docs | Swagger at `/api` |
 | Tests | Jest 30 + ts-jest + supertest |
 
+
+## System Architecture & Design
+
+```mermaid
+graph TB
+    subgraph Client_Space ["Client Space (User Devices)"]
+        UA["User / Rider / Admin Devices"]
+    end
+
+    subgraph Infrastructure_Gateway ["Infrastructure Gateway (Hostinger VPS)"]
+        NGINX["Nginx Reverse Proxy & Web Server"]
+        Static["Client Static Files (HTML/JS/CSS)"]
+        Media["Media Storage (/opt/neyokart/uploads)"]
+    end
+
+    subgraph App_Layer ["Containerized NestJS Application"]
+        NestJS["NestJS App Server (Port 3000)"]
+        
+        subgraph Modules ["Core Modules"]
+            AuthMod["Auth (OTP & PIN Validation)"]
+            ProdMod["Products & Inventory"]
+            CartMod["Cart Management"]
+            OrderMod["Orders & Smart Allocation Engine"]
+            ParcelMod["Parcel Booking & Routing"]
+            DelivMod["Delivery & Claiming System"]
+            SSEMod["SSE Server-Sent Events Service"]
+            SMSMod["SMS Notifications & Logs"]
+            PayMod["Razorpay Payment Integration"]
+        end
+    end
+
+    subgraph Storage_Caching ["Persistence & Caching"]
+        Redis[("Redis Cache & Lock Manager<br/>Port 6379")]
+        PgBouncer["PgBouncer Connection Pooler<br/>Port 6432 (Transaction Mode)"]
+        Postgres[("PostgreSQL Database<br/>Port 5432 (Direct / Migrations)")]
+    end
+
+    subgraph External_APIs ["Third-Party Service Providers"]
+        Razorpay["Razorpay Payment Gateway"]
+        MSG91["MSG91 SMS Gateway (Flow API)"]
+    end
+
+    %% Routing Flows
+    UA -->|HTTPS: /app & Dashboards| NGINX
+    UA -->|SSE Stream: Live order/rider events| NGINX
+    NGINX -->|Serve Static SPA Assets| Static
+    NGINX -->|Direct serving: /uploads/*| Media
+    NGINX -->|Reverse Proxy API: /api/*| NestJS
+
+    %% NestJS Modules Connection
+    NestJS --> Modules
+
+    %% Cache & Storage
+    CartMod <-->|Redis Session Carts (7d TTL)| Redis
+    DelivMod <-->|Rider pools, Claim locks, Live GPS| Redis
+    SSEMod -->|Rider/User Broadcast Events| Redis
+    ProdMod -->|Store uploaded & optimized WebP images| Media
+
+    %% Database Connection
+    NestJS -->|Prisma ORM Queries| PgBouncer
+    PgBouncer -->|Pooled Connections| Postgres
+
+    %% External Communications
+    PayMod <-->|Create Orders / Verify Signatures| Razorpay
+    Razorpay -->|Post-payment webhook callbacks| NGINX
+    SMSMod -->|Send OTPs & Transactional Alerts| MSG91
+```
+
 ## Project Structure
 
 ```
@@ -349,10 +417,21 @@ new grocery/
 
 ## Order State Machine
 
-```
-PENDING → CONFIRMED → PROCESSING → ORDER_PICKED → SHIPPED → DELIVERED
-   ↓          ↓           ↓             ↓            ↓
-CANCELLED  CANCELLED   CANCELLED    CANCELLED    CANCELLED
+```mermaid
+stateDiagram-v2
+    [*] --> PENDING
+    PENDING --> CONFIRMED : Payment verification / COD
+    PENDING --> CANCELLED : Customer cancel
+    CONFIRMED --> PROCESSING : Admin start processing
+    CONFIRMED --> CANCELLED : Grace period cancel (90s)
+    PROCESSING --> ORDER_PICKED : Order packed
+    PROCESSING --> CANCELLED : Admin/Store Manager cancel
+    ORDER_PICKED --> SHIPPED : Dispatch to rider
+    ORDER_PICKED --> CANCELLED : Admin/Store Manager cancel
+    SHIPPED --> DELIVERED : Delivery PIN verification
+    SHIPPED --> CANCELLED : Admin/Store Manager cancel
+    DELIVERED --> [*]
+    CANCELLED --> [*]
 ```
 
 ### Valid Transitions
@@ -376,10 +455,24 @@ CANCELLED  CANCELLED   CANCELLED    CANCELLED    CANCELLED
 
 ## Parcel Order State Machine
 
-```
-PENDING → APPROVED → READY_FOR_PICKUP → ASSIGNED → PICKED_UP → IN_TRANSIT → DELIVERED
-   ↓          ↓              ↓               ↓          ↓           ↓
-CANCELLED  CANCELLED     CANCELLED       CANCELLED   CANCELLED   CANCELLED
+```mermaid
+stateDiagram-v2
+    [*] --> PENDING
+    PENDING --> APPROVED : Admin approval with COD amount
+    PENDING --> CANCELLED : Customer cancel
+    APPROVED --> READY_FOR_PICKUP : Admin sets ready
+    APPROVED --> CANCELLED : Customer cancel
+    READY_FOR_PICKUP --> ASSIGNED : Rider claims parcel (SSE broadcast)
+    READY_FOR_PICKUP --> CANCELLED : Admin cancel
+    ASSIGNED --> PICKED_UP : Rider accepts assignment
+    ASSIGNED --> READY_FOR_PICKUP : Rider rejects assignment
+    ASSIGNED --> CANCELLED : Admin/Customer cancel
+    PICKED_UP --> IN_TRANSIT : Rider starts transit
+    PICKED_UP --> CANCELLED : Admin cancel
+    IN_TRANSIT --> DELIVERED : Rider completes delivery with PIN
+    IN_TRANSIT --> CANCELLED : Admin cancel
+    DELIVERED --> [*]
+    CANCELLED --> [*]
 ```
 
 | Transition | Triggered By |
@@ -411,6 +504,18 @@ CANCELLED  CANCELLED     CANCELLED       CANCELLED   CANCELLED   CANCELLED
 - **Cross-Category Carts**: Carts can contain items across any storeType (GROCERY, PIZZA_TOWN, etc.). The multi-store logic will automatically separate the order into multiple child orders based on each product's store.
 
 ### Flow
+
+```mermaid
+flowchart TD
+    Start[Customer places order with AddressId] --> Geo[Get Nearby Stores within 10km]
+    Geo --> Phase1{Phase 1: Can any single store fulfill ALL items?}
+    Phase1 -- Yes --> Single[Create single Order, decrement store stock] --> Finish[Order Confirmed]
+    Phase1 -- No --> Phase2{Phase 2: Can items be split across multiple stores?}
+    Phase2 -- Yes (Greedy Split) --> Split[Create Parent Order & Child Orders atomically]
+    Split --> StockDec[Decrement stock per-store in $transaction] --> Broadcast[Broadcast each child order to riders]
+    Phase2 -- No --> Reject[Reject Order: Out of Stock] --> Fail[Fulfillment Failed]
+```
+
 1. Customer places order with `addressId` (includes lat/lng)
 2. `AllocationService.allocate()` runs two-phase algorithm against nearby stores' `StoreInventory`
 3. `OrderFulfillmentService` delegates to `AllocationService`, returns backward-compatible `FulfillmentResult`
@@ -504,6 +609,295 @@ CANCELLED  CANCELLED     CANCELLED       CANCELLED   CANCELLED   CANCELLED
 | **Live** | Key starts with `rzp_live_*` | Real Razorpay API (production), mock endpoint blocked |
 
 ## Database Models (Prisma)
+
+### Entity Relationship Diagram (ERD)
+
+```mermaid
+erDiagram
+    USER {
+        string id PK
+        string phone UK
+        string name
+        Role role
+        datetime createdAt
+        datetime updatedAt
+    }
+    ADDRESS {
+        string id PK
+        string userId FK
+        string type
+        string houseNo
+        string street
+        string city
+        string state
+        string zipCode
+        string landmark
+        string mapsLink
+        string recipientName
+        string recipientPhone
+        float lat
+        float lng
+        datetime createdAt
+    }
+    PRODUCT {
+        string id PK
+        string name
+        string description
+        float price
+        float storePrice
+        float mrp
+        string category
+        string subCategory
+        int stock
+        string storeLocation
+        boolean isGrocery
+        string[] images
+        string storeId FK
+        float taxRate
+        boolean isActive
+        datetime createdAt
+        datetime updatedAt
+    }
+    PRODUCT_VARIANT {
+        string id PK
+        string productId FK
+        string label
+        float price
+        float storePrice
+        float mrp
+        int stock
+        string[] images
+        boolean isActive
+        float taxRate
+        datetime createdAt
+        datetime updatedAt
+    }
+    STORE {
+        string id PK
+        string name
+        string pincode
+        float lat
+        float lng
+        string address
+        string storeType
+        string storeCode UK
+        boolean isActive
+        datetime createdAt
+        datetime updatedAt
+    }
+    STORE_MANAGER {
+        string id PK
+        string name
+        string phone UK
+        string pinHash
+        string storeId FK
+        boolean isActive
+        datetime createdAt
+        datetime updatedAt
+    }
+    PARCEL_MANAGER {
+        string id PK
+        string name
+        string phone UK
+        string pinHash
+        boolean isActive
+        datetime createdAt
+        datetime updatedAt
+    }
+    PAYMENT_LEDGER {
+        string id PK
+        string storeId FK
+        string transactionId UK
+        datetime date
+        float amount
+        string paymentMethod
+        string referenceNotes
+        datetime createdAt
+    }
+    STORE_INVENTORY {
+        string id PK
+        string storeId FK
+        string productId FK
+        int stock
+    }
+    DELIVERY_PERSON {
+        string id PK
+        string name
+        string phone UK
+        string pinHash
+        DeliveryPersonStatus status
+        float lat
+        float lng
+        boolean isActive
+        datetime lastLocationAt
+        datetime createdAt
+        datetime updatedAt
+    }
+    ORDER_ASSIGNMENT {
+        string id PK
+        string orderId UK, FK
+        string deliveryPersonId FK
+        datetime assignedAt
+        datetime acceptedAt
+        datetime completedAt
+        string result
+    }
+    ORDER {
+        string id PK
+        string userId FK
+        string orderNumber UK
+        OrderStatus status
+        PaymentMethod paymentMethod
+        PaymentStatus paymentStatus
+        json deliveryAddress
+        float subtotal
+        float deliveryFee
+        float tax
+        float total
+        string idempotencyKey UK
+        string razorpayOrderId UK
+        string razorpayPaymentId
+        string razorpaySignature
+        datetime createdAt
+        datetime updatedAt
+        datetime confirmedAt
+        datetime paidAt
+        datetime deliveredAt
+        string notDeliveredReason
+        datetime notDeliveredAt
+        string deliveryPin
+        string parentOrderId FK
+        boolean isParent
+        string storeTypeName
+    }
+    ORDER_ITEM {
+        string id PK
+        string orderId FK
+        string productId FK
+        string variantId FK
+        string variantLabel
+        string name
+        float price
+        int quantity
+        float total
+        float taxRate
+        string storeId FK
+        string selectedSize
+        string[] userUploadUrls
+        string printProductId
+    }
+    PARCEL_ORDER {
+        string id PK
+        string userId FK
+        string parcelNumber UK
+        ParcelStatus status
+        json pickupAddress
+        float pickupLat
+        float pickupLng
+        json dropAddress
+        float dropLat
+        float dropLng
+        ParcelCategory category
+        string categoryOther
+        float weight
+        float length
+        float width
+        float height
+        datetime pickupTime
+        datetime dropTime
+        float codAmount
+        PaymentMethod paymentMethod
+        PaymentStatus paymentStatus
+        string adminNotes
+        datetime createdAt
+        datetime updatedAt
+        datetime approvedAt
+        datetime pickedUpAt
+        datetime deliveredAt
+        string notDeliveredReason
+        datetime notDeliveredAt
+        string deliveryPin
+    }
+    PARCEL_ASSIGNMENT {
+        string id PK
+        string parcelOrderId UK, FK
+        string deliveryPersonId FK
+        datetime assignedAt
+        datetime acceptedAt
+        datetime completedAt
+        string result
+    }
+    CUSTOM_SUBCATEGORY {
+        string id PK
+        string storeType
+        string name
+        datetime createdAt
+    }
+    CATEGORY_CONFIG {
+        string id PK
+        string storeType
+        string subcategory
+        string uploadType
+        string bannerImage
+        datetime createdAt
+        datetime updatedAt
+    }
+    PRINT_PRODUCT {
+        string id PK
+        string name
+        string productType
+        json sizes
+        float basePrice
+        string image
+        boolean isActive
+        datetime createdAt
+        datetime updatedAt
+    }
+    SMS_TEMPLATE {
+        string id PK
+        string name
+        string key UK
+        string content
+        string[] variables
+        SmsType type
+        boolean isActive
+        string msg91TemplateId
+        string msg91FlowId
+        datetime createdAt
+        datetime updatedAt
+    }
+    SMS_LOG {
+        string id PK
+        string templateId FK
+        string recipientPhone
+        json variables
+        SmsStatus status
+        string msg91RequestId
+        datetime sentAt
+        datetime deliveredAt
+        string failureReason
+        json metadata
+        datetime createdAt
+    }
+
+    USER ||--o{ ADDRESS : "has"
+    USER ||--o{ ORDER : "places"
+    USER ||--o{ PARCEL_ORDER : "books"
+    STORE ||--o{ STORE_MANAGER : "managed_by"
+    STORE ||--o{ PAYMENT_LEDGER : "has_ledger_entries"
+    STORE ||--o{ STORE_INVENTORY : "has_inventory"
+    STORE ||--o{ PRODUCT : "owns"
+    STORE ||--o{ ORDER_ITEM : "supplies"
+    PRODUCT ||--o{ PRODUCT_VARIANT : "has_variants"
+    PRODUCT ||--o{ STORE_INVENTORY : "in_inventory"
+    ORDER ||--o{ ORDER_ITEM : "contains"
+    ORDER ||--o| ORDER_ASSIGNMENT : "assigned_to"
+    ORDER ||--o{ ORDER : "parent_children"
+    DELIVERY_PERSON ||--o{ ORDER_ASSIGNMENT : "handles_orders"
+    DELIVERY_PERSON ||--o{ PARCEL_ASSIGNMENT : "handles_parcels"
+    PARCEL_ORDER ||--o| PARCEL_ASSIGNMENT : "assigned_to"
+    SMS_TEMPLATE ||--o{ SMS_LOG : "generates"
+```
 
 ### Enums
 - **Role**: `USER`, `STORE_MANAGER`, `PARCEL_MANAGER`, `DELIVERY_PERSON`, `ADMIN`
