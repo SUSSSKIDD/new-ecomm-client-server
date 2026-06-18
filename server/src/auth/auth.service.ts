@@ -13,7 +13,7 @@ import { SendOtpDto, VerifyOtpDto, StoreManagerLoginDto } from './dto/auth.dto';
 import * as bcrypt from 'bcryptjs';
 import { Role } from '@prisma/client';
 import { TTL } from '../common/redis/ttl.config.js';
-
+//authservice
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
@@ -29,7 +29,7 @@ export class AuthService {
   ) {
     let phoneParam = this.config.get<string>('SUPER_ADMIN_PHONE', '');
     this.superAdminPhone = phoneParam.replace(/^["']|["']$/g, '');
-    
+
     let pinParam = this.config.get<string>('SUPER_ADMIN_PIN', '');
     const cleanPin = pinParam.replace(/^["']|["']$/g, '');
     // Pre-hash the pin synchronously at startup for comparison later
