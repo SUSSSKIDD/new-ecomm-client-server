@@ -5,21 +5,21 @@ echo "=========================================="
 echo " Starting Neyokart Blue/Green Deployment  "
 echo "=========================================="
 
-APP_DIR="/opt/neyokart"
+APP_DIR="/srv/projects/pratyush/neyokart"
 DOCKER_COMPOSE_FILE="$APP_DIR/docker-compose.prod.yml"
 STATE_FILE="$APP_DIR/active_color.txt"
 
 # .env must exist — it holds all production secrets.
 # CI/CD never creates or overwrites it. Create once on the VPS:
-#   nano /opt/neyokart/.env   (fill in DATABASE_URL, JWT_SECRET, etc.)
+#   nano /srv/projects/pratyush/neyokart/.env   (fill in DATABASE_URL, JWT_SECRET, etc.)
 if [ ! -f "$APP_DIR/.env" ]; then
-    echo "❌ /opt/neyokart/.env is missing. SSH into the VPS and create it:"
-    echo "   nano /opt/neyokart/.env"
+    echo "❌ /srv/projects/pratyush/neyokart/.env is missing. SSH into the VPS and create it:"
+    echo "   nano /srv/projects/pratyush/neyokart/.env"
     exit 1
 fi
 
 # Ensure uploads directory exists and is writable by the container user (uid 1001 = nodeuser).
-# Docker mounts /opt/neyokart/uploads → /app/uploads inside the container.
+# Docker mounts /srv/projects/pratyush/neyokart/uploads → /app/uploads inside the container.
 # If the host dir is missing or root-owned, the app crashes with EACCES on startup.
 mkdir -p "$APP_DIR/uploads"
 chown -R 1001:1001 "$APP_DIR/uploads" 2>/dev/null || true

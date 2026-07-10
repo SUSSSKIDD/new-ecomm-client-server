@@ -27,7 +27,7 @@ x-server-common: &server-common
     redis-bull:
       condition: service_healthy
   volumes:
-    - /opt/neyokart/uploads:/app/uploads
+    - /srv/projects/pratyush/neyokart/uploads:/app/uploads
   extra_hosts:
     - "host.docker.internal:host-gateway"
   stop_grace_period: 1m
