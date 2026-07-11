@@ -11,7 +11,7 @@ async function main() {
 
   const settings = await prisma.$queryRaw`SELECT * FROM "_prisma_migrations" LIMIT 1`; // Just checking connection
   console.log('--- DB CONNECTION OK ---');
-  
+
   process.exit(0);
 }
 
@@ -19,3 +19,4 @@ main().catch((err) => {
   console.error(err);
   process.exit(1);
 });
+//test
