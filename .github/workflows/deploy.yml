@@ -192,13 +192,11 @@ jobs:
       - name: Trigger Blue/Green Deployment Script
         if: env.HAS_CHANGES == 'true'
         run: |
-          sshpass -e ssh -o StrictHostKeyChecking=no ${{ secrets.VPS_USER }}@${{ secrets.VPS_IP }} \
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no ${{ secrets.VPS_USER }}@${{ secrets.VPS_IP }} \
             "chmod +x /srv/projects/pratyush/neyokart/scripts/deployment/deploy.sh && cd /srv/projects/pratyush/neyokart && bash ./scripts/deployment/deploy.sh"
-        env:
-          SSHPASS: ${{ secrets.VPS_PASSWORD }}
           
       - name: Trigger Deployment Script (No Changes but manual trigger)
         if: env.HAS_CHANGES != 'true'
         run: |
-          sshpass -e ssh -o StrictHostKeyChecking=no ${{ secrets.VPS_USER }}@${{ secrets.VPS_IP }} \
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no ${{ secrets.VPS_USER }}@${{ secrets.VPS_IP }} \
             "chmod +x /srv/projects/pratyush/neyokart/scripts/deployment/deploy.sh && cd /srv/projects/pratyush/neyokart && bash ./scripts/deployment/deploy.sh"
