@@ -1,16 +1,298 @@
 <!doctype html>
-<html lang="en">
-
+<html lang="en" itemscope itemtype="https://schema.org/LocalBusiness">
 <head>
   <meta charset="UTF-8" />
   <link rel="icon" type="image/png" href="/favicon.png" />
+  <link rel="apple-touch-icon" href="/logo.png" />
+  <link rel="manifest" href="/manifest.json" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-  <title>NEYOKART</title>
+  <meta name="theme-color" content="#10b981" media="(prefers-color-scheme: light)" />
+  <meta name="theme-color" content="#0f172a" media="(prefers-color-scheme: dark)" />
+  <meta name="color-scheme" content="light dark" />
+  
+  <!-- Primary Meta Tags -->
+  <title>NEYOKART - Fresh Grocery Delivery in Varanasi | 30 Min Delivery</title>
+  <meta name="title" content="NEYOKART - Fresh Grocery Delivery in Varanasi | 30 Min Delivery" />
+  <meta name="description" content="Order fresh vegetables, fruits, groceries & daily essentials from NEYOKART. Free delivery above ₹199. 30-min delivery in Varanasi. COD & Online payment available." />
+  <meta name="keywords" content="grocery delivery Varanasi, online grocery shopping, fresh vegetables delivery, fruits delivery, NEYOKART, same day grocery delivery, cash on delivery groceries" />
+  <meta name="author" content="NEYOKART" />
+  <meta name="robots" content="index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1" />
+  <meta name="googlebot" content="index, follow" />
+  <meta name="format-detection" content="telephone=no" />
+  
+  <!-- Geo Tags for Local SEO -->
+  <meta name="geo.region" content="IN-UP" />
+  <meta name="geo.placename" content="Varanasi" />
+  <meta name="geo.position" content="25.3176;82.9739" />
+  <meta name="ICBM" content="25.3176, 82.9739" />
+  
+  <!-- Open Graph / Facebook -->
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://neyokart.com/" />
+  <meta property="og:title" content="NEYOKART - Fresh Grocery Delivery in Varanasi | 30 Min Delivery" />
+  <meta property="og:description" content="Order fresh vegetables, fruits, groceries & daily essentials. Free delivery above ₹199. 30-min delivery in Varanasi. COD & Online payment." />
+  <meta property="og:image" content="https://neyokart.com/logo.png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="NEYOKART - Fresh Grocery Delivery in Varanasi" />
+  <meta property="og:site_name" content="NEYOKART" />
+  <meta property="og:locale" content="en_IN" />
+  <meta property="og:locale:alternate" content="hi_IN" />
+  
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:url" content="https://neyokart.com/" />
+  <meta name="twitter:title" content="NEYOKART - Fresh Grocery Delivery in Varanasi | 30 Min Delivery" />
+  <meta name="twitter:description" content="Order fresh vegetables, fruits, groceries & daily essentials. Free delivery above ₹199. 30-min delivery in Varanasi." />
+  <meta name="twitter:image" content="https://neyokart.com/logo.png" />
+  <meta name="twitter:image:alt" content="NEYOKART - Fresh Grocery Delivery" />
+  <meta name="twitter:site" content="@neyokart" />
+  <meta name="twitter:creator" content="@neyokart" />
+  
+  <!-- Canonical URL -->
+  <link rel="canonical" href="https://neyokart.com/" />
+  
+  <!-- Preconnect for Performance -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="preconnect" href="https://neyokart.com" crossorigin />
+  <link rel="dns-prefetch" href="https://api.msg91.com" />
+  <link rel="dns-prefetch" href="https://api.razorpay.com" />
+  
+  <!-- Preload Critical Resources -->
+  <link rel="preload" as="style" href="/src/index.css" />
+  <link rel="preload" as="font" type="font/woff2" crossorigin href="https://fonts.gstatic.com/s/inter/v19/UcCO3FwrK3iLTeHuS_nVMrMxCp50SjIw2boKoduKmMEVuLyfAZ9hjp-Ek-_EeA.woff2" />
+  
+  <!-- PWA Manifest -->
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="NEYOKART" />
+  
+  <!-- JSON-LD Structured Data: LocalBusiness + Organization -->
+  <script type="application/ld+json" id="schema-org-localbusiness">
+  {
+    "@context": "https://schema.org",
+    "@type": ["LocalBusiness", "Store", "GroceryStore"],
+    "@id": "https://neyokart.com/#localbusiness",
+    "name": "NEYOKART",
+    "alternateName": "Neyokart Grocery Delivery",
+    "description": "NEYOKART is a hyper-local grocery delivery platform connecting customers with neighborhood stores in Varanasi for fresh vegetables, fruits, groceries, and daily essentials with 30-minute delivery.",
+    "url": "https://neyokart.com",
+    "telephone": "+91-8378842740",
+    "email": "neyokart@gmail.com",
+    "logo": "https://neyokart.com/logo.png",
+    "image": "https://neyokart.com/logo.png",
+    "slogan": "Fresh from Farm to Doorstep in 30 Minutes",
+    "priceRange": "₹₹",
+    "currenciesAccepted": "INR",
+    "paymentAccepted": "Cash, Credit Card, Debit Card, UPI, Net Banking, Razorpay",
+    "areaServed": {
+      "@type": "GeoCircle",
+      "geoMidpoint": {
+        "@type": "GeoCoordinates",
+        "latitude": 25.3176,
+        "longitude": 82.9739
+      },
+      "geoRadius": "10000"
+    },
+    "address": {
+      "@type": "PostalAddress",
+      "streetAddress": "O, RAMCHANDIPUR, OLD SHIV MANDIR, RAMCHANDIPUR, JALHUPUR",
+      "addressLocality": "Varanasi",
+      "addressRegion": "Uttar Pradesh",
+      "postalCode": "221104",
+      "addressCountry": "IN"
+    },
+    "geo": {
+      "@type": "GeoCoordinates",
+      "latitude": 25.3176,
+      "longitude": 82.9739
+    },
+    "openingHoursSpecification": [
+      {
+        "@type": "OpeningHoursSpecification",
+        "dayOfWeek": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"],
+        "opens": "08:00",
+        "closes": "23:00"
+      }
+    ],
+    "hasOfferCatalog": {
+      "@type": "OfferCatalog",
+      "name": "Grocery & Daily Essentials",
+      "itemListElement": [
+        {
+          "@type": "Offer",
+          "itemOffered": {
+            "@type": "Product",
+            "name": "Fresh Vegetables & Fruits",
+            "category": "Produce"
+          }
+        },
+        {
+          "@type": "Offer",
+          "itemOffered": {
+            "@type": "Product",
+            "name": "Dairy, Bread & Eggs",
+            "category": "Dairy"
+          }
+        },
+        {
+          "@type": "Offer",
+          "itemOffered": {
+            "@type": "Product",
+            "name": "Pantry Staples (Atta, Rice, Dal, Oil)",
+            "category": "Pantry"
+          }
+        },
+        {
+          "@type": "Offer",
+          "itemOffered": {
+            "@type": "Product",
+            "name": "Snacks & Beverages",
+            "category": "Snacks"
+          }
+        },
+        {
+          "@type": "Offer",
+          "itemOffered": {
+            "@type": "Product",
+            "name": "Personal Care & Household",
+            "category": "Personal Care"
+          }
+        }
+      ]
+    },
+    "serviceType": "Grocery Delivery & Pickup/Drop Service",
+    "availableChannel": {
+      "@type": "ServiceChannel",
+      "serviceUrl": "https://neyokart.com",
+      "servicePhone": "+91-8378842740",
+      "serviceMobileApp": {
+        "@type": "MobileApplication",
+        "name": "NEYOKART",
+        "operatingSystem": "Android, iOS",
+        "applicationCategory": "ShoppingApplication"
+      }
+    },
+    "sameAs": [
+      "https://www.facebook.com/neyokart",
+      "https://www.instagram.com/neyokart",
+      "https://twitter.com/neyokart"
+    ],
+    "knowsAbout": ["Grocery Delivery", "Fresh Produce", "Local Commerce", "Hyperlocal Delivery", "Parcel Pickup & Drop"],
+    "knowsLanguage": ["English", "Hindi"],
+    "foundingDate": "2024",
+    "numberOfEmployees": {
+      "@type": "QuantitativeValue",
+      "minValue": 10,
+      "maxValue": 50
+    }
+  }
+  </script>
+  
+  <!-- JSON-LD: WebSite with SearchAction -->
+  <script type="application/ld+json" id="schema-website">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    "@id": "https://neyokart.com/#website",
+    "url": "https://neyokart.com",
+    "name": "NEYOKART",
+    "description": "Fresh grocery delivery platform in Varanasi with 30-minute delivery from local stores.",
+    "publisher": {
+      "@id": "https://neyokart.com/#localbusiness"
+    },
+    "potentialAction": {
+      "@type": "SearchAction",
+      "target": {
+        "@type": "EntryPoint",
+        "urlTemplate": "https://neyokart.com/search?q={search_term_string}"
+      },
+      "query-input": "required name=search_term_string"
+    },
+    "inLanguage": "en-IN"
+  }
+  </script>
+  
+  <!-- JSON-LD: FAQPage for common questions -->
+  <script type="application/ld+json" id="schema-faq">
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "@id": "https://neyokart.com/#faq",
+    "mainEntity": [
+      {
+        "@type": "Question",
+        "name": "What is NEYOKART's delivery time?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Most orders are delivered within 30-60 minutes. Custom orders and parcel pickups follow scheduled timelines provided at checkout."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "What is the minimum order for free delivery?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Free delivery on all orders above ₹199. Standard delivery fee of ₹30 applies to orders below ₹199."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "What payment methods does NEYOKART accept?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "We accept Cash on Delivery (COD), UPI, Credit/Debit Cards, Net Banking, and Wallets via Razorpay."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Can I cancel my order?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "You can cancel your order immediately after placing it. Once the store starts packing or a delivery executive is dispatched, the order cannot be cancelled."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "What areas does NEYOKART deliver to?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "We currently operate within Varanasi city limits. You will be notified at checkout if your address falls within our active delivery zones (10km radius from partner stores)."
+        }
+      },
+      {
+        "@type": "Question",
+        "name": "Does NEYOKART offer parcel pickup and drop service?",
+        "acceptedAnswer": {
+          "@type": "Answer",
+          "text": "Yes, NEYOKART offers a Pickup & Drop service for documents, packages, and parcels within Varanasi. Book via the 'Pickup & Drop' section in the app."
+        }
+      }
+    ]
+  }
+  </script>
+
+  <title>NEYOKART - Fresh Grocery Delivery in Varanasi | 30 Min Delivery</title>
 </head>
 
 <body>
   <div id="root"></div>
   <script type="module" src="/src/main.jsx"></script>
+  
+  <!-- Fallback for noscript users -->
+  <noscript>
+    <div style="padding: 2rem; text-align: center; font-family: system-ui; max-width: 600px; margin: 2rem auto;">
+      <h1 style="color: #10b981;">NEYOKART</h1>
+      <p style="color: #6b7280; margin: 1rem 0;">Please enable JavaScript to use NEYOKART - Fresh Grocery Delivery in Varanasi.</p>
+      <p style="color: #9ca3af; font-size: 0.875rem;">We deliver fresh vegetables, fruits, groceries & daily essentials in 30 minutes. Free delivery above ₹199.</p>
+      <div style="margin-top: 1.5rem; padding: 1rem; background: #f3f4f6; border-radius: 0.5rem;">
+        <p style="margin: 0.5rem 0;"><strong>Contact:</strong> neyokart@gmail.com | +91-8378842740</p>
+        <p style="margin: 0.5rem 0;"><strong>Address:</strong> O, RAMCHANDIPUR, OLD SHIV MANDIR, RAMCHANDIPUR, JALHUPUR, Varanasi, UP 221104</p>
+        <p style="margin: 0.5rem 0;"><strong>Hours:</strong> 8:00 AM - 11:00 PM Daily</p>
+      </div>
+    </div>
+  </noscript>
 </body>
-
 </html>

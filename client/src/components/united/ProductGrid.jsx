@@ -27,7 +27,7 @@ const ProductGrid = ({ mainCategory, subCategory, onProductSelect }) => {
 
     if (loading && products.length === 0) {
         return (
-            <div className="w-full py-8 flex justify-center">
+            <div className="w-full py-8 flex justify-center" role="status" aria-label="Loading products">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-ud-primary"></div>
             </div>
         );
@@ -35,21 +35,21 @@ const ProductGrid = ({ mainCategory, subCategory, onProductSelect }) => {
 
     if (error) {
         return (
-            <div className="w-full py-8 text-center text-red-500">
+            <div className="w-full py-8 text-center text-red-500" role="alert">
                 Failed to load products. Please try again.
             </div>
         );
     }
 
     return (
-        <div className="w-full py-2">
-            <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-4">{effectiveSubCategory}</h2>
+        <section aria-labelledby="category-heading" className="w-full py-2">
+            <h2 id="category-heading" className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-4">{effectiveSubCategory}</h2>
 
             {products.length === 0 ? (
-                <p className="text-gray-500 dark:text-gray-400 italic mt-4 text-center">No products found in this category.</p>
+                <p className="text-gray-500 dark:text-gray-400 italic mt-4 text-center" role="status">No products found in this category.</p>
             ) : (
                 <>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                    <ul className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4" role="list">
                         {products.map((product) => {
                             const hasVariants = product.variants && product.variants.length > 0;
                             const defaultVariant = hasVariants ? product.variants[0] : null;
@@ -58,14 +58,15 @@ const ProductGrid = ({ mainCategory, subCategory, onProductSelect }) => {
                             const stock = defaultVariant ? defaultVariant.stock : product.stock;
 
                             return (
-                            <div
+                            <li
                                 key={product.id}
                                 className="bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-gray-100 dark:border-slate-700 p-4 flex gap-4 hover:shadow-md transition-all cursor-pointer relative"
                                 onClick={() => handleSelect(product)}
+                                role="listitem"
                             >
                                 <div className="h-24 w-24 shrink-0 flex items-center justify-center bg-gray-50 dark:bg-slate-900 rounded-md overflow-hidden relative">
                                     {product.images?.[0] ? (
-                                        <img src={product.images[0]} alt={product.name} className="h-full object-contain mix-blend-multiply dark:mix-blend-normal" loading="lazy" />
+                                        <img src={product.images[0]} alt="" className="h-full object-contain mix-blend-multiply dark:mix-blend-normal" loading="lazy" />
                                     ) : (
                                         <span className="text-gray-300 dark:text-gray-600 text-[10px]">No Image</span>
                                     )}
@@ -113,10 +114,10 @@ const ProductGrid = ({ mainCategory, subCategory, onProductSelect }) => {
                                         </RippleButton>
                                     </div>
                                 </div>
-                            </div>
+                            </li>
                             );
                         })}
-                    </div>
+                    </ul>
 
                     {/* Load More Button */}
                     {hasMore && (
@@ -133,7 +134,7 @@ const ProductGrid = ({ mainCategory, subCategory, onProductSelect }) => {
                     )}
                 </>
             )}
-        </div>
+        </section>
     );
 };
 

@@ -61,7 +61,7 @@ const UnitedDealsHome = () => {
     return (
         <div className="h-[100dvh] overflow-hidden bg-white font-sans text-gray-900 relative flex flex-col">
             {toastMessage && (
-                <div className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-black/80 text-white px-6 py-3 rounded-lg text-sm font-medium shadow-xl z-50 animate-fade-in-up">
+                <div className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 bg-black/80 text-white px-6 py-3 rounded-lg text-sm font-medium shadow-xl z-50 animate-fade-in-up" role="alert" aria-live="polite">
                     {toastMessage}
                 </div>
             )}
@@ -69,7 +69,7 @@ const UnitedDealsHome = () => {
             <CartSidebar />
             <ProfileSidebar />
 
-            <div className="flex-1 min-h-0 bg-gray-50 uppercase tracking-tight">
+            <main className="flex-1 min-h-0 bg-gray-50 uppercase tracking-tight" role="main">
                 {selectedProduct ? (
                     <div className="h-full flex flex-col overflow-hidden">
                         <ProductDetailView />
@@ -90,7 +90,7 @@ const UnitedDealsHome = () => {
                         <Footer />
                     </div>
                 )}
-            </div>
+            </main>
         </div>
     );
 };

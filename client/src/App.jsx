@@ -14,6 +14,7 @@ import { Capacitor } from '@capacitor/core';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { usePushNotifications } from './hooks/usePushNotifications';
 import { StatusBar } from '@capacitor/status-bar';
+import { SEOProvider } from './components/SEOProvider';
 
 const ProductDetails = lazy(() => import('./views/ProductDetails'));
 const DeliveryLogin = lazy(() => import('./components/delivery/DeliveryLogin'));
@@ -93,7 +94,8 @@ function App() {
                       No Internet Connection. Some features may be unavailable.
                     </div>
                   )}
-                  <Routes>
+                  <SEOProvider>
+                    <Routes>
                     {/* Build-type based entry point redirection */}
                     {import.meta.env.VITE_APP_TYPE === 'DELIVERY' ? (
                       <Route index element={<Navigate to="/delivery/login" replace />} />
@@ -126,8 +128,9 @@ function App() {
                       <Route index element={<AdminDashboard />} />
                     </Route>
 
-                    <Route path="*" element={<UnitedDealsHome />} />
-                  </Routes>
+<Route path="*" element={<UnitedDealsHome />} />
+                    </Routes>
+                  </SEOProvider>
                 </Suspense>
               </ErrorBoundary>
             </CategoryProvider>

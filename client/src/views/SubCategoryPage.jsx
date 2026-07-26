@@ -19,6 +19,55 @@ const TITLE_TO_STORE_TYPE = {
     'Print Factory': 'DROP_IN_FACTORY',
 };
 
+// Category descriptions for SEO
+const CATEGORY_DESCRIPTIONS = {
+    'Grocery': {
+        'Vegetables & Fruits': 'Fresh, locally-sourced vegetables and fruits delivered from Varanasi\'s best farms. Farm-to-door freshness in 30 minutes.',
+        'Atta, Rice & Dal': 'Premium quality atta, rice, and dal from trusted brands. Essential pantry staples for your daily cooking needs.',
+        'Oil, Ghee & Masala': 'Pure cooking oils, desi ghee, and authentic masalas. Elevate your cooking with the finest ingredients.',
+        'Dairy, Bread & Eggs': 'Fresh milk, curd, paneer, bread, and eggs delivered daily. Complete your breakfast essentials.',
+        'Bakery & Biscuits': 'Freshly baked goods, cookies, biscuits, and cakes from local bakeries. Perfect for tea-time snacks.',
+        'Dry Fruits & Cereals': 'Premium dry fruits, nuts, and healthy cereals. Nutritious snacking options for the whole family.',
+        'Chicken, Meat & Fish': 'Fresh, hygienically processed chicken, mutton, and fish. Quality non-veg delivered to your doorstep.',
+        'Kitchenware & Appliances': 'Essential kitchen tools, utensils, and small appliances. Make cooking easier and enjoyable.',
+        'Chips & Namkeen': 'Crunchy chips, namkeen, and savory snacks. Perfect for munching and entertaining guests.',
+        'Sweets & Chocolates': 'Traditional Indian sweets, chocolates, and confectioneries. Satisfy your sweet cravings.',
+        'Drinks & Juices': 'Refreshing beverages, fruit juices, soft drinks, and energy drinks. Stay hydrated and refreshed.',
+        'Tea, Coffee & Milk Drinks': 'Premium tea, coffee, and flavored milk drinks. Start your day right with the perfect brew.',
+        'Instant Food': 'Quick meals, noodles, pasta, and ready-to-cook options. Delicious meals in minutes.',
+        'Sauces & Spreads': 'Ketchup, sauces, jams, spreads, and condiments. Add flavor to every meal.',
+        'Paan Corner': 'Fresh paan, supari, and mouth fresheners. Traditional after-meal delights.',
+        'Ice Creams & More': 'Ice creams, frozen desserts, and cold treats. Perfect for beating the heat.',
+        'Bath & Body': 'Soaps, body washes, lotions, and personal care essentials. Feel fresh and clean.',
+        'Hair': 'Shampoos, conditioners, oils, and hair care products. Healthy hair starts here.',
+        'Skin & Face': 'Face washes, creams, moisturizers, and skincare essentials. Glow naturally.',
+        'Beauty & Cosmetics': 'Makeup, cosmetics, and beauty products. Look your best every day.',
+        'Feminine Hygiene': 'Sanitary pads, tampons, and intimate care products. Comfort and protection.',
+        'Baby Care': 'Diapers, wipes, baby food, and essentials. Care for your little one.',
+        'Health & Pharma': 'OTC medicines, supplements, and health essentials. Your wellness partner.',
+        'Sexual Wellness': 'Personal intimacy and wellness products. Discreet delivery.',
+        'Home & Lifestyle': 'Home decor, furnishings, and lifestyle products. Beautify your space.',
+        'Cleaners & Repellents': 'Home cleaning products, detergents, and mosquito repellents. Clean and protected home.',
+        'Electronics': 'Mobile accessories, gadgets, and small electronics. Stay connected.',
+        'Stationery & Games': 'Office supplies, school stationery, and fun games. Work and play essentials.',
+    },
+    'Pizza Town & Food Zone': {
+        'Pizza': 'Freshly baked pizzas with premium toppings. From classic Margherita to loaded meat lovers.',
+        'Burger': 'Juicy burgers with fresh patties and crisp vegetables. Fast food done right.',
+        'Sandwich': 'Grilled and cold sandwiches with delicious fillings. Perfect for a quick meal.',
+        'French Fries': 'Crispy golden fries, peri-peri, and loaded options. The ultimate side dish.',
+        'Cake': 'Fresh cakes for every occasion. Birthday, anniversary, or just because.',
+    },
+    'Print Factory': {
+        'General': 'Custom printing services for all your needs. High-quality prints on various materials.',
+        'Photo Frames': 'Personalized photo frames with your favorite memories. Perfect gifts.',
+        'Coffee Mugs': 'Custom printed coffee mugs with photos, quotes, or designs. Unique drinkware.',
+        'Custom T-Shirts': 'Design your own t-shirts with custom prints. Express your style.',
+        'Personalized Gifts': 'Unique personalized gifts for birthdays, anniversaries, and special occasions.',
+        'Stationery Printing': 'Custom business cards, letterheads, and stationery. Professional printing.',
+    },
+};
+
 const SubCategoryPage = () => {
     const { mainCat, subCat } = useParams();
     const navigate = useNavigate();
@@ -94,6 +143,10 @@ const SubCategoryPage = () => {
         navigate(`/category/${encodeURIComponent(mainCategory)}/${encodeURIComponent(newSub)}`);
     };
 
+    // Get category description for SEO
+    const categoryDescription = CATEGORY_DESCRIPTIONS[mainCategory]?.[subCategory] || 
+        `Browse ${subCategory} from ${mainCategory} category. Fresh products from local Varanasi stores. Free delivery above ₹199. 30-min delivery.`;
+
     return (
         <div className="h-[100dvh] w-full flex flex-col overflow-hidden bg-gray-50 font-sans text-gray-900">
             <Header />
@@ -140,6 +193,14 @@ const SubCategoryPage = () => {
                             </div>
 
                             <div className="container mx-auto px-4 py-8 max-w-7xl animate-fade-in min-h-[60vh]">
+                                {/* Category Description for SEO */}
+                                <section aria-labelledby="category-desc-heading" className="mb-6">
+                                    <h2 id="category-desc-heading" className="sr-only">Category Description</h2>
+                                    <p className="prose max-w-3xl mx-auto px-4 py-4 text-gray-600 text-sm">
+                                        {categoryDescription}
+                                    </p>
+                                </section>
+
                                 {/* Page Content Card */}
                                 <div className="bg-white rounded-[2.5rem] shadow-sm border border-gray-100 overflow-hidden">
                                     {/* Stylish Header */}

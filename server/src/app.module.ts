@@ -21,6 +21,7 @@ import { SmsModule } from './sms/sms.module';
 import { ParcelModule } from './parcel/parcel.module';
 import { PrintModule } from './print/print.module';
 import { SseModule } from './sse/sse.module';
+import { SitemapModule } from './sitemap/sitemap.module';
 
 
 @Module({
@@ -50,6 +51,7 @@ import { SseModule } from './sse/sse.module';
     ParcelModule,
     PrintModule,
     SseModule,
+    SitemapModule,
 
   ],
   controllers: [AppController],

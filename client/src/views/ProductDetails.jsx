@@ -7,6 +7,7 @@ import Header from '../components/united/Header';
 import ImageCarousel from '../components/united/ImageCarousel';
 import { useCategory } from '../context/CategoryContext';
 import { useAuth } from '../context/AuthContext';
+import { BASE_URL, generateProductSchema, updateMetaTag, updateCanonical, injectJSONLD, removeJSONLD } from '../lib/seo';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
@@ -51,7 +52,35 @@ const ProductDetails = () => {
                         pincode: userPincode
                     }
                 });
-                setProduct(response.data);
+                const productData = response.data;
+                setProduct(productData);
+
+                // Update SEO meta tags and structured data
+                if (productData) {
+                    const seoTitle = `${productData.name} - Buy Online at NEYOKART Varanasi`;
+                    const seoDescription = productData.description 
+                        ? `${productData.description.substring(0, 155)}...` 
+                        : `Buy ${productData.name} at best price from local Varanasi stores. Fresh delivery in 30 mins. COD & online payment.`;
+                    const canonical = `${BASE_URL}/product/${id}`;
+                    const ogImage = productData.images?.[0] || `${BASE_URL}/logo.png`;
+
+                    document.title = seoTitle;
+                    updateMetaTag('description', seoDescription, 'name');
+                    updateMetaTag('og:title', seoTitle);
+                    updateMetaTag('og:description', seoDescription);
+                    updateMetaTag('og:url', canonical);
+                    updateMetaTag('og:image', ogImage);
+                    updateMetaTag('twitter:title', seoTitle);
+                    updateMetaTag('twitter:description', seoDescription);
+                    updateMetaTag('twitter:image', ogImage);
+                    updateCanonical(canonical);
+                    
+                    // Inject Product structured data
+                    const schema = generateProductSchema(productData);
+                    if (schema) {
+                        injectJSONLD('product-schema', schema);
+                    }
+                }
 
                 // Check category config for upload type
                 const storeType = response.data.category;
@@ -89,6 +118,13 @@ const ProductDetails = () => {
             fetchProduct();
         }
     }, [id, location?.lat, location?.lng]);
+
+    // Cleanup structured data on unmount
+    useEffect(() => {
+        return () => {
+            removeJSONLD('product-schema');
+        };
+    }, []);
 
     const handleBack = () => {
         navigate(-1);
@@ -222,12 +258,33 @@ const ProductDetails = () => {
     const canAddToCart = !isUploadRequired || (hasUploaded && (uploadType !== 'DESIGN_UPLOAD' || (selectedPrintProduct && selectedSize)));
 
     return (
-        <div className="h-[100dvh] w-full flex flex-col overflow-hidden bg-gray-50">
+        <article className="h-[100dvh] w-full flex flex-col overflow-hidden bg-gray-50">
             <Header />
             <div className="flex-1 w-full overflow-y-auto min-h-0 pb-20">
+                {/* Breadcrumb Navigation */}
+                <nav aria-label="Breadcrumb" className="container mx-auto px-4 py-4">
+                    <ol className="flex items-center gap-2 text-sm text-gray-500">
+                        <li>
+                            <a href="/" className="hover:text-ud-primary" rel="home">Home</a>
+                        </li>
+                        <li aria-hidden="true">/</li>
+                        <li>
+                            <a href={`/category/${product.category}`} className="hover:text-ud-primary">
+                                {product.category}
+                            </a>
+                        </li>
+                        <li aria-hidden="true">/</li>
+                        <li aria-current="page" className="text-gray-900 font-medium truncate max-w-[200px]">
+                            {product.name}
+                        </li>
+                    </ol>
+                </nav>
+
                 <div className="container mx-auto px-4 py-8">
                     <RippleButton onClick={handleBack} className="mb-4 text-gray-600 hover:text-gray-900 flex items-center gap-1">
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                        </svg>
                         Back to Shopping
                     </RippleButton>
 
@@ -254,18 +311,26 @@ const ProductDetails = () => {
                                 )}
                             </div>
 
-                            <h1 className="text-3xl font-bold text-gray-900 mb-2">{product.name}</h1>
+                            <h1 className="text-3xl font-bold text-gray-900 mb-2" itemProp="name">{product.name}</h1>
                             {product.description && (
-                                <p className="text-gray-500 mb-6 text-lg">{product.description}</p>
+                                <p className="text-gray-500 mb-6 text-lg" itemProp="description">{product.description}</p>
                             )}
 
                             <div className="flex items-end gap-3 mb-6">
-                                <span className="text-4xl font-bold text-gray-900">₹{product.price}</span>
+                                <span className="text-4xl font-bold text-gray-900" itemProp="offers" itemScope itemType="https://schema.org/Offer">
+                                    <span itemProp="priceCurrency" content="INR">₹</span>
+                                    <span itemProp="price" content={product.price}>{product.price}</span>
+                                </span>
                                 {product.mrp && product.mrp > product.price && (
-                                    <span className="text-lg text-gray-500 line-through mb-1">₹{product.mrp}</span>
+                                    <span className="text-lg text-gray-500 line-through mb-1" itemProp="offers" itemScope itemType="https://schema.org/Offer">
+                                        <span itemProp="priceCurrency" content="INR">₹</span>
+                                        <span itemProp="price" content={product.mrp}>{product.mrp}</span>
+                                    </span>
                                 )}
                                 {discount > 0 && (
-                                    <span className="text-green-600 font-bold mb-1">
+                                    <span className="text-green-600 font-bold mb-1" itemProp="offers" itemScope itemType="https://schema.org/Offer">
+                                        <meta itemProp="priceCurrency" content="INR" />
+                                        <meta itemProp="price" content={product.price} />
                                         {discount}% OFF
                                     </span>
                                 )}
@@ -273,7 +338,7 @@ const ProductDetails = () => {
 
                             {/* Upload Section */}
                             {isUploadRequired && (
-                                <div className="border border-gray-200 rounded-lg p-5 mb-6 bg-gray-50">
+                                <div className="border border-gray-200 rounded-lg p-5 mb-6 bg-gray-50" itemProp="additionalProperty" itemScope itemType="https://schema.org/PropertyValue">
                                     <h3 className="text-sm font-bold text-gray-700 mb-3">
                                         {uploadType === 'PHOTO_UPLOAD'
                                             ? 'Upload Your Photo'
@@ -405,7 +470,7 @@ const ProductDetails = () => {
                                 </div>
                             )}
 
-                            {/* Additional Info (Aisle and Count hidden from users) */}
+                            {/* Additional Info */}
                             <div className="border-t border-gray-100 pt-6 space-y-3 text-sm text-gray-600">
                                 <div className="flex justify-between">
                                     <span>Stock Status:</span>
@@ -435,7 +500,7 @@ const ProductDetails = () => {
                     </div>
                 </div>
             </div>
-        </div>
+        </article>
     );
 };
 

@@ -1,4 +1,6 @@
 import { useNavigate } from 'react-router-dom';
+import { useEffect } from 'react';
+import { injectJSONLD, removeJSONLD, generateLegalPageSchema, BASE_URL } from '../lib/seo';
 
 const sections = [
   {
@@ -27,7 +29,11 @@ const sections = [
       },
       {
         heading: 'Associated Brands and Services',
-        body: 'Neyokart may own, operate, manage, or support multiple digital products, brands, and service platforms. These may include travel, technology, e-commerce, and other business services operated under the Neyokart organization.\n\nYavaTrip is a travel services platform operated and managed under the Neyokart organization. Certain operational services, customer communications, and regulatory registrations may be managed centrally through Neyokart where applicable.\n\nThis arrangement does not affect the rights and obligations of customers using the respective platforms.',
+        body: `Neyokart may own, operate, manage, or support multiple digital products, brands, and service platforms. These may include travel, technology, e-commerce, and other business services operated under the Neyokart organization.
+
+YavaTrip is a travel services platform operated and managed under the Neyokart organization. Certain operational services, customer communications, and regulatory registrations may be managed centrally through Neyokart where applicable.
+
+This arrangement does not affect the rights and obligations of customers using the respective platforms.`,
       },
     ],
   },
@@ -125,6 +131,19 @@ const sections = [
 
 const LegalPage = () => {
   const navigate = useNavigate();
+
+  // Inject FAQ schema for legal page
+  useEffect(() => {
+    const schema = generateLegalPageSchema();
+    injectJSONLD('legal-faq-schema', schema);
+    
+    // Update meta tags
+    document.title = 'Legal Information - Terms, Privacy, Shipping & Refunds | NEYOKART';
+    
+    return () => {
+      removeJSONLD('legal-faq-schema');
+    };
+  }, []);
 
   return (
     <div className="h-[100dvh] bg-gray-50 font-sans text-gray-800 flex flex-col overflow-hidden">
