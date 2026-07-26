@@ -23,6 +23,7 @@ const HomeCategoryList = () => {
     const [expandedSections, setExpandedSections] = useState(new Set());
     const [loadedImages, setLoadedImages] = useState(new Set());
     const observerRef = useRef(null);
+    const elementRefsRef = useRef(new Map());
     const navigate = useNavigate();
 
     // Merge API data with static categories when available
@@ -37,12 +38,16 @@ const HomeCategoryList = () => {
         }
     }, [apiSubcategories, loading]);
 
-    // Setup intersection observer for lazy loading images
+    // Setup single intersection observer for all lazy images
     useEffect(() => {
         observerRef.current = new IntersectionObserver((entries) => {
             entries.forEach(entry => {
                 if (entry.isIntersecting) {
-                    setLoadedImages(prev => new Set([...prev, entry.target.dataset.index]));
+                    const imageKey = entry.target.dataset.index;
+                    if (imageKey) {
+                        setLoadedImages(prev => new Set([...prev, imageKey]));
+                        observerRef.current?.unobserve(entry.target);
+                    }
                 }
             });
         }, { rootMargin: '100px', threshold: 0.1 });
@@ -51,6 +56,15 @@ const HomeCategoryList = () => {
             if (observerRef.current) observerRef.current.disconnect();
         };
     }, []);
+
+    // Callback ref to register/unregister elements with observer
+    const observeElement = useCallback((el, imageKey) => {
+        if (el && imageKey && !loadedImages.has(imageKey) && observerRef.current) {
+            elementRefsRef.current.set(imageKey, el);
+            el.dataset.index = imageKey;
+            observerRef.current.observe(el);
+        }
+    }, [loadedImages]);
 
     const toggleExpand = (title) => {
         setExpandedSections(prev => {
@@ -107,7 +121,6 @@ const HomeCategoryList = () => {
                                     const imageKey = `${section.storeType}:${item}`;
                                     const imageSrc = bannerImages[section.storeType]?.[item];
                                     const isLoaded = loadedImages.has(imageKey);
-                                    const observerRef = useRef(null);
                                     
                                     return (
                                         <div
@@ -118,7 +131,7 @@ const HomeCategoryList = () => {
                                             <div className={`${isExpanded ? 'w-full aspect-square' : 'w-28 h-28 md:w-40 md:h-40'} rounded-xl shadow-sm border flex items-center justify-center overflow-hidden transition-all border-gray-100 dark:border-slate-800 group-hover:shadow-md bg-white dark:bg-slate-800`}>
                                                 {imageSrc && !isLoaded ? (
                                                     <img
-                                                        ref={(el) => { observerRef.current = el; }}
+                                                        ref={(el) => observeElement(el, imageKey)}
                                                         data-src={imageSrc}
                                                         data-index={imageKey}
                                                         alt={item}
