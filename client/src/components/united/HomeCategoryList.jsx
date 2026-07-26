@@ -1,6 +1,6 @@
 import { useCategory } from '../../context/CategoryContext';
 import { useCategories } from '../../context/CategoriesContext';
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { HOME_CATEGORIES } from '../../constants';
 
@@ -15,16 +15,50 @@ const TITLE_TO_STORE_TYPE = {
     'Auto Parts Shop': 'AUTO_PARTS_SHOP',
 };
 
+const CategoryItem = ({ item, section, imageSrc, isLoaded, imageKey, onClick, observeElement }) => {
+    return (
+        <div
+            className="flex flex-col items-center gap-2 group cursor-pointer"
+            onClick={() => onClick(section, item)}
+        >
+            <div className="w-28 h-28 md:w-40 md:h-40 rounded-xl shadow-sm border flex items-center justify-center overflow-hidden transition-all border-gray-100 dark:border-slate-800 group-hover:shadow-md bg-white dark:bg-slate-800">
+                {imageSrc && !isLoaded ? (
+                    <img
+                        ref={(el) => observeElement(el, imageKey)}
+                        data-src={imageSrc}
+                        data-index={imageKey}
+                        alt={item}
+                        className="w-full h-full object-cover opacity-0 transition-opacity duration-300"
+                        loading="lazy"
+                    />
+                ) : imageSrc && isLoaded ? (
+                    <img
+                        src={imageSrc}
+                        alt={item}
+                        className="w-full h-full object-cover"
+                    />
+                ) : (
+                    <span className="text-4xl font-black select-none text-gray-200 dark:text-gray-700">{item.charAt(0)}</span>
+                )}
+            </div>
+            <span className="text-[10px] md:text-sm font-medium text-center leading-tight transition-colors text-gray-700 dark:text-gray-400 group-hover:text-ud-primary truncate w-full px-1">
+                {item}
+            </span>
+        </div>
+    );
+};
+
 const HomeCategoryList = () => {
+    // ALL HOOKS AT THE VERY TOP - NO CONDITIONALS, NO COMPUTATIONS BEFORE
     const { selectedCategory, setActiveSubCategory } = useCategory();
     const { subcategories: apiSubcategories, bannerImages, loading } = useCategories();
+    const navigate = useNavigate();
     
     const [categories, setCategories] = useState(HOME_CATEGORIES);
     const [expandedSections, setExpandedSections] = useState(new Set());
     const [loadedImages, setLoadedImages] = useState(new Set());
     const observerRef = useRef(null);
     const elementRefsRef = useRef(new Map());
-    const navigate = useNavigate();
 
     // Merge API data with static categories when available
     useEffect(() => {
@@ -82,9 +116,10 @@ const HomeCategoryList = () => {
         navigate(`/category/${mainCat}/${subCat}`);
     };
 
-    const filteredData = selectedCategory === 'All'
-        ? categories
-        : categories.filter(cat =>
+    // Compute filtered data using useMemo to avoid recomputation
+    const filteredData = useMemo(() => {
+        if (selectedCategory === 'All') return categories;
+        return categories.filter(cat =>
             cat.title.toLowerCase() === selectedCategory.toLowerCase() ||
             (selectedCategory === "Pizza town and food zone" && cat.title === "Pizza Town & Food Zone") ||
             (selectedCategory === "Home service" && cat.title === "Home Service") ||
@@ -92,6 +127,7 @@ const HomeCategoryList = () => {
             (selectedCategory === "Health Service" && cat.title === "Health Service") ||
             (selectedCategory === "Print factory" && cat.title === "Print Factory")
         );
+    }, [selectedCategory, categories]);
 
     return (
         <div className="py-6 space-y-8 bg-gray-50 dark:bg-slate-900">
@@ -123,35 +159,16 @@ const HomeCategoryList = () => {
                                     const isLoaded = loadedImages.has(imageKey);
                                     
                                     return (
-                                        <div
+                                        <CategoryItem
                                             key={i}
-                                            className={`${isExpanded ? 'w-full' : 'flex-shrink-0 w-28 md:w-40'} flex flex-col items-center gap-2 group cursor-pointer`}
-                                            onClick={() => handleSubCategoryClick(section, item)}
-                                        >
-                                            <div className={`${isExpanded ? 'w-full aspect-square' : 'w-28 h-28 md:w-40 md:h-40'} rounded-xl shadow-sm border flex items-center justify-center overflow-hidden transition-all border-gray-100 dark:border-slate-800 group-hover:shadow-md bg-white dark:bg-slate-800`}>
-                                                {imageSrc && !isLoaded ? (
-                                                    <img
-                                                        ref={(el) => observeElement(el, imageKey)}
-                                                        data-src={imageSrc}
-                                                        data-index={imageKey}
-                                                        alt={item}
-                                                        className="w-full h-full object-cover opacity-0 transition-opacity duration-300"
-                                                        loading="lazy"
-                                                    />
-                                                ) : imageSrc && isLoaded ? (
-                                                    <img
-                                                        src={imageSrc}
-                                                        alt={item}
-                                                        className="w-full h-full object-cover"
-                                                    />
-                                                ) : (
-                                                    <span className="text-4xl font-black select-none text-gray-200 dark:text-gray-700">{item.charAt(0)}</span>
-                                                )}
-                                            </div>
-                                            <span className={`text-[10px] md:text-sm font-medium text-center leading-tight transition-colors text-gray-700 dark:text-gray-400 group-hover:text-ud-primary ${isExpanded ? 'truncate w-full px-1' : ''}`}>
-                                                {item}
-                                            </span>
-                                        </div>
+                                            item={item}
+                                            section={section}
+                                            imageSrc={imageSrc}
+                                            isLoaded={isLoaded}
+                                            imageKey={imageKey}
+                                            onClick={handleSubCategoryClick}
+                                            observeElement={observeElement}
+                                        />
                                     );
                                 })}
                             </div>
