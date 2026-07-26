@@ -4,6 +4,7 @@ import { AdminAuthProvider } from './context/AdminAuthContext';
 import { LocationProvider } from './context/LocationContext';
 import { CartProvider } from './context/CartContext';
 import { CategoryProvider } from './context/CategoryContext';
+import { CategoriesProvider } from './context/CategoriesContext';
 import ErrorBoundary from './components/ErrorBoundary';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { Suspense, lazy, useEffect, useState } from 'react';
@@ -83,7 +84,8 @@ function App() {
         <LocationProvider>
           <CartProvider>
             <CategoryProvider>
-              <ErrorBoundary>
+              <CategoriesProvider>
+                <ErrorBoundary>
                 <Suspense fallback={
                   <div className="h-[100dvh] w-full flex flex-col overflow-hidden overscroll-none flex items-center justify-center">
                     <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-ud-primary"></div>
@@ -133,7 +135,8 @@ function App() {
                   </SEOProvider>
                 </Suspense>
               </ErrorBoundary>
-            </CategoryProvider>
+            </CategoriesProvider>
+          </CategoryProvider>
           </CartProvider>
         </LocationProvider>
       </AdminAuthProvider>

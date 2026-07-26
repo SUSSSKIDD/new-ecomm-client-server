@@ -1,6 +1,7 @@
-import { createContext, useContext, useState, useEffect } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import PropTypes from 'prop-types';
 import { useCart } from './CartContext';
+import { API_URL } from '../lib/api';
 
 const CategoryContext = createContext();
 
@@ -10,6 +11,26 @@ export const CategoryProvider = ({ children }) => {
     const [selectedProduct, setSelectedProduct] = useState(null);
     const [buyNowProduct, setBuyNowProduct] = useState(null);
     const [activePage, setActivePage] = useState('home');
+
+    // Shared categories data to avoid duplicate fetches
+    const [categoriesData, setCategoriesData] = useState(null);
+    const [categoriesLoading, setCategoriesLoading] = useState(true);
+
+    const fetchCategories = useCallback(async () => {
+        try {
+            const response = await fetch(`${API_URL}/stores/categories`);
+            const data = await response.json();
+            setCategoriesData(data);
+        } catch (err) {
+            console.error('Failed to fetch categories:', err);
+        } finally {
+            setCategoriesLoading(false);
+        }
+    }, []);
+
+    useEffect(() => {
+        fetchCategories();
+    }, [fetchCategories]);
 
     // Handle initial app state push
     useEffect(() => {
@@ -41,6 +62,9 @@ export const CategoryProvider = ({ children }) => {
             selectedProduct, setSelectedProduct,
             buyNowProduct, setBuyNowProduct,
             activePage, setActivePage,
+            categoriesData,
+            categoriesLoading,
+            refetchCategories: fetchCategories,
         }}>
             {children}
         </CategoryContext.Provider>
@@ -61,3 +85,5 @@ export const useCategory = () => {
     const cart = useCart();
     return { ...ui, ...cart };
 };
+
+export default CategoryContext;

@@ -1,34 +1,33 @@
 import { useState, useEffect } from 'react';
 import { RippleButton } from '../../components/ui/ripple-button';
-import { API_URL } from '../../lib/api';
-
-const FALLBACK_IMAGE = 'https://png.pngtree.com/png-clipart/20230914/ourmid/pngtree-basket-of-vegetables-png-image_10116238.png';
+import { useCategories } from '../../context/CategoriesContext';
 
 // The subcategory key whose bannerImage is used for the hero section.
 const HERO_STORE_TYPE = 'GROCERY';
 const HERO_SUBCATEGORY = '__hero__';
 
 const HeroSection = () => {
-    const [bannerSrc, setBannerSrc] = useState(FALLBACK_IMAGE);
+    const { bannerImages, loading } = useCategories();
+    const [bannerSrc, setBannerSrc] = useState(null);
     const [isVideo, setIsVideo] = useState(false);
+    const [imageLoaded, setImageLoaded] = useState(false);
 
+    // Local SVG fallback - loads instantly, no network request
+    const FALLBACK_IMAGE = '/hero-fallback.svg';
+
+    // Use banner image from shared context when available
     useEffect(() => {
-        let cancelled = false;
-        fetch(`${API_URL}/stores/categories`)
-            .then(r => r.json())
-            .then(data => {
-                if (cancelled) return;
-                const url = data?.bannerImages?.[HERO_STORE_TYPE]?.[HERO_SUBCATEGORY];
-                if (url) {
-                    const lowerUrl = url.toLowerCase();
-                    const videoExts = ['.mp4', '.webm', '.ogg', '.mov'];
-                    setIsVideo(videoExts.some(ext => lowerUrl.includes(ext)));
-                    setBannerSrc(url);
-                }
-            })
-            .catch(() => {});
-        return () => { cancelled = true; };
-    }, []);
+        if (bannerImages?.[HERO_STORE_TYPE]?.[HERO_SUBCATEGORY]) {
+            const url = bannerImages[HERO_STORE_TYPE][HERO_SUBCATEGORY];
+            const lowerUrl = url.toLowerCase();
+            const videoExts = ['.mp4', '.webm', '.ogg', '.mov'];
+            setIsVideo(videoExts.some(ext => lowerUrl.includes(ext)));
+            setBannerSrc(url);
+        }
+    }, [bannerImages]);
+
+    // Show fallback immediately, then swap when banner loads
+    const displaySrc = bannerSrc || FALLBACK_IMAGE;
 
     return (
         <div className="bg-ud-primary dark:bg-slate-900 text-white overflow-hidden relative transition-colors duration-300">
@@ -61,23 +60,29 @@ const HeroSection = () => {
                     <div className="absolute top-10 right-10 w-[400px] h-[400px] bg-white/10 dark:bg-white/5 rounded-full"></div>
                 </div>
 
-                {/* Hero Banner (Image or Video) */}
+                {/* Hero Banner (Image or Video) - LCP Candidate */}
                 <div className="w-2/5 md:w-auto md:absolute md:right-20 md:top-1/2 md:-translate-y-1/2 z-20 flex justify-end">
                     <div className="relative w-[120px] h-[100px] md:w-[450px] md:h-[300px]">
                         {isVideo ? (
                             <video
-                                src={bannerSrc}
+                                src={displaySrc}
                                 autoPlay
                                 loop
                                 muted
                                 playsInline
                                 className="w-full h-full object-contain filter drop-shadow-2xl"
+                                poster={FALLBACK_IMAGE}
                             />
                         ) : (
                             <img
-                                src={bannerSrc}
-                                alt="Fresh Vegetables"
-                                className="w-full h-full object-contain filter drop-shadow-2xl hover:scale-105 transition-all duration-500"
+                                src={displaySrc}
+                                alt="Fresh vegetables and groceries delivered in 30 minutes"
+                                className={`w-full h-full object-contain filter drop-shadow-2xl transition-all duration-500 ${imageLoaded ? 'hover:scale-105' : ''}`}
+                                loading="eager"
+                                fetchPriority="high"
+                                onLoad={() => setImageLoaded(true)}
+                                width={450}
+                                height={300}
                             />
                         )}
                     </div>
