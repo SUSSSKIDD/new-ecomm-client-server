@@ -25,6 +25,10 @@ const sections = [
         heading: 'Parcel Delivery Rules',
         body: 'If you use our parcel pickup and drop service, you strictly agree not to send any illegal, hazardous, fragile, or restricted items. NEYOKART and our delivery partners reserve the right to refuse any package.',
       },
+      {
+        heading: 'Associated Brands and Services',
+        body: 'Neyokart may own, operate, manage, or support multiple digital products, brands, and service platforms. These may include travel, technology, e-commerce, and other business services operated under the Neyokart organization.\n\nYavaTrip is a travel services platform operated and managed under the Neyokart organization. Certain operational services, customer communications, and regulatory registrations may be managed centrally through Neyokart where applicable.\n\nThis arrangement does not affect the rights and obligations of customers using the respective platforms.',
+      },
     ],
   },
   {
@@ -176,7 +180,7 @@ const LegalPage = () => {
                     </p>
                   )}
                   {item.body && (
-                    <p className="text-sm text-gray-600 leading-relaxed">
+                    <p className="text-sm text-gray-600 leading-relaxed whitespace-pre-line">
                       {item.body}
                     </p>
                   )}
