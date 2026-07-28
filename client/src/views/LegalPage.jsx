@@ -28,10 +28,10 @@ const sections = [
         body: 'If you use our parcel pickup and drop service, you strictly agree not to send any illegal, hazardous, fragile, or restricted items. NEYOKART and our delivery partners reserve the right to refuse any package.',
       },
       {
-        heading: 'Associated Brands and Services',
-        body: `Neyokart may own, operate, manage, or support multiple digital products, brands, and service platforms. These may include travel, technology, e-commerce, and other business services operated under the Neyokart organization.
+        heading: 'Our Brands and  Business Initiatives',
+        body: `NEYOKART operates and manages multiple digital products and service offerings across different industries. One such business initiative is YavaTrip, a travel platform developed and operated under the management of NEYOKART.
 
-YavaTrip is a travel services platform operated and managed under the Neyokart organization. Certain operational services, customer communications, and regulatory registrations may be managed centrally through Neyokart where applicable.
+Operational services including technology, customer support, marketing communications, and regulatory compliance for YavaTrip may be administered by NEYOKART.
 
 This arrangement does not affect the rights and obligations of customers using the respective platforms.`,
       },
