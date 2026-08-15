@@ -48,6 +48,7 @@ import {
   CATEGORY_SUBCATEGORIES,
 } from '../common/constants/store-categories';
 import { LocalStorageService } from '../common/services/local-storage.service';
+import multer from 'multer';
 
 interface AuthenticatedRequest {
   user: { sub: string; phone: string; role: string; storeId?: string };
@@ -294,7 +295,17 @@ export class StoresController {
   @ApiBearerAuth()
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Roles('ADMIN', 'STORE_MANAGER')
-  @UseInterceptors(FileInterceptor('photo'))
+  @UseInterceptors(FileInterceptor('photo', {
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 5 * 1024 * 1024 },
+    fileFilter: (_req: any, file: Express.Multer.File, cb: any) => {
+      if (['image/jpeg', 'image/png', 'image/webp', 'image/jpg'].includes(file.mimetype)) {
+        cb(null, true);
+      } else {
+        cb(new Error(`Invalid file type: ${file.mimetype}. Only JPEG, PNG, WebP allowed.`), false);
+      }
+    },
+  }))
   @ApiOperation({ summary: 'Upload/Update subcategory photo (SuperAdmin)' })
   async uploadSubcategoryPhoto(
     @Body() dto: { storeType: string, subcategory: string },

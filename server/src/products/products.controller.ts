@@ -30,14 +30,14 @@ import { ProductQueryDto } from './dto/product-query.dto';
 import { RemoveImageDto } from './dto/remove-image.dto';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
-
 import { StoreGuard } from '../auth/guards/store.guard';
+import multer from 'multer';
 
 const MULTER_IMAGE_OPTIONS = {
-  limits: { fileSize: 5 * 1024 * 1024, files: 10 }, // 5MB per file, max 10 files
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024, files: 10 },
   fileFilter: (_req: any, file: Express.Multer.File, cb: any) => {
     const allowed = ['image/jpeg', 'image/png', 'image/webp', 'image/jpg'];
-    // cb(null, false) skips the file silently; cb(new Error) aborts the entire request
     cb(null, allowed.includes(file.mimetype));
   },
 };

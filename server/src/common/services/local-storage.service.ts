@@ -59,6 +59,12 @@ export class LocalStorageService implements OnModuleInit {
             );
         }
 
+        // Ensure file.buffer exists (Multer memoryStorage must be used in controllers)
+        if (!file.buffer || file.buffer.length === 0) {
+            this.logger.error(`Empty file buffer received for ${file.originalname}. Ensure Multer uses memoryStorage.`);
+            throw new BadRequestException('Empty file upload. Please try again.');
+        }
+
         const safeFolder = folder.replace(/[^a-zA-Z0-9_-]/g, '-');
         const subDir = path.join(this.uploadsDir, safeFolder);
         await fs.mkdir(subDir, { recursive: true });
