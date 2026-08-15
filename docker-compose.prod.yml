@@ -9,7 +9,7 @@ x-redis-env: &redis-env
   BULL_REDIS_PORT: "6379"
 
 x-server-common: &server-common
-  image: ghcr.io/pratyush812/neyokart-server:latest
+  image: ghcr.io/sussskidd/neyokart-server:latest
   environment:
     <<: *redis-env
     PORT: "3000"
@@ -49,7 +49,7 @@ x-server-common: &server-common
     - app
 
 x-client-common: &client-common
-  image: ghcr.io/pratyush812/sandos-dropbox:latest
+  image: ghcr.io/sussskidd/sandos-dropbox:latest
   restart: unless-stopped
   deploy:
     resources:
