@@ -1,21 +1,15 @@
 # Runs on Hostinger VPS. Blue/Green deployment — traffic routed via host nginx.
 # Redis shared + persistent across both slots.
+# Images pulled from GHCR (built by GitHub Actions)
 
 x-redis-env: &redis-env
   REDIS_URL: redis://redis:6379
   RIDER_REDIS_URL: redis://redis:6379
-  # BullMQ gets its own Redis instance to isolate heavy job traffic from SSE/cache/claiming
   BULL_REDIS_HOST: redis-bull
   BULL_REDIS_PORT: "6379"
 
 x-server-common: &server-common
-  build:
-    context: ./server
-  image: neyokart-server:latest
-  # env_file declared on server-blue/server-green directly, NOT here.
-  # Putting it in the anchor causes Docker Compose to validate it for ALL services
-  # (including redis) at parse time, which breaks `docker compose up -d redis redis-bull`
-  # when .env doesn't exist yet on a fresh VPS.
+  image: ghcr.io/pratyush812/neyokart-server:latest
   environment:
     <<: *redis-env
     PORT: "3000"
@@ -27,7 +21,7 @@ x-server-common: &server-common
     redis-bull:
       condition: service_healthy
   volumes:
-    - /srv/projects/pratyush/neyokart/uploads:/app/uploads
+    - /opt/srv/projects/pratyush/neyokart/uploads:/app/uploads
   extra_hosts:
     - "host.docker.internal:host-gateway"
   stop_grace_period: 1m
@@ -55,11 +49,7 @@ x-server-common: &server-common
     - app
 
 x-client-common: &client-common
-  build:
-    context: ./client
-    args:
-      - VITE_API_URL=/api
-  image: neyokart-client:latest
+  image: ghcr.io/pratyush812/sandos-dropbox:latest
   restart: unless-stopped
   deploy:
     resources:

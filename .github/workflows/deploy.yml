@@ -1,202 +1,68 @@
-name: CI/CD Pipeline
+name: Deploy to VPS
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [main]
+  workflow_dispatch:
 
 env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  REGISTRY: ghcr.io
+  IMAGE_SERVER: ghcr.io/${{ github.repository_owner }}/neyokart-server
+  IMAGE_CLIENT: ghcr.io/${{ github.repository_owner }}/sandos-dropbox
 
 jobs:
-  check_changes:
-    name: Detect Changed Paths
+  build-and-push:
     runs-on: ubuntu-latest
-    outputs:
-      server: ${{ steps.filter.outputs.server }}
-      client: ${{ steps.filter.outputs.client }}
+    permissions:
+      contents: read
+      packages: write
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - uses: dorny/paths-filter@v3
-        id: filter
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
         with:
-          filters: |
-            server:
-              - 'server/**'
-            client:
-              - 'client/**'
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-  # ── Build client (parallel, independent of tests) ───────────────────────────
-  build_client:
-    name: Build Client
-    needs: check_changes
-    if: needs.check_changes.outputs.client == 'true' || needs.check_changes.outputs.server == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
+      - name: Build & push server
+        uses: docker/build-push-action@v5
         with:
-          node-version: '24'
-          cache: 'npm'
-          cache-dependency-path: 'client/package-lock.json'
+          context: ./server
+          push: true
+          tags: ${{ env.IMAGE_SERVER }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64
 
-      - name: Install client deps
-        run: cd client && npm ci
-
-      - name: Build client
-        run: cd client && npm run build
-        env:
-          VITE_API_URL: /api
-
-      - name: Upload client dist
-        uses: actions/upload-artifact@v4
+      - name: Build & push client
+        uses: docker/build-push-action@v5
         with:
-          name: client-dist
-          path: client/dist
-          retention-days: 1
+          context: ./client
+          push: true
+          tags: ${{ env.IMAGE_CLIENT }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64
 
-  # ── E2E tests (parallel with client build) ──────────────────────────────────
-  test:
-    name: E2E Tests
-    needs: check_changes
-    if: needs.check_changes.outputs.server == 'true'
-    runs-on: ubuntu-latest
-
-    services:
-      # Main Redis — SSE pub/sub, cart cache, rider eligible sets, distributed locks
-      redis:
-        image: redis:7-alpine
-        ports:
-          - 6379:6379
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 5s
-          --health-timeout 3s
-          --health-retries 5
-
-      # BullMQ Redis — isolated from app Redis (mirrors SCALE-06 prod separation)
-      redis-bull:
-        image: redis:7-alpine
-        ports:
-          - 6380:6379
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 5s
-          --health-timeout 3s
-          --health-retries 5
-
-      postgres:
-        image: postgres:15-alpine
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: password123
-          POSTGRES_DB: neyokart_test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '24'
-          cache: 'npm'
-          cache-dependency-path: 'server/package-lock.json'
-
-      - name: Install server deps
-        run: cd server && npm ci
-
-      - name: Setup Prisma
-        env:
-          DATABASE_URL: postgresql://postgres:password123@localhost:5432/neyokart_test
-          DIRECT_URL: postgresql://postgres:password123@localhost:5432/neyokart_test
-        run: |
-          cd server
-          npx prisma db push --accept-data-loss
-          npx prisma generate
-          node seed.mjs
-
-      - name: Build server
-        run: cd server && npm run build
-
-      - name: Run E2E tests
-        env:
-          DATABASE_URL: postgresql://postgres:password123@localhost:5432/neyokart_test
-          DIRECT_URL: postgresql://postgres:password123@localhost:5432/neyokart_test
-          # App Redis (SSE, cache, claiming)
-          REDIS_URL: redis://localhost:6379
-          RIDER_REDIS_URL: redis://localhost:6379
-          # BullMQ Redis (isolated — mirrors SCALE-06 prod config)
-          BULL_REDIS_HOST: localhost
-          BULL_REDIS_PORT: "6380"
-          JWT_SECRET: "ci-cd-test-secret-key-12345"
-          SUPER_ADMIN_PHONE: "+917785945524"
-          SUPER_ADMIN_PIN: "5015"
-          PORT: 3000
-          RAZORPAY_KEY_ID: ${{ secrets.RAZORPAY_TEST_KEY_ID }}
-          RAZORPAY_KEY_SECRET: ${{ secrets.RAZORPAY_TEST_KEY_SECRET }}
-          RAZORPAY_TEST_KEY_ID: ${{ secrets.RAZORPAY_TEST_KEY_ID }}
-          MSG91_AUTH_KEY: mock_key
-          MAX_DELIVERY_RADIUS_KM: 14
-          FREE_DELIVERY_THRESHOLD: "199"
-          # Disable HTTP throttler so E2E order creation (5+ orders per store type) isn't rate-limited.
-          # PIN rate-limiting (BUG-13) uses Redis directly and is unaffected by this flag.
-          THROTTLE_DISABLED: "true"
-        run: |
-          cd server
-          node --enable-source-maps dist/src/main.js &
-          echo "Waiting for backend..."
-          until curl -sf http://localhost:3000/api > /dev/null; do sleep 2; done
-          node test/universal-e2e.mjs http://localhost:3000
-
-  # ── Deploy — waits for both jobs ────────────────────────────────────────────
   deploy:
-    name: Zero-Downtime VPS Deployment
-    needs: [check_changes, test, build_client]
-    if: |
-      always() &&
-      needs.check_changes.result == 'success' &&
-      (needs.test.result == 'success' || needs.test.result == 'skipped') &&
-      (needs.build_client.result == 'success' || needs.build_client.result == 'skipped')
+    needs: build-and-push
     runs-on: ubuntu-latest
-
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup SSH
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.VPS_SSH_KEY }}" > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -p 22 -H "${{ secrets.VPS_IP }}" >> ~/.ssh/known_hosts 2>/dev/null
-          # Print runner public IP for firewall debugging
-          echo "Runner public IP: $(curl -sf https://api.ipify.org || echo 'unknown')"
-
-      - name: Copy source to VPS
-        run: |
-          rsync -az \
-            -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -o ConnectTimeout=30" \
-            --exclude='node_modules' \
-            --exclude='.git' \
-            server client scripts docker-compose.prod.yml \
-            ${{ secrets.VPS_USER }}@${{ secrets.VPS_IP }}:/srv/projects/pratyush/neyokart/
-        env:
-          SSHPASS: ${{ secrets.VPS_PASSWORD }}
-
-      - name: Trigger Blue/Green Deployment Script
-        if: env.HAS_CHANGES == 'true'
-        run: |
-          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no ${{ secrets.VPS_USER }}@${{ secrets.VPS_IP }} \
-            "chmod +x /srv/projects/pratyush/neyokart/scripts/deployment/deploy.sh && cd /srv/projects/pratyush/neyokart && bash ./scripts/deployment/deploy.sh"
-          
-      - name: Trigger Deployment Script (No Changes but manual trigger)
-        if: env.HAS_CHANGES != 'true'
-        run: |
-          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no ${{ secrets.VPS_USER }}@${{ secrets.VPS_IP }} \
-            "chmod +x /srv/projects/pratyush/neyokart/scripts/deployment/deploy.sh && cd /srv/projects/pratyush/neyokart && bash ./scripts/deployment/deploy.sh"
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            cd /opt/srv/projects/pratyush/neyokart
+            docker compose -f docker-compose.prod.yml pull
+            docker compose -f docker-compose.prod.yml up -d --remove-orphans
+            docker image prune -f
