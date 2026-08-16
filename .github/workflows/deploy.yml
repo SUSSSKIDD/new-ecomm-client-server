@@ -97,6 +97,5 @@ jobs:
           script: |
             echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u ${{ github.actor }} --password-stdin
             cd /opt/srv/projects/pratyush/neyokart
-            docker compose -f docker-compose.prod.yml pull
-            docker compose -f docker-compose.prod.yml up -d --remove-orphans
-            docker image prune -f
+            chmod +x scripts/deployment/deploy.sh
+            ./scripts/deployment/deploy.sh
