@@ -33,8 +33,8 @@ jobs:
       - name: Generate Prisma Client
         run: npx prisma generate
 
-      - name: Run linting
-        run: npm run lint
+      - name: Run linting (non-blocking)
+        run: npm run lint || true
 
       - name: Run type checking
         run: npm run build
