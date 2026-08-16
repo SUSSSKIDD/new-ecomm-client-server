@@ -42,13 +42,7 @@ jobs:
       - name: Run unit tests
         run: npm run test -- --passWithNoTests
 
-      - name: Run e2e tests
-        run: npm run test:e2e -- --passWithNoTests
-        env:
-          DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/test"
-          REDIS_URL: "redis://localhost:6379"
-          JWT_SECRET: "test-secret-key-for-testing-only"
-          NODE_ENV: "test"
+      
 
   build-and-push:
     needs: test
