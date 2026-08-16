@@ -7,12 +7,51 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  # GHCR requires lowercase repository names
   IMAGE_SERVER: ghcr.io/sussskidd/neyokart-server
   IMAGE_CLIENT: ghcr.io/sussskidd/sandos-dropbox
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./server
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: server/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Generate Prisma Client
+        run: npx prisma generate
+
+      - name: Run linting
+        run: npm run lint
+
+      - name: Run type checking
+        run: npm run build
+
+      - name: Run unit tests
+        run: npm run test --if-present
+
+      - name: Run e2e tests
+        run: npm run test:e2e --if-present
+        env:
+          DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/test"
+          REDIS_URL: "redis://localhost:6379"
+          JWT_SECRET: "test-secret-key-for-testing-only"
+          NODE_ENV: "test"
+
   build-and-push:
+    needs: test
     runs-on: ubuntu-latest
     permissions:
       contents: read
