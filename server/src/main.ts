@@ -4,19 +4,17 @@ import { ValidationPipe } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import compression from 'compression';
 import helmet from 'helmet';
+import * as bodyParser from 'body-parser';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
-    rawBody: true, // Required for Razorpay webhook @RawBody() decorator
+    rawBody: true,
   });
 
   app.use(helmet());
-  app.use(
-    compression({
-      threshold: 1024, // Only compress responses > 1KB
-      level: 6, // Balanced speed vs compression ratio
-    }),
-  );
+  app.use(compression({ threshold: 1024, level: 6 }));
+  app.use(bodyParser.json({ limit: '20mb' }));
+  app.use(bodyParser.urlencoded({ limit: '20mb', extended: true }));
 
   app.enableCors({
     origin: process.env.CORS_ORIGINS
