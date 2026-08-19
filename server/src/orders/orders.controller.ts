@@ -9,12 +9,14 @@ import {
   UseGuards,
   Req,
   BadRequestException,
+  ForbiddenException,
   ParseUUIDPipe,
   HttpCode,
   Patch,
   Sse,
   MessageEvent,
   Res,
+  Logger,
 } from '@nestjs/common';
 import { map, Observable } from 'rxjs';
 import { Throttle } from '@nestjs/throttler';
@@ -46,6 +48,8 @@ interface AuthenticatedRequest extends Request {
 @UseGuards(AuthGuard('jwt'))
 @Controller('orders')
 export class OrdersController {
+  private readonly logger = new Logger(OrdersController.name);
+
   constructor(
     private readonly ordersService: OrdersService,
     private readonly userSseService: UserSseService,
@@ -126,16 +130,22 @@ export class OrdersController {
     @Req() req: AuthenticatedRequest,
     @Query() query: OrderQueryDto,
   ) {
+    this.logger.debug(`findStoreOrders called - role: ${req.user.role}, storeId: ${req.user.storeId}, sub: ${req.user.sub}`);
+    
     if (req.user.role === 'ADMIN') {
+      this.logger.debug('ADMIN role detected - calling findAllAdmin');
       return this.ordersService.findAllAdmin(query);
     }
 
     const storeId = req.user.storeId;
-    if (!storeId)
+    if (!storeId) {
+      this.logger.warn(`STORE_MANAGER role but no storeId in JWT - sub: ${req.user.sub}`);
       return {
         data: [],
         meta: { total: 0, page: 1, limit: 10, totalPages: 0 },
       };
+    }
+    this.logger.debug(`Calling findStoreOrders with storeId: ${storeId}`);
     return this.ordersService.findStoreOrders(storeId, query);
   }
 
@@ -148,6 +158,10 @@ export class OrdersController {
     @Param('id', ParseUUIDPipe) id: string,
     @Body('status') status: OrderStatus,
   ) {
+    // Explicit defense: Superadmin cannot modify orders
+    if (req.user.role === 'ADMIN') {
+      throw new ForbiddenException('Superadmin cannot modify orders. Only store managers can process orders.');
+    }
     return this.ordersService.updateStatus(id, status, req.user.storeId);
   }
 
@@ -162,6 +176,10 @@ export class OrdersController {
     @Req() req: AuthenticatedRequest,
     @Param('id', ParseUUIDPipe) id: string,
   ) {
+    // Explicit defense: Superadmin cannot modify orders
+    if (req.user.role === 'ADMIN') {
+      throw new ForbiddenException('Superadmin cannot modify orders. Only store managers can process orders.');
+    }
     return this.ordersService.triggerDeliveryAssignment(id, req.user.storeId);
   }
 
@@ -175,6 +193,10 @@ export class OrdersController {
     @Param('id', ParseUUIDPipe) id: string,
     @Body('deliveryPersonId') riderId: string,
   ) {
+    // Explicit defense: Superadmin cannot modify orders
+    if (req.user.role === 'ADMIN') {
+      throw new ForbiddenException('Superadmin cannot modify orders. Only store managers can process orders.');
+    }
     return this.ordersService.manualAssignDelivery(
       id,
       riderId,

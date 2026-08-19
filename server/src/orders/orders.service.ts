@@ -1272,6 +1272,7 @@ export class OrdersService {
     });
   }
   async findStoreOrders(storeId: string, query: OrderQueryDto) {
+    this.logger.debug(`findStoreOrders service called with storeId: ${storeId}`);
     const {
       page = 1,
       limit = 10,
@@ -1316,6 +1317,7 @@ export class OrdersService {
     ]);
 
     const result = paginate(orders, total, page, limit);
+    this.logger.debug(`findStoreOrders returning ${orders.length} orders, total: ${total} for storeId`);
     const nextCursor =
       orders.length === Number(limit) ? orders[orders.length - 1].id : null;
     return { ...result, nextCursor };
