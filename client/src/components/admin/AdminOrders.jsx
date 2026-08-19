@@ -1,11 +1,12 @@
 /* eslint-disable react/prop-types */
-import React from 'react';
+import React, { useContext } from 'react';
 import { RippleButton } from '../ui/ripple-button';
 import { useState, useCallback } from 'react';
 import { adminApi } from '../../lib/api';
 import { getStatusLabel, getStatusColor } from '../../lib/status';
 import { usePolling } from '../../hooks/usePolling';
 import { Store } from 'lucide-react';
+import { AdminAuthContext } from '../../context/AdminAuthContext';
 
 // What the admin can transition TO from each status (one-way)
 // DELIVERED is not here — only delivery person can set it
@@ -18,6 +19,9 @@ const NEXT_STATUS = {
 const FILTER_STATUSES = ['PENDING', 'CONFIRMED', 'PROCESSING', 'ORDER_PICKED', 'SHIPPED', 'DELIVERED', 'CANCELLED'];
 
 const AdminOrders = () => {
+    const { admin } = useContext(AdminAuthContext);
+    const isAdmin = admin?.role === 'ADMIN';
+
     const [orders, setOrders] = useState([]);
     const [loading, setLoading] = useState(true);
     const [page, setPage] = useState(1);
@@ -234,41 +238,41 @@ const AdminOrders = () => {
                                                 </span>
                                             </td>
                                             <td className="px-4 py-4 whitespace-nowrap text-sm">
-                                                {o.assignment ? (
-                                                    <span className="text-xs text-green-700 font-medium">
-                                                        {o.assignment.deliveryPerson?.name || 'Assigned'}
-                                                    </span>
-                                                ) : (
-                                                     <div className="flex flex-col gap-1">
-                                                         {o.notDeliveredReason && (
-                                                            <span className="text-[10px] text-red-600 font-bold uppercase tracking-tighter leading-none mb-1">
-                                                                Delivery failed
-                                                            </span>
-                                                         )}
-                                                         {['CONFIRMED', 'PROCESSING', 'ORDER_PICKED', 'SHIPPED'].includes(o.status) ? (
-                                                             <div className="flex items-center gap-3">
-                                                                <button 
-                                                                    onClick={(e) => { e.stopPropagation(); handleAutoAssign(o.id); }}
-                                                                    className="text-[11px] font-bold text-blue-600 hover:text-blue-800 underline underline-offset-2"
-                                                                >
-                                                                    Auto
-                                                                </button>
-                                                                <button 
-                                                                    onClick={(e) => { e.stopPropagation(); setAssigningOrder(o); setAssignmentType('MANUAL'); }}
-                                                                    className="text-[11px] font-bold text-emerald-600 hover:text-emerald-800 underline underline-offset-2"
-                                                                >
-                                                                    Manual
-                                                                </button>
-                                                             </div>
-                                                         ) : (
-                                                             <span className="text-xs text-gray-400">—</span>
-                                                         )}
-                                                     </div>
-                                                )}
+{o.assignment ? (
+                                                      <span className="text-xs text-green-700 font-medium">
+                                                          {o.assignment.deliveryPerson?.name || 'Assigned'}
+                                                      </span>
+                                                    ) : (
+                                                       <div className="flex flex-col gap-1">
+                                                          {o.notDeliveredReason && (
+                                                             <span className="text-[10px] text-red-600 font-bold uppercase tracking-tighter leading-none mb-1">
+                                                                 Delivery failed
+                                                             </span>
+                                                          )}
+                                                          {!isAdmin && ['CONFIRMED', 'PROCESSING', 'ORDER_PICKED', 'SHIPPED'].includes(o.status) ? (
+                                                              <div className="flex items-center gap-3">
+                                                                 <button 
+                                                                     onClick={(e) => { e.stopPropagation(); handleAutoAssign(o.id); }}
+                                                                     className="text-[11px] font-bold text-blue-600 hover:text-blue-800 underline underline-offset-2"
+                                                                 >
+                                                                     Auto
+                                                                 </button>
+                                                                 <button 
+                                                                     onClick={(e) => { e.stopPropagation(); setAssigningOrder(o); setAssignmentType('MANUAL'); }}
+                                                                     className="text-[11px] font-bold text-emerald-600 hover:text-emerald-800 underline underline-offset-2"
+                                                                 >
+                                                                     Manual
+                                                                 </button>
+                                                              </div>
+                                                          ) : (
+                                                              <span className="text-xs text-gray-400">—</span>
+                                                          )}
+                                                      </div>
+                                                    )}
                                             </td>
                                             <td className="px-4 py-4 whitespace-nowrap text-sm" onClick={e => e.stopPropagation()}>
                                                 <div className="flex items-center gap-1.5">
-                                                    {nextStatus ? (
+                                                    {!isAdmin && nextStatus ? (
                                                         <RippleButton
                                                             onClick={() => advanceStatus(o.id, nextStatus)}
                                                             disabled={updatingId === o.id}
@@ -285,7 +289,7 @@ const AdminOrders = () => {
                                                     ) : (
                                                         <span className="text-xs text-gray-400">—</span>
                                                     )}
-                                                    {!['DELIVERED', 'CANCELLED'].includes(o.status) && (
+                                                    {!isAdmin && !['DELIVERED', 'CANCELLED'].includes(o.status) && (
                                                         <button
                                                             onClick={() => cancelOrder(o.id)}
                                                             disabled={updatingId === o.id}
@@ -353,7 +357,7 @@ const AdminOrders = () => {
                                                                                     </div>
                                                                                 ) : (
                                                                                     <div className="flex flex-col gap-2">
-                                                                                        {['CONFIRMED', 'PROCESSING', 'ORDER_PICKED', 'SHIPPED'].includes(child.status) && (
+                                                                                        {!isAdmin && ['CONFIRMED', 'PROCESSING', 'ORDER_PICKED', 'SHIPPED'].includes(child.status) && (
                                                                                             <div className="flex items-center gap-3">
                                                                                                 <button
                                                                                                     onClick={() => handleAutoAssign(child.id)}

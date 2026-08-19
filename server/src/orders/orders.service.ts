@@ -1527,6 +1527,13 @@ export class OrdersService {
   };
 
   async updateStatus(id: string, status: OrderStatus, storeId?: string) {
+    // Superadmin (ADMIN) has no storeId — prevent order mutations
+    if (!storeId) {
+      throw new ForbiddenException(
+        'Superadmin cannot modify orders. Only store managers can process orders.',
+      );
+    }
+
     const order = await this.prisma.order.findUnique({
       where: { id },
       include: { items: true },
@@ -1623,6 +1630,13 @@ export class OrdersService {
    * Manually trigger delivery assignment for an order (admin action).
    */
   async triggerDeliveryAssignment(orderId: string, storeId?: string) {
+    // Superadmin (ADMIN) has no storeId — prevent order mutations
+    if (!storeId) {
+      throw new ForbiddenException(
+        'Superadmin cannot modify orders. Only store managers can process orders.',
+      );
+    }
+
     const order = await this.prisma.order.findUnique({
       where: { id: orderId },
       include: { items: true, assignment: true },
@@ -1690,6 +1704,13 @@ export class OrdersService {
     deliveryPersonId: string,
     storeId?: string,
   ) {
+    // Superadmin (ADMIN) has no storeId — prevent order mutations
+    if (!storeId) {
+      throw new ForbiddenException(
+        'Superadmin cannot modify orders. Only store managers can process orders.',
+      );
+    }
+
     const order = await this.prisma.order.findUnique({
       where: { id: orderId },
       include: { items: true, assignment: true },
