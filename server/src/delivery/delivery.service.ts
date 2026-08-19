@@ -1,8 +1,8 @@
 import {
-    Injectable,
-    Logger,
-    NotFoundException,
-    BadRequestException,
+  Injectable,
+  Logger,
+  NotFoundException,
+  BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
 import { RedisCacheService } from '../common/services/redis-cache.service';
@@ -13,727 +13,853 @@ import { TTL } from '../common/redis/ttl.config.js';
 import * as bcrypt from 'bcryptjs';
 import { UserSseService } from '../sse/user-sse.service';
 
-
-
 import { haversineDistance } from '../common/utils/geo.util';
 import { OrderPoolService } from './order-pool.service';
 
-
 @Injectable()
 export class DeliveryService {
-    private readonly logger = new Logger(DeliveryService.name);
+  private readonly logger = new Logger(DeliveryService.name);
 
-    constructor(
-        private readonly prisma: PrismaService,
-        private readonly cache: RedisCacheService,
-        private readonly riderRedis: RiderRedisService,
-        private readonly userSseService: UserSseService,
-        private readonly orderPool: OrderPoolService,
-    ) { }
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cache: RedisCacheService,
+    private readonly riderRedis: RiderRedisService,
+    private readonly userSseService: UserSseService,
+    private readonly orderPool: OrderPoolService,
+  ) {}
 
+  // ── Admin: Manage delivery persons ──────────────────────────────
 
-    // ── Admin: Manage delivery persons ──────────────────────────────
+  /** Create a delivery person. Returns the record. */
+  async createPerson(dto: CreateDeliveryPersonDto) {
+    const pinHash = await bcrypt.hash(dto.pin, 10);
 
-    /** Create a delivery person. Returns the record. */
-    async createPerson(dto: CreateDeliveryPersonDto) {
-        const pinHash = await bcrypt.hash(dto.pin, 10);
+    // Check if delivery person with this phone already exists
+    const existing = await this.prisma.deliveryPerson.findUnique({
+      where: { phone: dto.phone },
+    });
 
-        // Check if delivery person with this phone already exists
-        const existing = await this.prisma.deliveryPerson.findUnique({
-            where: { phone: dto.phone },
-        });
-
-        let person;
-        if (existing) {
-            // Update existing person (reset PIN, update name)
-            person = await this.prisma.deliveryPerson.update({
-                where: { id: existing.id },
-                data: {
-                    name: dto.name,
-                    pinHash,
-                    isActive: true,
-                    status: 'DUTY_OFF',
-                },
-            });
-            this.logger.log(
-                `Delivery person updated: ${person.name} (${person.id})`,
-            );
-        } else {
-            person = await this.prisma.deliveryPerson.create({
-                data: {
-                    name: dto.name,
-                    phone: dto.phone,
-                    pinHash,
-                },
-            });
-            this.logger.log(
-                `Delivery person created: ${person.name} (${person.id})`,
-            );
-        }
-
-        return person;
+    let person;
+    if (existing) {
+      // Update existing person (reset PIN, update name)
+      person = await this.prisma.deliveryPerson.update({
+        where: { id: existing.id },
+        data: {
+          name: dto.name,
+          pinHash,
+          isActive: true,
+          status: 'DUTY_OFF',
+        },
+      });
+      this.logger.log(`Delivery person updated: ${person.name} (${person.id})`);
+    } else {
+      person = await this.prisma.deliveryPerson.create({
+        data: {
+          name: dto.name,
+          phone: dto.phone,
+          pinHash,
+        },
+      });
+      this.logger.log(`Delivery person created: ${person.name} (${person.id})`);
     }
 
-    /** List all delivery persons (paginated). */
-    async findAllPersons(page = 1, limit = 50) {
-        const skip = (page - 1) * limit;
-        const [data, total] = await Promise.all([
-            this.prisma.deliveryPerson.findMany({
-                skip,
-                take: limit,
-                orderBy: { createdAt: 'desc' },
-                select: {
+    return person;
+  }
+
+  /** List all delivery persons (paginated). */
+  async findAllPersons(page = 1, limit = 50) {
+    const skip = (page - 1) * limit;
+    const [data, total] = await Promise.all([
+      this.prisma.deliveryPerson.findMany({
+        skip,
+        take: limit,
+        orderBy: { createdAt: 'desc' },
+        select: {
+          id: true,
+          name: true,
+          phone: true,
+          status: true,
+          isActive: true,
+          createdAt: true,
+          _count: { select: { assignments: true } },
+        },
+      }),
+      this.prisma.deliveryPerson.count(),
+    ]);
+    return {
+      data,
+      meta: { page, limit, total, totalPages: Math.ceil(total / limit) },
+    };
+  }
+
+  /** List all delivery persons with distance from a store. */
+  async findAllNearStore(storeId: string) {
+    const store = await this.prisma.store.findUnique({
+      where: { id: storeId },
+    });
+    if (!store || store.lat == null || store.lng == null) {
+      return this.findAllPersons();
+    }
+
+    const persons = await this.prisma.deliveryPerson.findMany({
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        name: true,
+        phone: true,
+        status: true,
+        isActive: true,
+        lat: true,
+        lng: true,
+        createdAt: true,
+        _count: { select: { assignments: true } },
+      },
+    });
+
+    return persons
+      .map((p) => {
+        const distance =
+          p.lat != null && p.lng != null
+            ? haversineDistance(store.lat, store.lng, p.lat, p.lng)
+            : Infinity;
+        return {
+          id: p.id,
+          name: p.name,
+          phone: p.phone,
+          status: p.status,
+          isActive: p.isActive,
+          createdAt: p.createdAt,
+          _count: p._count,
+          distance: Math.round(distance * 100) / 100, // round to 2 decimal places
+        };
+      })
+      .sort((a, b) => (a.distance || 0) - (b.distance || 0));
+  }
+
+  /** Update a delivery person (admin). */
+  async updatePerson(
+    id: string,
+    data: Partial<{ name: string; isActive: boolean; pin: string }>,
+  ) {
+    const person = await this.prisma.deliveryPerson.findUnique({
+      where: { id },
+    });
+    if (!person) throw new NotFoundException(`Delivery person ${id} not found`);
+
+    const updateData: any = { ...data };
+    if (data.pin) {
+      updateData.pinHash = await bcrypt.hash(data.pin, 10);
+      delete updateData.pin;
+    }
+
+    return this.prisma.deliveryPerson.update({
+      where: { id },
+      data: updateData,
+      select: {
+        id: true,
+        name: true,
+        phone: true,
+        status: true,
+        isActive: true,
+      },
+    });
+  }
+
+  /** Delete a delivery person (admin). Cascade-deletes all assignments first. */
+  async deletePerson(id: string) {
+    const person = await this.prisma.deliveryPerson.findUnique({
+      where: { id },
+    });
+    if (!person) throw new NotFoundException(`Delivery person ${id} not found`);
+
+    // Cascade-delete all assignments to avoid FK constraint violations
+    await this.prisma.$transaction([
+      this.prisma.orderAssignment.deleteMany({
+        where: { deliveryPersonId: id },
+      }),
+      this.prisma.parcelAssignment.deleteMany({
+        where: { deliveryPersonId: id },
+      }),
+      this.prisma.deliveryPerson.delete({ where: { id } }),
+    ]);
+
+    // Clean up Redis presence/location
+    await Promise.all([
+      this.riderRedis.setRiderOffline(id),
+      this.cache.del(`dp:loc:${id}`),
+      this.cache.geoRemove('riders_location', id),
+    ]);
+
+    this.logger.log(`Delivery person deleted: ${person.name} (${id})`);
+    return person;
+  }
+
+  // ── Delivery person: Self-service ───────────────────────────────
+
+  /** Get own profile. */
+  async getProfile(personId: string) {
+    const person = await this.prisma.deliveryPerson.findUnique({
+      where: { id: personId },
+    });
+    if (!person) throw new NotFoundException('Profile not found');
+    return person;
+  }
+
+  /** Update GPS location (cached in main Redis + riderdb2). */
+  async updateLocation(personId: string, lat: number, lng: number) {
+    // Parallel: DB update + main Redis cache + riderdb2 location + riderdb2 presence + geo caching
+    await Promise.all([
+      this.prisma.deliveryPerson.update({
+        where: { id: personId },
+        data: { lat, lng, lastLocationAt: new Date() },
+      }),
+      this.cache.set(
+        `dp:loc:${personId}`,
+        { lat, lng, updatedAt: new Date().toISOString() },
+        TTL.LOCATION,
+      ),
+      this.cache.geoAdd('riders_location', lng, lat, personId),
+      this.riderRedis.setRiderLocation(personId, lat, lng),
+      this.riderRedis.setRiderOnline(personId),
+    ]);
+
+    return { lat, lng, updated: true };
+  }
+
+  /** Set delivery person status (DUTY_OFF/FREE). */
+  async setStatus(personId: string, status: DeliveryPersonStatus) {
+    if (status === DeliveryPersonStatus.BUSY) {
+      throw new BadRequestException('Cannot manually set BUSY');
+    }
+
+    const person = await this.prisma.deliveryPerson.findUnique({
+      where: { id: personId },
+    });
+
+    if (!person) {
+      throw new NotFoundException('Delivery person not found');
+    }
+
+    if (
+      person.status === DeliveryPersonStatus.BUSY &&
+      status === DeliveryPersonStatus.DUTY_OFF
+    ) {
+      throw new BadRequestException('Complete current delivery first');
+    }
+
+    const updated = await this.prisma.deliveryPerson.update({
+      where: { id: personId },
+      data: { status },
+    });
+
+    if (status === DeliveryPersonStatus.DUTY_OFF) {
+      await this.riderRedis.setRiderOffline(personId);
+      await this.cache.geoRemove('riders_location', personId);
+    } else if (
+      status === DeliveryPersonStatus.FREE &&
+      person.lat &&
+      person.lng
+    ) {
+      await Promise.all([
+        this.riderRedis.setRiderOnline(personId),
+        this.riderRedis.setRiderLocation(personId, person.lat, person.lng),
+        this.cache.geoAdd('riders_location', person.lng, person.lat, personId),
+      ]);
+    }
+
+    this.logger.log(`Delivery person ${updated.name} set to ${status}`);
+    return { status: updated.status };
+  }
+
+  /** Get assigned orders for a delivery person. */
+  async getAssignedOrders(personId: string) {
+    const assignments = await this.prisma.orderAssignment.findMany({
+      where: { deliveryPersonId: personId, completedAt: null },
+      include: {
+        order: {
+          include: {
+            items: {
+              include: {
+                store: {
+                  select: {
                     id: true,
                     name: true,
-                    phone: true,
-                    status: true,
-                    isActive: true,
-                    createdAt: true,
-                    _count: { select: { assignments: true } },
+                    address: true,
+                    lat: true,
+                    lng: true,
+                  },
                 },
-            }),
-            this.prisma.deliveryPerson.count(),
-        ]);
-        return {
-            data,
-            meta: { page, limit, total, totalPages: Math.ceil(total / limit) },
-        };
-    }
-
-    /** List all delivery persons with distance from a store. */
-    async findAllNearStore(storeId: string) {
-        const store = await this.prisma.store.findUnique({ where: { id: storeId } });
-        if (!store || store.lat == null || store.lng == null) {
-            return this.findAllPersons();
-        }
-
-        const persons = await this.prisma.deliveryPerson.findMany({
-            orderBy: { createdAt: 'desc' },
-            select: {
-                id: true,
-                name: true,
-                phone: true,
-                status: true,
-                isActive: true,
-                lat: true,
-                lng: true,
-                createdAt: true,
-                _count: { select: { assignments: true } },
+              },
             },
-        });
+          },
+        },
+      },
+      orderBy: { assignedAt: 'desc' },
+    });
 
-        return persons.map((p) => {
-            const distance = (p.lat != null && p.lng != null)
-                ? haversineDistance(store.lat!, store.lng!, p.lat, p.lng)
-                : Infinity;
-            return {
-                id: p.id,
-                name: p.name,
-                phone: p.phone,
-                status: p.status,
-                isActive: p.isActive,
-                createdAt: p.createdAt,
-                _count: p._count,
-                distance: Math.round(distance * 100) / 100, // round to 2 decimal places
-            };
-        }).sort((a, b) => (a.distance || 0) - (b.distance || 0));
-    }
-
-    /** Update a delivery person (admin). */
-    async updatePerson(
-        id: string,
-        data: Partial<{ name: string; isActive: boolean; pin: string }>,
-    ) {
-        const person = await this.prisma.deliveryPerson.findUnique({
-            where: { id },
-        });
-        if (!person) throw new NotFoundException(`Delivery person ${id} not found`);
-
-        const updateData: any = { ...data };
-        if (data.pin) {
-            updateData.pinHash = await bcrypt.hash(data.pin, 10);
-            delete updateData.pin;
+    // Attach primary store info to each assignment for easy access in the rider app
+    return assignments.map((a) => {
+      const storeMap = new Map<string, any>();
+      for (const item of a.order.items) {
+        if (item.store && !storeMap.has(item.store.id)) {
+          storeMap.set(item.store.id, item.store);
         }
-
-        return this.prisma.deliveryPerson.update({
-            where: { id },
-            data: updateData,
-            select: {
-                id: true,
-                name: true,
-                phone: true,
-                status: true,
-                isActive: true,
-            },
-        });
-    }
-
-    /** Delete a delivery person (admin). Cascade-deletes all assignments first. */
-    async deletePerson(id: string) {
-        const person = await this.prisma.deliveryPerson.findUnique({
-            where: { id },
-        });
-        if (!person) throw new NotFoundException(`Delivery person ${id} not found`);
-
-        // Cascade-delete all assignments to avoid FK constraint violations
-        await this.prisma.$transaction([
-            this.prisma.orderAssignment.deleteMany({ where: { deliveryPersonId: id } }),
-            this.prisma.parcelAssignment.deleteMany({ where: { deliveryPersonId: id } }),
-            this.prisma.deliveryPerson.delete({ where: { id } }),
-        ]);
-
-        // Clean up Redis presence/location
-        await Promise.all([
-            this.riderRedis.setRiderOffline(id),
-            this.cache.del(`dp:loc:${id}`),
-            this.cache.geoRemove('riders_location', id),
-        ]);
-
-        this.logger.log(`Delivery person deleted: ${person.name} (${id})`);
-        return person;
-    }
-
-    // ── Delivery person: Self-service ───────────────────────────────
-
-    /** Get own profile. */
-    async getProfile(personId: string) {
-        const person = await this.prisma.deliveryPerson.findUnique({
-            where: { id: personId }
-        });
-        if (!person) throw new NotFoundException('Profile not found');
-        return person;
-    }
-
-    /** Update GPS location (cached in main Redis + riderdb2). */
-    async updateLocation(personId: string, lat: number, lng: number) {
-        // Parallel: DB update + main Redis cache + riderdb2 location + riderdb2 presence + geo caching
-        await Promise.all([
-            this.prisma.deliveryPerson.update({
-                where: { id: personId },
-                data: { lat, lng, lastLocationAt: new Date() },
-            }),
-            this.cache.set(
-                `dp:loc:${personId}`,
-                { lat, lng, updatedAt: new Date().toISOString() },
-                TTL.LOCATION,
-            ),
-            this.cache.geoAdd('riders_location', lng, lat, personId),
-            this.riderRedis.setRiderLocation(personId, lat, lng),
-            this.riderRedis.setRiderOnline(personId),
-        ]);
-
-        return { lat, lng, updated: true };
-    }
-
-    /** Set delivery person status (DUTY_OFF/FREE). */
-    async setStatus(personId: string, status: DeliveryPersonStatus) {
-        if (status === DeliveryPersonStatus.BUSY) {
-            throw new BadRequestException('Cannot manually set BUSY');
-        }
-
-        const person = await this.prisma.deliveryPerson.findUnique({
-            where: { id: personId },
-        });
-
-        if (!person) {
-            throw new NotFoundException('Delivery person not found');
-        }
-
-        if (person.status === DeliveryPersonStatus.BUSY && status === DeliveryPersonStatus.DUTY_OFF) {
-            throw new BadRequestException('Complete current delivery first');
-        }
-
-        const updated = await this.prisma.deliveryPerson.update({
-            where: { id: personId },
-            data: { status },
-        });
-
-        if (status === DeliveryPersonStatus.DUTY_OFF) {
-            await this.riderRedis.setRiderOffline(personId);
-            await this.cache.geoRemove('riders_location', personId);
-        } else if (status === DeliveryPersonStatus.FREE && person.lat && person.lng) {
-            await Promise.all([
-                this.riderRedis.setRiderOnline(personId),
-                this.riderRedis.setRiderLocation(personId, person.lat, person.lng),
-                this.cache.geoAdd('riders_location', person.lng, person.lat, personId),
-            ]);
-        }
-
-        this.logger.log(`Delivery person ${updated.name} set to ${status}`);
-        return { status: updated.status };
-    }
-
-    /** Get assigned orders for a delivery person. */
-    async getAssignedOrders(personId: string) {
-        const assignments = await this.prisma.orderAssignment.findMany({
-            where: { deliveryPersonId: personId, completedAt: null },
-            include: {
-                order: {
-                    include: {
-                        items: {
-                            include: {
-                                store: {
-                                    select: { id: true, name: true, address: true, lat: true, lng: true },
-                                },
-                            },
-                        },
-                    },
-                },
-            },
-            orderBy: { assignedAt: 'desc' },
-        });
-
-        // Attach primary store info to each assignment for easy access in the rider app
-        return assignments.map((a) => {
-            const storeMap = new Map<string, any>();
-            for (const item of a.order.items) {
-                if (item.store && !storeMap.has(item.store.id)) {
-                    storeMap.set(item.store.id, item.store);
-                }
-            }
-            const stores = Array.from(storeMap.values());
-            const primaryStore = stores[0] ?? null;
-            return { ...a, primaryStore };
-        });
-    }
-
-    // ── Generic assignment operations (OOP: Template Method pattern) ──
-
-    /** Validate assignment state and return it, or throw. */
-    private validateAssignment(
-        assignment: { id: string; acceptedAt: Date | null; completedAt: Date | null } | null,
-        action: 'accept' | 'reject' | 'complete',
-    ) {
-        if (!assignment) throw new NotFoundException('Assignment not found');
-        if (action === 'accept') {
-            if (assignment.acceptedAt) throw new BadRequestException('Assignment already accepted');
-            if (assignment.completedAt) throw new BadRequestException('Assignment already completed');
-        } else if (action === 'reject') {
-            if (assignment.acceptedAt) throw new BadRequestException('Cannot reject an already accepted assignment');
-            if (assignment.completedAt) throw new BadRequestException('Assignment already completed');
-        } else {
-            if (!assignment.acceptedAt) throw new BadRequestException('You must accept the assignment before completing delivery');
-            if (assignment.completedAt) throw new BadRequestException('Delivery already completed');
-        }
-        return assignment;
-    }
-
-    /** Accept a delivery assignment (order or parcel). */
-    async acceptAssignment(personId: string, orderId: string) {
-        const assignment = await this.prisma.orderAssignment.findFirst({
-            where: { orderId, deliveryPersonId: personId },
-        });
-        this.validateAssignment(assignment, 'accept');
-
-        await this.prisma.$transaction([
-            this.prisma.orderAssignment.update({
-                where: { id: assignment!.id },
-                data: { acceptedAt: new Date() },
-            }),
-            this.prisma.deliveryPerson.update({
-                where: { id: personId },
-                data: { status: DeliveryPersonStatus.BUSY },
-            }),
-            this.prisma.order.update({
-                where: { id: orderId },
-                data: { status: 'SHIPPED' },
-            }),
-        ]);
-
-        const updatedOrder = await this.prisma.order.findUnique({
-            where: { id: orderId },
-            include: { user: { select: { id: true } } },
-        });
-        if (!updatedOrder) throw new NotFoundException(`Order ${orderId} not found after accept`);
-
-        // Trigger parent status re-sync if applicable
-        if (updatedOrder.parentOrderId) {
-            await this.syncParentOrderStatus(updatedOrder.parentOrderId);
-        } else {
-            // No parent: just notify the user directly of this order's update
-            this.userSseService.notify(updatedOrder.userId, {
-                type: 'ORDER_STATUS_UPDATED',
-                data: { orderId, status: 'SHIPPED', orderNumber: updatedOrder.orderNumber },
-            });
-        }
-
-        this.logger.log(`Assignment accepted for order ${orderId} by person ${personId} - Status SHIPPED`);
-        return { orderId, accepted: true };
-    }
-
-    async acceptParcelAssignment(personId: string, parcelOrderId: string) {
-        const assignment = await this.prisma.parcelAssignment.findFirst({
-            where: { parcelOrderId, deliveryPersonId: personId },
-        });
-        this.validateAssignment(assignment, 'accept');
-
-        await this.prisma.$transaction([
-            this.prisma.parcelAssignment.update({
-                where: { id: assignment!.id },
-                data: { acceptedAt: new Date() },
-            }),
-            this.prisma.deliveryPerson.update({
-                where: { id: personId },
-                data: { status: DeliveryPersonStatus.BUSY },
-            }),
-            this.prisma.parcelOrder.update({
-                where: { id: parcelOrderId },
-                data: { status: 'PICKED_UP' },
-            }),
-        ]);
-
-        const updatedParcel = await this.prisma.parcelOrder.findUnique({
-            where: { id: parcelOrderId },
-        });
-        if (!updatedParcel) throw new NotFoundException(`Parcel ${parcelOrderId} not found after accept`);
-
-        // Notify user of parcel pickup
-        this.userSseService.notify(updatedParcel.userId, {
-            type: 'PARCEL_STATUS_UPDATED',
-            data: { parcelId: parcelOrderId, status: 'PICKED_UP', parcelNumber: updatedParcel.parcelNumber },
-        });
-
-        this.logger.log(`Assignment accepted for parcel ${parcelOrderId} by person ${personId} - Status PICKED_UP`);
-        return { parcelOrderId, accepted: true };
-    }
-
-    /** Reject a delivery assignment. Deletes assignment and frees the person. */
-    async rejectAssignment(personId: string, orderId: string) {
-        const assignment = await this.prisma.orderAssignment.findFirst({
-            where: { orderId, deliveryPersonId: personId },
-        });
-        this.validateAssignment(assignment, 'reject');
-
-        // Store the rejected personId in Redis so auto-assign skips them
-        const rejectedKey = `order:rejected:${orderId}`;
-        const existing = await this.cache.get<string[]>(rejectedKey);
-        const rejectedIds = existing ? [...existing, personId] : [personId];
-        await this.cache.set(rejectedKey, rejectedIds, TTL.REJECTED_RIDERS);
-
-        await this.prisma.$transaction([
-            this.prisma.orderAssignment.delete({ where: { id: assignment!.id } }),
-            this.prisma.deliveryPerson.update({
-                where: { id: personId },
-                data: { status: DeliveryPersonStatus.FREE },
-            }),
-        ]);
-
-        this.logger.log(`Assignment rejected for order ${orderId} by person ${personId}`);
-
-        // Re-add to broadcast pool so other riders can claim it
-        await this.orderPool.broadcastOrder(orderId).catch(err => {
-            this.logger.error(`Failed to re-broadcast order ${orderId} after rejection: ${err.message}`);
-        });
-
-        return { orderId, rejected: true };
-    }
-
-    async rejectParcelAssignment(personId: string, parcelOrderId: string) {
-        const assignment = await this.prisma.parcelAssignment.findFirst({
-            where: { parcelOrderId, deliveryPersonId: personId },
-        });
-        this.validateAssignment(assignment, 'reject');
-
-        await this.prisma.$transaction([
-            this.prisma.parcelAssignment.delete({ where: { id: assignment!.id } }),
-            this.prisma.deliveryPerson.update({
-                where: { id: personId },
-                data: { status: DeliveryPersonStatus.FREE },
-            }),
-            this.prisma.parcelOrder.update({
-                where: { id: parcelOrderId },
-                data: { status: 'READY_FOR_PICKUP' },
-            }),
-        ]);
-
-        this.logger.log(`Assignment rejected for parcel ${parcelOrderId} by person ${personId}`);
-
-        // Re-add to broadcast pool so other riders can claim it
-        await this.orderPool.broadcastParcelOrder(parcelOrderId).catch(err => {
-            this.logger.error(`Failed to re-broadcast parcel ${parcelOrderId} after rejection: ${err.message}`);
-        });
-
-        return { parcelOrderId, rejected: true };
-    }
-
-    async completeDelivery(personId: string, orderId: string, result: 'DELIVERED' | 'NOT_DELIVERED', deliveryPin?: string, reason?: string) {
-        // Prevent race condition on completion (Atomic guard)
-        // acquireLock prepends "lock:order:" internally, so the key is lock:order:complete:<orderId>
-        const lockAcquired = await this.riderRedis.acquireLock(`complete:${orderId}`, personId, 30);
-        if (!lockAcquired) {
-            throw new BadRequestException('Request already in progress for this order');
-        }
-
-        try {
-            const assignment = await this.prisma.orderAssignment.findFirst({
-                where: { orderId, deliveryPersonId: personId },
-            });
-
-            this.logger.log(`COMPLETING DELIVERY for order ${orderId}. PIN provided: [${deliveryPin}] Result: ${result}`);
-            this.validateAssignment(assignment, 'complete');
-
-        if (result === 'NOT_DELIVERED' && (!reason || reason.trim().length < 5)) {
-            throw new BadRequestException('A reason is required when marking as NOT_DELIVERED');
-        }
-
-        if (result === 'DELIVERED') {
-            const order = await (this.prisma.order.findUnique({
-                where: { id: orderId },
-                select: { deliveryPin: true } as any,
-            }) as Promise<any>);
-            if (!order) throw new NotFoundException('Order not found');
-            if (!deliveryPin) {
-                throw new BadRequestException('A delivery PIN is required to complete this delivery.');
-            }
-
-            const attempts = await this.riderRedis.getPinAttempts(orderId);
-            if (attempts >= 3) {
-                throw new BadRequestException('Too many incorrect PIN attempts. Try again in 10 minutes.');
-            }
-
-            if (order.deliveryPin && order.deliveryPin !== deliveryPin) {
-                await this.riderRedis.incrementPinAttempts(orderId);
-                const remaining = 2 - attempts;
-                throw new BadRequestException(
-                    remaining > 0
-                        ? `Invalid delivery PIN. ${remaining} attempt${remaining === 1 ? '' : 's'} remaining.`
-                        : 'Invalid delivery PIN. No more attempts — try again in 10 minutes.',
-                );
-            }
-
-            await this.riderRedis.clearPinAttempts(orderId);
-        }
-
-        const now = new Date();
-        const isDelivered = result === 'DELIVERED';
-
-        await this.prisma.$transaction([
-            isDelivered
-                ? this.prisma.orderAssignment.update({ where: { id: assignment!.id }, data: { completedAt: now, result } })
-                : this.prisma.orderAssignment.delete({ where: { id: assignment!.id } }),
-            this.prisma.order.update({
-                where: { id: orderId },
-                data: isDelivered
-                    ? { status: 'DELIVERED', deliveredAt: now }
-                    : { status: 'ORDER_PICKED', notDeliveredReason: reason!.trim(), notDeliveredAt: now },
-            }),
-            this.prisma.deliveryPerson.update({
-                where: { id: personId },
-                data: { status: DeliveryPersonStatus.FREE },
-            }),
-        ]);
-
-        this.logger.log(`Delivery ${result} for order ${orderId} by person ${personId}${!isDelivered ? ` — reason: ${reason}` : ''}`);
-
-        // Sync parent order status if this is a child order
-        const order = await this.prisma.order.findUnique({
-            where: { id: orderId },
-            select: { parentOrderId: true },
-        });
-        if (order?.parentOrderId) {
-            await this.syncParentOrderStatus(order.parentOrderId);
-        }
-
-        const orderWithUser = await this.prisma.order.findUnique({
-            where: { id: orderId },
-            select: { userId: true, orderNumber: true },
-        });
-
-        if (orderWithUser) {
-            this.userSseService.notify(orderWithUser.userId, {
-                type: 'ORDER_STATUS_UPDATED',
-                data: { orderId, status: result, orderNumber: orderWithUser.orderNumber },
-            });
-        }
-
-        return { orderId, result, completed: true };
-        } finally {
-            await this.riderRedis.releaseLock(`complete:${orderId}`, personId);
-        }
-    }
-
-    /**
-     * Sync parent order status derived from children's statuses.
-     * Uses OrderStatus enum — kept in sync with OrdersService.syncParentStatus().
-     */
-    private async syncParentOrderStatus(parentOrderId: string): Promise<void> {
-        const children = await this.prisma.order.findMany({
-            where: { parentOrderId },
-            select: { status: true },
-        });
-        if (children.length === 0) return;
-
-        const statuses = children.map((c) => c.status);
-        const activeStatuses = statuses.filter((s) => s !== OrderStatus.CANCELLED);
-
-        let parentStatus: OrderStatus;
-        if (activeStatuses.length === 0) parentStatus = OrderStatus.CANCELLED;
-        else if (activeStatuses.every((s) => s === OrderStatus.DELIVERED)) parentStatus = OrderStatus.DELIVERED;
-        else if (activeStatuses.some((s) => s === OrderStatus.SHIPPED)) parentStatus = OrderStatus.SHIPPED;
-        else if (activeStatuses.some((s) => s === OrderStatus.ORDER_PICKED)) parentStatus = OrderStatus.ORDER_PICKED;
-        else parentStatus = OrderStatus.CONFIRMED;
-
-        const updatedParent = await this.prisma.order.update({
-            where: { id: parentOrderId },
-            data: {
-                status: parentStatus,
-                ...(parentStatus === OrderStatus.DELIVERED ? { deliveredAt: new Date() } : {}),
-            },
-        });
-
-        // Notify user of parent order update so the UI tracker advances
-        this.userSseService.notify(updatedParent.userId, {
-            type: 'ORDER_STATUS_UPDATED',
-            data: { orderId: parentOrderId, status: parentStatus, orderNumber: updatedParent.orderNumber },
-        });
-    }
-
-    /** Get assigned parcels for a delivery person. */
-    async getAssignedParcelOrders(personId: string) {
-        return this.prisma.parcelAssignment.findMany({
-            where: { deliveryPersonId: personId, completedAt: null },
-            include: { parcelOrder: true },
-            orderBy: { assignedAt: 'desc' },
-        });
-    }
-
-    async completeParcelDelivery(personId: string, parcelOrderId: string, result: 'DELIVERED' | 'NOT_DELIVERED', deliveryPin?: string, reason?: string) {
-        const assignment = await this.prisma.parcelAssignment.findFirst({
-            where: { parcelOrderId, deliveryPersonId: personId },
-        });
-        this.validateAssignment(assignment, 'complete');
-
-        if (result === 'NOT_DELIVERED' && (!reason || reason.trim().length < 5)) {
-            throw new BadRequestException('A reason is required when marking as NOT_DELIVERED');
-        }
-
-        if (result === 'DELIVERED') {
-            const parcel = await (this.prisma.parcelOrder.findUnique({
-                where: { id: parcelOrderId },
-                select: { deliveryPin: true } as any,
-            }) as Promise<any>);
-            if (!parcel) throw new NotFoundException('Parcel not found');
-            if (!deliveryPin) {
-                throw new BadRequestException('A delivery PIN is required to complete this parcel delivery.');
-            }
-            if (parcel.deliveryPin && parcel.deliveryPin !== deliveryPin) {
-                throw new BadRequestException('Invalid delivery PIN provided by customer');
-            }
-        }
-
-        const now = new Date();
-        const isDelivered = result === 'DELIVERED';
-
-        await this.prisma.$transaction([
-            isDelivered
-                ? this.prisma.parcelAssignment.update({ where: { id: assignment!.id }, data: { completedAt: now, result } })
-                : this.prisma.parcelAssignment.delete({ where: { id: assignment!.id } }),
-            this.prisma.parcelOrder.update({
-                where: { id: parcelOrderId },
-                data: isDelivered
-                    ? { status: 'DELIVERED', deliveredAt: now }
-                    : { status: 'READY_FOR_PICKUP', notDeliveredReason: reason!.trim(), notDeliveredAt: now },
-            }),
-            this.prisma.deliveryPerson.update({
-                where: { id: personId },
-                data: { status: DeliveryPersonStatus.FREE },
-            }),
-        ]);
-
-        this.logger.log(`Parcel delivery ${result} for parcel ${parcelOrderId} by person ${personId}${!isDelivered ? ` — reason: ${reason}` : ''}`);
-        const parcelWithUser = await this.prisma.parcelOrder.findUnique({
-            where: { id: parcelOrderId },
-            select: { userId: true, parcelNumber: true },
-        });
-
-        if (parcelWithUser) {
-            this.userSseService.notify(parcelWithUser.userId, {
-                type: 'PARCEL_STATUS_UPDATED',
-                data: { parcelId: parcelOrderId, status: result, parcelNumber: parcelWithUser.parcelNumber },
-            });
-        }
-
-        return { parcelOrderId, result, completed: true };
-    }
-
-    /** Get delivery history (completed orders + parcels). */
-    async getDeliveryHistory(personId: string) {
-        const [orderHistory, parcelHistory] = await Promise.all([
-            this.prisma.orderAssignment.findMany({
-                where: { deliveryPersonId: personId, completedAt: { not: null } },
-                include: {
-                    order: {
-                        select: {
-                            id: true,
-                            orderNumber: true,
-                            total: true,
-                            paymentMethod: true,
-                            deliveryAddress: true,
-                            status: true,
-                        },
-                    },
-                },
-                orderBy: { completedAt: 'desc' },
-                take: 50,
-            }),
-            this.prisma.parcelAssignment.findMany({
-                where: { deliveryPersonId: personId, completedAt: { not: null } },
-                include: {
-                    parcelOrder: {
-                        select: {
-                            id: true,
-                            parcelNumber: true,
-                            codAmount: true,
-                            category: true,
-                            weight: true,
-                            pickupAddress: true,
-                            dropAddress: true,
-                            status: true,
-                        },
-                    },
-                },
-                orderBy: { completedAt: 'desc' },
-                take: 50,
-            }),
-        ]);
-
-        // Merge and sort by completedAt desc
-        const combined = [
-            ...orderHistory.map((a) => ({
-                id: a.id,
-                type: 'order' as const,
-                orderId: a.order.id,
-                orderNumber: a.order.orderNumber,
-                total: a.order.total,
-                paymentMethod: a.order.paymentMethod,
-                deliveryAddress: a.order.deliveryAddress,
-                result: a.result,
-                completedAt: a.completedAt,
-                assignedAt: a.assignedAt,
-            })),
-            ...parcelHistory.map((a) => ({
-                id: a.id,
-                type: 'parcel' as const,
-                orderId: a.parcelOrder.id,
-                orderNumber: a.parcelOrder.parcelNumber,
-                total: a.parcelOrder.codAmount,
-                paymentMethod: 'COD',
-                deliveryAddress: a.parcelOrder.dropAddress,
-                result: a.result,
-                completedAt: a.completedAt,
-                assignedAt: a.assignedAt,
-                category: a.parcelOrder.category,
-                weight: a.parcelOrder.weight,
-            })),
-        ].sort((a, b) => new Date(b.completedAt!).getTime() - new Date(a.completedAt!).getTime());
-
-        return combined;
-    }
-
-    /** Get cached location for a delivery person (from Redis). */
-    async getCachedLocation(personId: string) {
-        return this.cache.get<{ lat: number; lng: number; updatedAt: string }>(
-            `dp:loc:${personId}`,
+      }
+      const stores = Array.from(storeMap.values());
+      const primaryStore = stores[0] ?? null;
+      return { ...a, primaryStore };
+    });
+  }
+
+  // ── Generic assignment operations (OOP: Template Method pattern) ──
+
+  /** Validate assignment state and return it, or throw. */
+  private validateAssignment(
+    assignment: {
+      id: string;
+      acceptedAt: Date | null;
+      completedAt: Date | null;
+    } | null,
+    action: 'accept' | 'reject' | 'complete',
+  ) {
+    if (!assignment) throw new NotFoundException('Assignment not found');
+    if (action === 'accept') {
+      if (assignment.acceptedAt)
+        throw new BadRequestException('Assignment already accepted');
+      if (assignment.completedAt)
+        throw new BadRequestException('Assignment already completed');
+    } else if (action === 'reject') {
+      if (assignment.acceptedAt)
+        throw new BadRequestException(
+          'Cannot reject an already accepted assignment',
         );
+      if (assignment.completedAt)
+        throw new BadRequestException('Assignment already completed');
+    } else {
+      if (!assignment.acceptedAt)
+        throw new BadRequestException(
+          'You must accept the assignment before completing delivery',
+        );
+      if (assignment.completedAt)
+        throw new BadRequestException('Delivery already completed');
     }
+    return assignment;
+  }
+
+  /** Accept a delivery assignment (order or parcel). */
+  async acceptAssignment(personId: string, orderId: string) {
+    const assignment = await this.prisma.orderAssignment.findFirst({
+      where: { orderId, deliveryPersonId: personId },
+    });
+    this.validateAssignment(assignment, 'accept');
+
+    await this.prisma.$transaction([
+      this.prisma.orderAssignment.update({
+        where: { id: assignment!.id },
+        data: { acceptedAt: new Date() },
+      }),
+      this.prisma.deliveryPerson.update({
+        where: { id: personId },
+        data: { status: DeliveryPersonStatus.BUSY },
+      }),
+      this.prisma.order.update({
+        where: { id: orderId },
+        data: { status: 'SHIPPED' },
+      }),
+    ]);
+
+    const updatedOrder = await this.prisma.order.findUnique({
+      where: { id: orderId },
+      include: { user: { select: { id: true } } },
+    });
+    if (!updatedOrder)
+      throw new NotFoundException(`Order ${orderId} not found after accept`);
+
+    // Trigger parent status re-sync if applicable
+    if (updatedOrder.parentOrderId) {
+      await this.syncParentOrderStatus(updatedOrder.parentOrderId);
+    } else {
+      // No parent: just notify the user directly of this order's update
+      this.userSseService.notify(updatedOrder.userId, {
+        type: 'ORDER_STATUS_UPDATED',
+        data: {
+          orderId,
+          status: 'SHIPPED',
+          orderNumber: updatedOrder.orderNumber,
+        },
+      });
+    }
+
+    this.logger.log(
+      `Assignment accepted for order ${orderId} by person ${personId} - Status SHIPPED`,
+    );
+    return { orderId, accepted: true };
+  }
+
+  async acceptParcelAssignment(personId: string, parcelOrderId: string) {
+    const assignment = await this.prisma.parcelAssignment.findFirst({
+      where: { parcelOrderId, deliveryPersonId: personId },
+    });
+    this.validateAssignment(assignment, 'accept');
+
+    await this.prisma.$transaction([
+      this.prisma.parcelAssignment.update({
+        where: { id: assignment!.id },
+        data: { acceptedAt: new Date() },
+      }),
+      this.prisma.deliveryPerson.update({
+        where: { id: personId },
+        data: { status: DeliveryPersonStatus.BUSY },
+      }),
+      this.prisma.parcelOrder.update({
+        where: { id: parcelOrderId },
+        data: { status: 'PICKED_UP' },
+      }),
+    ]);
+
+    const updatedParcel = await this.prisma.parcelOrder.findUnique({
+      where: { id: parcelOrderId },
+    });
+    if (!updatedParcel)
+      throw new NotFoundException(
+        `Parcel ${parcelOrderId} not found after accept`,
+      );
+
+    // Notify user of parcel pickup
+    this.userSseService.notify(updatedParcel.userId, {
+      type: 'PARCEL_STATUS_UPDATED',
+      data: {
+        parcelId: parcelOrderId,
+        status: 'PICKED_UP',
+        parcelNumber: updatedParcel.parcelNumber,
+      },
+    });
+
+    this.logger.log(
+      `Assignment accepted for parcel ${parcelOrderId} by person ${personId} - Status PICKED_UP`,
+    );
+    return { parcelOrderId, accepted: true };
+  }
+
+  /** Reject a delivery assignment. Deletes assignment and frees the person. */
+  async rejectAssignment(personId: string, orderId: string) {
+    const assignment = await this.prisma.orderAssignment.findFirst({
+      where: { orderId, deliveryPersonId: personId },
+    });
+    this.validateAssignment(assignment, 'reject');
+
+    // Store the rejected personId in Redis so auto-assign skips them
+    const rejectedKey = `order:rejected:${orderId}`;
+    const existing = await this.cache.get<string[]>(rejectedKey);
+    const rejectedIds = existing ? [...existing, personId] : [personId];
+    await this.cache.set(rejectedKey, rejectedIds, TTL.REJECTED_RIDERS);
+
+    await this.prisma.$transaction([
+      this.prisma.orderAssignment.delete({ where: { id: assignment!.id } }),
+      this.prisma.deliveryPerson.update({
+        where: { id: personId },
+        data: { status: DeliveryPersonStatus.FREE },
+      }),
+    ]);
+
+    this.logger.log(
+      `Assignment rejected for order ${orderId} by person ${personId}`,
+    );
+
+    // Re-add to broadcast pool so other riders can claim it
+    await this.orderPool.broadcastOrder(orderId).catch((err) => {
+      this.logger.error(
+        `Failed to re-broadcast order ${orderId} after rejection: ${err.message}`,
+      );
+    });
+
+    return { orderId, rejected: true };
+  }
+
+  async rejectParcelAssignment(personId: string, parcelOrderId: string) {
+    const assignment = await this.prisma.parcelAssignment.findFirst({
+      where: { parcelOrderId, deliveryPersonId: personId },
+    });
+    this.validateAssignment(assignment, 'reject');
+
+    await this.prisma.$transaction([
+      this.prisma.parcelAssignment.delete({ where: { id: assignment!.id } }),
+      this.prisma.deliveryPerson.update({
+        where: { id: personId },
+        data: { status: DeliveryPersonStatus.FREE },
+      }),
+      this.prisma.parcelOrder.update({
+        where: { id: parcelOrderId },
+        data: { status: 'READY_FOR_PICKUP' },
+      }),
+    ]);
+
+    this.logger.log(
+      `Assignment rejected for parcel ${parcelOrderId} by person ${personId}`,
+    );
+
+    // Re-add to broadcast pool so other riders can claim it
+    await this.orderPool.broadcastParcelOrder(parcelOrderId).catch((err) => {
+      this.logger.error(
+        `Failed to re-broadcast parcel ${parcelOrderId} after rejection: ${err.message}`,
+      );
+    });
+
+    return { parcelOrderId, rejected: true };
+  }
+
+  async completeDelivery(
+    personId: string,
+    orderId: string,
+    result: 'DELIVERED' | 'NOT_DELIVERED',
+    deliveryPin?: string,
+    reason?: string,
+  ) {
+    // Prevent race condition on completion (Atomic guard)
+    // acquireLock prepends "lock:order:" internally, so the key is lock:order:complete:<orderId>
+    const lockAcquired = await this.riderRedis.acquireLock(
+      `complete:${orderId}`,
+      personId,
+      30,
+    );
+    if (!lockAcquired) {
+      throw new BadRequestException(
+        'Request already in progress for this order',
+      );
+    }
+
+    try {
+      const assignment = await this.prisma.orderAssignment.findFirst({
+        where: { orderId, deliveryPersonId: personId },
+      });
+
+      this.logger.log(
+        `COMPLETING DELIVERY for order ${orderId}. PIN provided: [${deliveryPin}] Result: ${result}`,
+      );
+      this.validateAssignment(assignment, 'complete');
+
+      if (result === 'NOT_DELIVERED' && (!reason || reason.trim().length < 5)) {
+        throw new BadRequestException(
+          'A reason is required when marking as NOT_DELIVERED',
+        );
+      }
+
+      if (result === 'DELIVERED') {
+        const order = await (this.prisma.order.findUnique({
+          where: { id: orderId },
+          select: { deliveryPin: true } as any,
+        }) as Promise<any>);
+        if (!order) throw new NotFoundException('Order not found');
+        if (!deliveryPin) {
+          throw new BadRequestException(
+            'A delivery PIN is required to complete this delivery.',
+          );
+        }
+
+        const attempts = await this.riderRedis.getPinAttempts(orderId);
+        if (attempts >= 3) {
+          throw new BadRequestException(
+            'Too many incorrect PIN attempts. Try again in 10 minutes.',
+          );
+        }
+
+        if (order.deliveryPin && order.deliveryPin !== deliveryPin) {
+          await this.riderRedis.incrementPinAttempts(orderId);
+          const remaining = 2 - attempts;
+          throw new BadRequestException(
+            remaining > 0
+              ? `Invalid delivery PIN. ${remaining} attempt${remaining === 1 ? '' : 's'} remaining.`
+              : 'Invalid delivery PIN. No more attempts — try again in 10 minutes.',
+          );
+        }
+
+        await this.riderRedis.clearPinAttempts(orderId);
+      }
+
+      const now = new Date();
+      const isDelivered = result === 'DELIVERED';
+
+      await this.prisma.$transaction([
+        isDelivered
+          ? this.prisma.orderAssignment.update({
+              where: { id: assignment!.id },
+              data: { completedAt: now, result },
+            })
+          : this.prisma.orderAssignment.delete({
+              where: { id: assignment!.id },
+            }),
+        this.prisma.order.update({
+          where: { id: orderId },
+          data: isDelivered
+            ? { status: 'DELIVERED', deliveredAt: now }
+            : {
+                status: 'ORDER_PICKED',
+                notDeliveredReason: reason!.trim(),
+                notDeliveredAt: now,
+              },
+        }),
+        this.prisma.deliveryPerson.update({
+          where: { id: personId },
+          data: { status: DeliveryPersonStatus.FREE },
+        }),
+      ]);
+
+      this.logger.log(
+        `Delivery ${result} for order ${orderId} by person ${personId}${!isDelivered ? ` — reason: ${reason}` : ''}`,
+      );
+
+      // Sync parent order status if this is a child order
+      const order = await this.prisma.order.findUnique({
+        where: { id: orderId },
+        select: { parentOrderId: true },
+      });
+      if (order?.parentOrderId) {
+        await this.syncParentOrderStatus(order.parentOrderId);
+      }
+
+      const orderWithUser = await this.prisma.order.findUnique({
+        where: { id: orderId },
+        select: { userId: true, orderNumber: true },
+      });
+
+      if (orderWithUser) {
+        this.userSseService.notify(orderWithUser.userId, {
+          type: 'ORDER_STATUS_UPDATED',
+          data: {
+            orderId,
+            status: result,
+            orderNumber: orderWithUser.orderNumber,
+          },
+        });
+      }
+
+      return { orderId, result, completed: true };
+    } finally {
+      await this.riderRedis.releaseLock(`complete:${orderId}`, personId);
+    }
+  }
+
+  /**
+   * Sync parent order status derived from children's statuses.
+   * Uses OrderStatus enum — kept in sync with OrdersService.syncParentStatus().
+   */
+  private async syncParentOrderStatus(parentOrderId: string): Promise<void> {
+    const children = await this.prisma.order.findMany({
+      where: { parentOrderId },
+      select: { status: true },
+    });
+    if (children.length === 0) return;
+
+    const statuses = children.map((c) => c.status);
+    const activeStatuses = statuses.filter((s) => s !== OrderStatus.CANCELLED);
+
+    let parentStatus: OrderStatus;
+    if (activeStatuses.length === 0) parentStatus = OrderStatus.CANCELLED;
+    else if (activeStatuses.every((s) => s === OrderStatus.DELIVERED))
+      parentStatus = OrderStatus.DELIVERED;
+    else if (activeStatuses.some((s) => s === OrderStatus.SHIPPED))
+      parentStatus = OrderStatus.SHIPPED;
+    else if (activeStatuses.some((s) => s === OrderStatus.ORDER_PICKED))
+      parentStatus = OrderStatus.ORDER_PICKED;
+    else parentStatus = OrderStatus.CONFIRMED;
+
+    const updatedParent = await this.prisma.order.update({
+      where: { id: parentOrderId },
+      data: {
+        status: parentStatus,
+        ...(parentStatus === OrderStatus.DELIVERED
+          ? { deliveredAt: new Date() }
+          : {}),
+      },
+    });
+
+    // Notify user of parent order update so the UI tracker advances
+    this.userSseService.notify(updatedParent.userId, {
+      type: 'ORDER_STATUS_UPDATED',
+      data: {
+        orderId: parentOrderId,
+        status: parentStatus,
+        orderNumber: updatedParent.orderNumber,
+      },
+    });
+  }
+
+  /** Get assigned parcels for a delivery person. */
+  async getAssignedParcelOrders(personId: string) {
+    return this.prisma.parcelAssignment.findMany({
+      where: { deliveryPersonId: personId, completedAt: null },
+      include: { parcelOrder: true },
+      orderBy: { assignedAt: 'desc' },
+    });
+  }
+
+  async completeParcelDelivery(
+    personId: string,
+    parcelOrderId: string,
+    result: 'DELIVERED' | 'NOT_DELIVERED',
+    deliveryPin?: string,
+    reason?: string,
+  ) {
+    const assignment = await this.prisma.parcelAssignment.findFirst({
+      where: { parcelOrderId, deliveryPersonId: personId },
+    });
+    this.validateAssignment(assignment, 'complete');
+
+    if (result === 'NOT_DELIVERED' && (!reason || reason.trim().length < 5)) {
+      throw new BadRequestException(
+        'A reason is required when marking as NOT_DELIVERED',
+      );
+    }
+
+    if (result === 'DELIVERED') {
+      const parcel = await (this.prisma.parcelOrder.findUnique({
+        where: { id: parcelOrderId },
+        select: { deliveryPin: true } as any,
+      }) as Promise<any>);
+      if (!parcel) throw new NotFoundException('Parcel not found');
+      if (!deliveryPin) {
+        throw new BadRequestException(
+          'A delivery PIN is required to complete this parcel delivery.',
+        );
+      }
+      if (parcel.deliveryPin && parcel.deliveryPin !== deliveryPin) {
+        throw new BadRequestException(
+          'Invalid delivery PIN provided by customer',
+        );
+      }
+    }
+
+    const now = new Date();
+    const isDelivered = result === 'DELIVERED';
+
+    await this.prisma.$transaction([
+      isDelivered
+        ? this.prisma.parcelAssignment.update({
+            where: { id: assignment!.id },
+            data: { completedAt: now, result },
+          })
+        : this.prisma.parcelAssignment.delete({
+            where: { id: assignment!.id },
+          }),
+      this.prisma.parcelOrder.update({
+        where: { id: parcelOrderId },
+        data: isDelivered
+          ? { status: 'DELIVERED', deliveredAt: now }
+          : {
+              status: 'READY_FOR_PICKUP',
+              notDeliveredReason: reason!.trim(),
+              notDeliveredAt: now,
+            },
+      }),
+      this.prisma.deliveryPerson.update({
+        where: { id: personId },
+        data: { status: DeliveryPersonStatus.FREE },
+      }),
+    ]);
+
+    this.logger.log(
+      `Parcel delivery ${result} for parcel ${parcelOrderId} by person ${personId}${!isDelivered ? ` — reason: ${reason}` : ''}`,
+    );
+    const parcelWithUser = await this.prisma.parcelOrder.findUnique({
+      where: { id: parcelOrderId },
+      select: { userId: true, parcelNumber: true },
+    });
+
+    if (parcelWithUser) {
+      this.userSseService.notify(parcelWithUser.userId, {
+        type: 'PARCEL_STATUS_UPDATED',
+        data: {
+          parcelId: parcelOrderId,
+          status: result,
+          parcelNumber: parcelWithUser.parcelNumber,
+        },
+      });
+    }
+
+    return { parcelOrderId, result, completed: true };
+  }
+
+  /** Get delivery history (completed orders + parcels). */
+  async getDeliveryHistory(personId: string) {
+    const [orderHistory, parcelHistory] = await Promise.all([
+      this.prisma.orderAssignment.findMany({
+        where: { deliveryPersonId: personId, completedAt: { not: null } },
+        include: {
+          order: {
+            select: {
+              id: true,
+              orderNumber: true,
+              total: true,
+              paymentMethod: true,
+              deliveryAddress: true,
+              status: true,
+            },
+          },
+        },
+        orderBy: { completedAt: 'desc' },
+        take: 50,
+      }),
+      this.prisma.parcelAssignment.findMany({
+        where: { deliveryPersonId: personId, completedAt: { not: null } },
+        include: {
+          parcelOrder: {
+            select: {
+              id: true,
+              parcelNumber: true,
+              codAmount: true,
+              category: true,
+              weight: true,
+              pickupAddress: true,
+              dropAddress: true,
+              status: true,
+            },
+          },
+        },
+        orderBy: { completedAt: 'desc' },
+        take: 50,
+      }),
+    ]);
+
+    // Merge and sort by completedAt desc
+    const combined = [
+      ...orderHistory.map((a) => ({
+        id: a.id,
+        type: 'order' as const,
+        orderId: a.order.id,
+        orderNumber: a.order.orderNumber,
+        total: a.order.total,
+        paymentMethod: a.order.paymentMethod,
+        deliveryAddress: a.order.deliveryAddress,
+        result: a.result,
+        completedAt: a.completedAt,
+        assignedAt: a.assignedAt,
+      })),
+      ...parcelHistory.map((a) => ({
+        id: a.id,
+        type: 'parcel' as const,
+        orderId: a.parcelOrder.id,
+        orderNumber: a.parcelOrder.parcelNumber,
+        total: a.parcelOrder.codAmount,
+        paymentMethod: 'COD',
+        deliveryAddress: a.parcelOrder.dropAddress,
+        result: a.result,
+        completedAt: a.completedAt,
+        assignedAt: a.assignedAt,
+        category: a.parcelOrder.category,
+        weight: a.parcelOrder.weight,
+      })),
+    ].sort(
+      (a, b) =>
+        new Date(b.completedAt!).getTime() - new Date(a.completedAt!).getTime(),
+    );
+
+    return combined;
+  }
+
+  /** Get cached location for a delivery person (from Redis). */
+  async getCachedLocation(personId: string) {
+    return this.cache.get<{ lat: number; lng: number; updatedAt: string }>(
+      `dp:loc:${personId}`,
+    );
+  }
 }

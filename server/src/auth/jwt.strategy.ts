@@ -35,11 +35,17 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     if (payload.role === 'STORE_MANAGER') {
       const manager = await this.prisma.storeManager.findUnique({
         where: { id: payload.sub },
-        select: { isActive: true },
+        select: { isActive: true, storeId: true },
       });
       if (!manager || !manager.isActive) {
         throw new UnauthorizedException('Account deactivated');
       }
+      return {
+        sub: payload.sub,
+        phone: payload.phone,
+        role: payload.role,
+        storeId: manager.storeId,
+      };
     } else if (payload.role === 'DELIVERY_PERSON') {
       const dp = await this.prisma.deliveryPerson.findUnique({
         where: { id: payload.sub },

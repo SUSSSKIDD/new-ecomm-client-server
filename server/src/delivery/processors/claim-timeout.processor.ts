@@ -11,10 +11,14 @@ export class ClaimTimeoutProcessor extends WorkerHost {
     super();
   }
 
-  async process(job: Job<{ orderId: string; isParcel?: boolean }>): Promise<void> {
+  async process(
+    job: Job<{ orderId: string; isParcel?: boolean }>,
+  ): Promise<void> {
     if (job.name === 'claim-timeout') {
       const { orderId, isParcel } = job.data;
-      this.logger.log(`Processing claim-timeout for ${isParcel ? 'parcel' : 'order'} ${orderId}`);
+      this.logger.log(
+        `Processing claim-timeout for ${isParcel ? 'parcel' : 'order'} ${orderId}`,
+      );
       if (isParcel) {
         await this.orderPool.handleParcelClaimTimeout(orderId);
       } else {
@@ -22,7 +26,9 @@ export class ClaimTimeoutProcessor extends WorkerHost {
       }
     } else if (job.name === 'manual-assignment-timeout') {
       const { orderId, isParcel } = job.data;
-      this.logger.log(`Processing manual-assignment-timeout for ${isParcel ? 'parcel' : 'order'} ${orderId}`);
+      this.logger.log(
+        `Processing manual-assignment-timeout for ${isParcel ? 'parcel' : 'order'} ${orderId}`,
+      );
       await this.orderPool.handleManualAssignmentTimeout(orderId, isParcel);
     }
   }

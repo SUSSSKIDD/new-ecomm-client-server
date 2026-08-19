@@ -9,7 +9,12 @@ import {
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { FilesInterceptor, FileInterceptor } from '@nestjs/platform-express';
-import { ApiTags, ApiBearerAuth, ApiOperation, ApiConsumes } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiBearerAuth,
+  ApiOperation,
+  ApiConsumes,
+} from '@nestjs/swagger';
 import { LocalStorageService } from '../common/services/local-storage.service';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -19,10 +24,19 @@ const MULTER_IMAGE_OPTIONS = {
   storage: multer.memoryStorage(),
   limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter: (_req: any, file: Express.Multer.File, cb: any) => {
-    if (['image/jpeg', 'image/png', 'image/webp', 'image/jpg'].includes(file.mimetype)) {
+    if (
+      ['image/jpeg', 'image/png', 'image/webp', 'image/jpg'].includes(
+        file.mimetype,
+      )
+    ) {
       cb(null, true);
     } else {
-      cb(new Error(`Invalid file type: ${file.mimetype}. Only JPEG, PNG, WebP allowed.`), false);
+      cb(
+        new Error(
+          `Invalid file type: ${file.mimetype}. Only JPEG, PNG, WebP allowed.`,
+        ),
+        false,
+      );
     }
   },
 };
@@ -30,7 +44,7 @@ const MULTER_IMAGE_OPTIONS = {
 @ApiTags('uploads')
 @Controller('uploads')
 export class UploadsController {
-  constructor(private readonly storage: LocalStorageService) { }
+  constructor(private readonly storage: LocalStorageService) {}
 
   @Post('user-designs')
   @ApiBearerAuth()
@@ -46,7 +60,11 @@ export class UploadsController {
       throw new BadRequestException('Maximum 3 images allowed');
     }
 
-    const urls = await this.storage.uploadMany(files, 'user-designs', 'user-uploads');
+    const urls = await this.storage.uploadMany(
+      files,
+      'user-designs',
+      'user-uploads',
+    );
     return { urls };
   }
 

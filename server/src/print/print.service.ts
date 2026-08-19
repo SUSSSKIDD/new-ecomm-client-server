@@ -1,10 +1,9 @@
-import {
-  Injectable,
-  Logger,
-  NotFoundException,
-} from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma.service';
-import { CreatePrintProductDto, UpdatePrintProductDto } from './dto/print-product.dto';
+import {
+  CreatePrintProductDto,
+  UpdatePrintProductDto,
+} from './dto/print-product.dto';
 
 @Injectable()
 export class PrintService {
@@ -22,7 +21,9 @@ export class PrintService {
         image: dto.image ?? null,
       },
     });
-    this.logger.log(`Print product created: ${product.name} (${product.productType})`);
+    this.logger.log(
+      `Print product created: ${product.name} (${product.productType})`,
+    );
     return product;
   }
 
@@ -40,7 +41,9 @@ export class PrintService {
   }
 
   async findOne(id: string) {
-    const product = await this.prisma.printProduct.findUnique({ where: { id } });
+    const product = await this.prisma.printProduct.findUnique({
+      where: { id },
+    });
     if (!product) throw new NotFoundException(`Print product ${id} not found`);
     return product;
   }

@@ -9,10 +9,9 @@ export class AutoAssignService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly orderPool: OrderPoolService,
-  ) { }
+  ) {}
 
   async assignOrder(orderId: string): Promise<number> {
     return this.orderPool.broadcastOrder(orderId);
   }
-
 }

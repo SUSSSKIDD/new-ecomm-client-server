@@ -9,9 +9,14 @@ import { StoresModule } from '../stores/stores.module';
 import { DeliveryModule } from '../delivery/delivery.module';
 import { LedgerModule } from '../ledger/ledger.module';
 
-
 @Module({
-  imports: [PrismaModule, CartModule, StoresModule, DeliveryModule, LedgerModule],
+  imports: [
+    PrismaModule,
+    CartModule,
+    StoresModule,
+    DeliveryModule,
+    LedgerModule,
+  ],
   controllers: [OrdersController],
   providers: [OrdersService, OrderFulfillmentService, AllocationService],
   exports: [OrdersService],

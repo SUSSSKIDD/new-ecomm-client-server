@@ -4,9 +4,9 @@ import { StoreManagerController } from './store-manager.controller';
 import { PrismaModule } from '../prisma.module';
 
 @Module({
-    imports: [PrismaModule],
-    controllers: [StoreManagerController],
-    providers: [StoreManagerService],
-    exports: [StoreManagerService],
+  imports: [PrismaModule],
+  controllers: [StoreManagerController],
+  providers: [StoreManagerService],
+  exports: [StoreManagerService],
 })
-export class StoreManagerModule { }
+export class StoreManagerModule {}

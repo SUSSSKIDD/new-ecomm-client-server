@@ -7,7 +7,12 @@ export class SitemapService {
 
   async generateSitemap(): Promise<string> {
     const baseUrl = 'https://neyokart.com';
-    const urls: Array<{ url: string; lastmod?: string; changefreq: string; priority: number }> = [
+    const urls: Array<{
+      url: string;
+      lastmod?: string;
+      changefreq: string;
+      priority: number;
+    }> = [
       { url: baseUrl, changefreq: 'daily', priority: 1.0 },
       { url: `${baseUrl}/legal`, changefreq: 'monthly', priority: 0.8 },
       { url: `${baseUrl}/pickup-drop`, changefreq: 'weekly', priority: 0.7 },
@@ -36,9 +41,12 @@ export class SitemapService {
         select: { subcategory: true },
         distinct: ['subcategory'],
       });
-      
-      const label = storeType === 'PIZZA_TOWN' ? 'Pizza%20Town%20%26%20Food%20Zone' : 'Print%20Factory';
-      
+
+      const label =
+        storeType === 'PIZZA_TOWN'
+          ? 'Pizza%20Town%20%26%20Food%20Zone'
+          : 'Print%20Factory';
+
       for (const cat of categories) {
         urls.push({
           url: `${baseUrl}/category/${label}/${encodeURIComponent(cat.subcategory)}`,
@@ -68,15 +76,26 @@ export class SitemapService {
     return this.buildXml(urls);
   }
 
-  private buildXml(urls: Array<{ url: string; lastmod?: string; changefreq: string; priority: number }>): string {
-    const urlElements = urls.map(u => `
+  private buildXml(
+    urls: Array<{
+      url: string;
+      lastmod?: string;
+      changefreq: string;
+      priority: number;
+    }>,
+  ): string {
+    const urlElements = urls
+      .map(
+        (u) => `
       <url>
         <loc>${u.url}</loc>
         ${u.lastmod ? `<lastmod>${u.lastmod}</lastmod>` : ''}
         <changefreq>${u.changefreq}</changefreq>
         <priority>${u.priority}</priority>
       </url>
-    `).join('');
+    `,
+      )
+      .join('');
 
     return `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"

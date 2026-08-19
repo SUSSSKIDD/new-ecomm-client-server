@@ -1,4 +1,10 @@
-import { IsString, IsNotEmpty, IsNumber, IsOptional, IsIn } from 'class-validator';
+import {
+  IsString,
+  IsNotEmpty,
+  IsNumber,
+  IsOptional,
+  IsIn,
+} from 'class-validator';
 import { STORE_CATEGORIES } from '../../common/constants/store-categories';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
@@ -30,5 +36,5 @@ export class CreateStoreDto {
   @IsString()
   @IsOptional()
   @IsIn(STORE_CATEGORIES)
-  storeType?: typeof STORE_CATEGORIES[number];
+  storeType?: (typeof STORE_CATEGORIES)[number];
 }

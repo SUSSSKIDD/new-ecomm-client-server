@@ -12,7 +12,10 @@ import {
 import { AuthGuard } from '@nestjs/passport';
 import { ApiTags, ApiBearerAuth, ApiOperation } from '@nestjs/swagger';
 import { PrintService } from './print.service';
-import { CreatePrintProductDto, UpdatePrintProductDto } from './dto/print-product.dto';
+import {
+  CreatePrintProductDto,
+  UpdatePrintProductDto,
+} from './dto/print-product.dto';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 

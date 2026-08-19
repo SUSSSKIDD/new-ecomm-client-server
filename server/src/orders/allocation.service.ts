@@ -87,20 +87,22 @@ export class AllocationService {
     }
 
     // ── Variant Stock Logic ──
-    const variantIds = cartItems.map(i => i.variantId).filter(Boolean) as string[];
+    const variantIds = cartItems
+      .map((i) => i.variantId)
+      .filter(Boolean) as string[];
     if (variantIds.length > 0) {
-        const variants = await this.prisma.productVariant.findMany({
-            where: { id: { in: variantIds } },
-            select: { id: true, productId: true, stock: true }
-        });
-        
-        for (const v of variants) {
-            for (const [storeId, storeInv] of inventoryMap.entries()) {
-                if (storeInv.has(v.productId)) {
-                    storeInv.set(`${v.productId}_${v.id}`, v.stock);
-                }
-            }
+      const variants = await this.prisma.productVariant.findMany({
+        where: { id: { in: variantIds } },
+        select: { id: true, productId: true, stock: true },
+      });
+
+      for (const v of variants) {
+        for (const [storeId, storeInv] of inventoryMap.entries()) {
+          if (storeInv.has(v.productId)) {
+            storeInv.set(`${v.productId}_${v.id}`, v.stock);
+          }
         }
+      }
     }
 
     const storeNameMap = new Map<string, string>(
@@ -111,12 +113,21 @@ export class AllocationService {
     );
 
     // Helper to get composite key for an item
-    const getCKey = (item: CartItemInput) => item.variantId ? `${item.productId}_${item.variantId}` : item.productId;
+    const getCKey = (item: CartItemInput) =>
+      item.variantId ? `${item.productId}_${item.variantId}` : item.productId;
 
     // ── Phase 0: Explicit Cross-Category Check ──
-    const storeTypes = new Set(cartItems.map(i => (i as any).storeType).filter(Boolean));
+    const storeTypes = new Set(
+      cartItems.map((i) => (i as any).storeType).filter(Boolean),
+    );
     if (storeTypes.size > 1) {
-      return this.resolveMultiStoreAllocation(cartItems, nearbyStores, inventoryMap, storeNameMap, storeDistMap);
+      return this.resolveMultiStoreAllocation(
+        cartItems,
+        nearbyStores,
+        inventoryMap,
+        storeNameMap,
+        storeDistMap,
+      );
     }
 
     // ── Phase 1: Single-store check ──
@@ -140,7 +151,10 @@ export class AllocationService {
               storeId: store.id,
               storeName: store.name,
               distance: store.distance,
-              items: cartItems.map((item) => ({ ...item, total: item.price * item.quantity })),
+              items: cartItems.map((item) => ({
+                ...item,
+                total: item.price * item.quantity,
+              })),
             },
           ],
           unfulfillableItems: [],
@@ -148,7 +162,13 @@ export class AllocationService {
       }
     }
 
-    return this.resolveMultiStoreAllocation(cartItems, nearbyStores, inventoryMap, storeNameMap, storeDistMap);
+    return this.resolveMultiStoreAllocation(
+      cartItems,
+      nearbyStores,
+      inventoryMap,
+      storeNameMap,
+      storeDistMap,
+    );
   }
 
   private resolveMultiStoreAllocation(
@@ -158,14 +178,15 @@ export class AllocationService {
     storeNameMap: Map<string, string>,
     storeDistMap: Map<string, number>,
   ): AllocationResult {
-    const getCKey = (item: CartItemInput) => item.variantId ? `${item.productId}_${item.variantId}` : item.productId;
+    const getCKey = (item: CartItemInput) =>
+      item.variantId ? `${item.productId}_${item.variantId}` : item.productId;
 
     // Use a unique index for each individual cart item to avoid product ID collisions
     // CartItemID -> RemainingQuantity
     const remaining = new Map<number, number>(
       cartItems.map((item, idx) => [idx, item.quantity]),
     );
-    
+
     const allocations = new Map<string, AllocatedItem[]>();
     const exhaustedStores = new Set<string>();
 
@@ -177,7 +198,10 @@ export class AllocationService {
       for (const store of nearbyStores) {
         if (exhaustedStores.has(store.id)) continue;
         const storeInv = inventoryMap.get(store.id);
-        if (!storeInv) { exhaustedStores.add(store.id); continue; }
+        if (!storeInv) {
+          exhaustedStores.add(store.id);
+          continue;
+        }
 
         const assignments: { cartItemIdx: number; quantity: number }[] = [];
         let score = 0;
@@ -200,15 +224,19 @@ export class AllocationService {
       }
 
       if (!bestStoreId || bestCoverScore === 0) {
-         const unfulfillable: CartItemInput[] = [];
-         for (const [idx, qty] of remaining) {
-           unfulfillable.push({ ...cartItems[idx], quantity: qty });
-         }
-         return {
-           type: 'MULTI_STORE',
-           storeAllocations: this.buildStoreAllocations(allocations, storeNameMap, storeDistMap),
-           unfulfillableItems: unfulfillable,
-         };
+        const unfulfillable: CartItemInput[] = [];
+        for (const [idx, qty] of remaining) {
+          unfulfillable.push({ ...cartItems[idx], quantity: qty });
+        }
+        return {
+          type: 'MULTI_STORE',
+          storeAllocations: this.buildStoreAllocations(
+            allocations,
+            storeNameMap,
+            storeDistMap,
+          ),
+          unfulfillableItems: unfulfillable,
+        };
       }
 
       // Assign items
@@ -216,7 +244,7 @@ export class AllocationService {
       for (const assignment of bestItemAssignments) {
         const item = cartItems[assignment.cartItemIdx];
         const key = getCKey(item);
-        
+
         storeItems.push({
           productId: item.productId,
           name: item.name,
@@ -228,7 +256,8 @@ export class AllocationService {
         });
 
         // Update remaining
-        const newRem = remaining.get(assignment.cartItemIdx)! - assignment.quantity;
+        const newRem =
+          remaining.get(assignment.cartItemIdx)! - assignment.quantity;
         if (newRem <= 0) remaining.delete(assignment.cartItemIdx);
         else remaining.set(assignment.cartItemIdx, newRem);
 
@@ -241,7 +270,11 @@ export class AllocationService {
 
     return {
       type: 'MULTI_STORE',
-      storeAllocations: this.buildStoreAllocations(allocations, storeNameMap, storeDistMap),
+      storeAllocations: this.buildStoreAllocations(
+        allocations,
+        storeNameMap,
+        storeDistMap,
+      ),
       unfulfillableItems: [],
     };
   }

@@ -47,7 +47,7 @@ export class DeliveryController {
     private readonly autoAssignService: AutoAssignService,
     private readonly orderClaimService: OrderClaimService,
     private readonly orderPoolService: OrderPoolService,
-  ) { }
+  ) {}
 
   /** Broadcast currently active pool pending orders + parcels to a newly FREE rider (fire-and-forget). */
   private broadcastPendingToRider(riderId: string): void {
@@ -82,10 +82,7 @@ export class DeliveryController {
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Roles('ADMIN', 'STORE_MANAGER')
   @ApiOperation({ summary: 'List all delivery persons (paginated)' })
-  findAllPersons(
-    @Query('page') page?: string,
-    @Query('limit') limit?: string,
-  ) {
+  findAllPersons(@Query('page') page?: string, @Query('limit') limit?: string) {
     return this.deliveryService.findAllPersons(
       page ? Math.max(1, parseInt(page, 10)) : 1,
       limit ? Math.min(100, Math.max(1, parseInt(limit, 10))) : 50,
@@ -162,7 +159,10 @@ export class DeliveryController {
   @ApiBearerAuth()
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Roles('ADMIN', 'STORE_MANAGER')
-  @ApiOperation({ summary: 'List all delivery persons with distance from a store (Admin/Store only)' })
+  @ApiOperation({
+    summary:
+      'List all delivery persons with distance from a store (Admin/Store only)',
+  })
   async findAllNearStore(@Param('storeId') storeId: string) {
     return this.deliveryService.findAllNearStore(storeId);
   }
@@ -189,7 +189,9 @@ export class DeliveryController {
   @ApiBearerAuth()
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Roles('DELIVERY_PERSON')
-  @ApiOperation({ summary: 'Get delivery history (completed orders + parcels)' })
+  @ApiOperation({
+    summary: 'Get delivery history (completed orders + parcels)',
+  })
   getDeliveryHistory(@Req() req: AuthenticatedRequest) {
     return this.deliveryService.getDeliveryHistory(req.user.sub);
   }
@@ -200,7 +202,9 @@ export class DeliveryController {
   @ApiBearerAuth()
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Roles('DELIVERY_PERSON')
-  @ApiOperation({ summary: 'List available orders for claiming (SSE reconnection fallback)' })
+  @ApiOperation({
+    summary: 'List available orders for claiming (SSE reconnection fallback)',
+  })
   getAvailableOrders(@Req() req: AuthenticatedRequest) {
     return this.orderPoolService.getAvailableOrdersForRider(req.user.sub);
   }
@@ -239,12 +243,17 @@ export class DeliveryController {
     @Req() req: AuthenticatedRequest,
     @Param('id', ParseUUIDPipe) id: string,
   ) {
-    const response = await this.deliveryService.rejectAssignment(req.user.sub, id);
+    const response = await this.deliveryService.rejectAssignment(
+      req.user.sub,
+      id,
+    );
 
     // Re-broadcast for other riders to claim
     this.autoAssignService
       .assignOrder(id)
-      .catch((err) => this.logger.error(`Re-assign after reject error: ${err.message}`));
+      .catch((err) =>
+        this.logger.error(`Re-assign after reject error: ${err.message}`),
+      );
 
     return response;
   }
@@ -306,11 +315,19 @@ export class DeliveryController {
     @Req() req: AuthenticatedRequest,
     @Param('id', ParseUUIDPipe) id: string,
   ) {
-    const response = await this.deliveryService.rejectParcelAssignment(req.user.sub, id);
+    const response = await this.deliveryService.rejectParcelAssignment(
+      req.user.sub,
+      id,
+    );
 
     // Broadcast back to pool
-    this.orderPoolService.broadcastParcelOrder(id)
-      .catch(err => this.logger.error(`Re-broadcast parcel after reject error: ${err.message}`));
+    this.orderPoolService
+      .broadcastParcelOrder(id)
+      .catch((err) =>
+        this.logger.error(
+          `Re-broadcast parcel after reject error: ${err.message}`,
+        ),
+      );
 
     return response;
   }

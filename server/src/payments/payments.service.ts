@@ -140,11 +140,15 @@ export class PaymentsService {
     }
 
     if (order.status === 'CANCELLED') {
-      throw new BadRequestException('Cannot process payment for a cancelled order');
+      throw new BadRequestException(
+        'Cannot process payment for a cancelled order',
+      );
     }
 
     if (order.status === 'DELIVERED') {
-      throw new BadRequestException('Cannot process payment for an already delivered order');
+      throw new BadRequestException(
+        'Cannot process payment for an already delivered order',
+      );
     }
 
     if (order.paymentMethod !== PaymentMethod.RAZORPAY) {
@@ -194,11 +198,15 @@ export class PaymentsService {
     }
 
     if (order.status === 'CANCELLED') {
-      throw new BadRequestException('Cannot verify payment for a cancelled order');
+      throw new BadRequestException(
+        'Cannot verify payment for a cancelled order',
+      );
     }
 
     if (order.status === 'DELIVERED') {
-      throw new BadRequestException('Cannot verify payment for an already delivered order');
+      throw new BadRequestException(
+        'Cannot verify payment for an already delivered order',
+      );
     }
 
     if (this.isMockMode) {
@@ -284,12 +292,16 @@ export class PaymentsService {
           await this.ordersService.findByRazorpayOrderId(razorpayOrderId);
 
         if (order.paymentStatus === PaymentStatus.PAID) {
-          this.logger.log(`Webhook: order ${order.orderNumber} already paid, skipping`);
+          this.logger.log(
+            `Webhook: order ${order.orderNumber} already paid, skipping`,
+          );
           return { status: 'already_paid' };
         }
 
         if (order.status === 'CANCELLED') {
-          this.logger.warn(`Webhook: order ${order.orderNumber} is cancelled, skipping payment`);
+          this.logger.warn(
+            `Webhook: order ${order.orderNumber} is cancelled, skipping payment`,
+          );
           return { status: 'order_cancelled' };
         }
 

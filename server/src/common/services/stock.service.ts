@@ -54,15 +54,30 @@ export class StockService {
     const aggregatedGlobalItems = Array.from(globalMap.values());
 
     if (aggregatedVariantItems.length > 0) {
-      await this.adjustVariantStock(tx, aggregatedVariantItems, direction, strict);
+      await this.adjustVariantStock(
+        tx,
+        aggregatedVariantItems,
+        direction,
+        strict,
+      );
     }
 
     if (aggregatedStoreItems.length > 0) {
-      await this.adjustStoreInventory(tx, aggregatedStoreItems, direction, strict);
+      await this.adjustStoreInventory(
+        tx,
+        aggregatedStoreItems,
+        direction,
+        strict,
+      );
     }
 
     if (aggregatedGlobalItems.length > 0) {
-      await this.adjustProductStock(tx, aggregatedGlobalItems, direction, strict);
+      await this.adjustProductStock(
+        tx,
+        aggregatedGlobalItems,
+        direction,
+        strict,
+      );
     }
   }
 
@@ -84,8 +99,7 @@ export class StockService {
     });
 
     const op = direction === 'decrement' ? '-' : '+';
-    const guard =
-      direction === 'decrement' ? ' AND si."stock" >= v.qty' : '';
+    const guard = direction === 'decrement' ? ' AND si."stock" >= v.qty' : '';
 
     const updatedCount = await tx.$executeRawUnsafe(
       `UPDATE "StoreInventory" AS si
@@ -121,8 +135,7 @@ export class StockService {
     });
 
     const op = direction === 'decrement' ? '-' : '+';
-    const guard =
-      direction === 'decrement' ? ' AND p."stock" >= v.qty' : '';
+    const guard = direction === 'decrement' ? ' AND p."stock" >= v.qty' : '';
 
     const updatedCount = await tx.$executeRawUnsafe(
       `UPDATE "Product" AS p
@@ -157,8 +170,7 @@ export class StockService {
     });
 
     const op = direction === 'decrement' ? '-' : '+';
-    const guard =
-      direction === 'decrement' ? ' AND pv."stock" >= v.qty' : '';
+    const guard = direction === 'decrement' ? ' AND pv."stock" >= v.qty' : '';
 
     const updatedCount = await tx.$executeRawUnsafe(
       `UPDATE "ProductVariant" AS pv

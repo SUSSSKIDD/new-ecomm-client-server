@@ -27,10 +27,10 @@ export class AuthService {
     private config: ConfigService,
     private cache: RedisCacheService,
   ) {
-    let phoneParam = this.config.get<string>('SUPER_ADMIN_PHONE', '');
+    const phoneParam = this.config.get<string>('SUPER_ADMIN_PHONE', '');
     this.superAdminPhone = phoneParam.replace(/^["']|["']$/g, '');
 
-    let pinParam = this.config.get<string>('SUPER_ADMIN_PIN', '');
+    const pinParam = this.config.get<string>('SUPER_ADMIN_PIN', '');
     const cleanPin = pinParam.replace(/^["']|["']$/g, '');
     // Pre-hash the pin synchronously at startup for comparison later
     this.superAdminPinHash = cleanPin ? bcrypt.hashSync(cleanPin, 10) : '';
@@ -109,13 +109,17 @@ export class AuthService {
     });
 
     if (!manager || !manager.isActive) {
-      throw new UnauthorizedException('Invalid credentials or inactive account');
+      throw new UnauthorizedException(
+        'Invalid credentials or inactive account',
+      );
     }
 
     const rlKey = `pin:rl:store:${dto.phone}`;
     const attempts = await this.cache.incr(rlKey, 300);
     if (attempts > 5) {
-      throw new UnauthorizedException('Too many failed attempts. Lockout for 5 minutes.');
+      throw new UnauthorizedException(
+        'Too many failed attempts. Lockout for 5 minutes.',
+      );
     }
 
     const isPinValid = await bcrypt.compare(dto.pin, manager.pinHash);
@@ -159,7 +163,9 @@ export class AuthService {
     const rlKey = `pin:rl:superadmin:${dto.phone}`;
     const attempts = await this.cache.incr(rlKey, 300);
     if (attempts > 5) {
-      throw new UnauthorizedException('Too many failed attempts. Lockout for 5 minutes.');
+      throw new UnauthorizedException(
+        'Too many failed attempts. Lockout for 5 minutes.',
+      );
     }
 
     const isPinValid = await bcrypt.compare(dto.pin, this.superAdminPinHash);
@@ -211,13 +217,17 @@ export class AuthService {
     });
 
     if (!manager || !manager.isActive) {
-      throw new UnauthorizedException('Invalid credentials or inactive account');
+      throw new UnauthorizedException(
+        'Invalid credentials or inactive account',
+      );
     }
 
     const rlKey = `pin:rl:parcel:${dto.phone}`;
     const attempts = await this.cache.incr(rlKey, 300);
     if (attempts > 5) {
-      throw new UnauthorizedException('Too many failed attempts. Lockout for 5 minutes.');
+      throw new UnauthorizedException(
+        'Too many failed attempts. Lockout for 5 minutes.',
+      );
     }
 
     const isPinValid = await bcrypt.compare(dto.pin, manager.pinHash);

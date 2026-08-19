@@ -63,7 +63,9 @@ export class UsersService {
       throw new NotFoundException('User not found');
     }
     if (user.name) {
-      throw new ForbiddenException('Name has already been set and cannot be changed');
+      throw new ForbiddenException(
+        'Name has already been set and cannot be changed',
+      );
     }
     return this.prisma.user.update({
       where: { id: userId },

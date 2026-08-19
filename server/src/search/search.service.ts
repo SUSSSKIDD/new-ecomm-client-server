@@ -85,7 +85,9 @@ export class SearchService {
 
     const normalizedQ = (q ?? '').trim().toLowerCase();
     const paramHash = createHash('md5')
-      .update(`${normalizedQ}|${category ?? ''}|${subCategory ?? ''}|${isGrocery ?? ''}|${inStock}|${sortBy}|${limit}|${cursor ?? ''}|${page ?? ''}`)
+      .update(
+        `${normalizedQ}|${category ?? ''}|${subCategory ?? ''}|${isGrocery ?? ''}|${inStock}|${sortBy}|${limit}|${cursor ?? ''}|${page ?? ''}`,
+      )
       .digest('hex')
       .slice(0, 12);
     const cacheKey = `search:${paramHash}`;
@@ -145,17 +147,18 @@ export class SearchService {
       const decoded = this.decodeCursor(cursor);
       const fetchLimit = limit + 1;
 
-      const cursorCondition: Prisma.ProductWhereInput = decoded.createdAt && decoded.id
-        ? {
-            OR: [
-              { createdAt: { lt: new Date(decoded.createdAt) } },
-              {
-                createdAt: new Date(decoded.createdAt),
-                id: { lt: decoded.id },
-              },
-            ],
-          }
-        : {};
+      const cursorCondition: Prisma.ProductWhereInput =
+        decoded.createdAt && decoded.id
+          ? {
+              OR: [
+                { createdAt: { lt: new Date(decoded.createdAt) } },
+                {
+                  createdAt: new Date(decoded.createdAt),
+                  id: { lt: decoded.id },
+                },
+              ],
+            }
+          : {};
       const cursorWhere: Prisma.ProductWhereInput = {
         AND: [where, cursorCondition],
       };

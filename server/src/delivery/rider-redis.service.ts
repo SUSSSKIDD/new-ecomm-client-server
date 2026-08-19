@@ -101,7 +101,7 @@ export class RiderRedisService implements OnModuleDestroy {
     if (!this.client) return;
     try {
       await this.client.del(`avail:order:${orderId}`);
-    } catch { }
+    } catch {}
   }
 
   /** Batch-get order snapshots using MGET (single round-trip). */
@@ -130,7 +130,11 @@ export class RiderRedisService implements OnModuleDestroy {
    * Returns true if lock acquired (this rider wins), false otherwise.
    * FAIL CLOSED: returns false on error so multiple riders cannot claim simultaneously.
    */
-  async acquireLock(orderId: string, riderId: string, ttlSeconds = TTL.LOCK): Promise<boolean> {
+  async acquireLock(
+    orderId: string,
+    riderId: string,
+    ttlSeconds = TTL.LOCK,
+  ): Promise<boolean> {
     if (!this.client) return false;
     try {
       const result = await this.client.set(
@@ -170,7 +174,9 @@ export class RiderRedisService implements OnModuleDestroy {
   async checkIdempotency(orderId: string, riderId: string): Promise<boolean> {
     if (!this.client) return false;
     try {
-      const val = await this.client.get(`idempotent:claim:${orderId}:${riderId}`);
+      const val = await this.client.get(
+        `idempotent:claim:${orderId}:${riderId}`,
+      );
       return val !== null;
     } catch {
       return false;
@@ -187,7 +193,7 @@ export class RiderRedisService implements OnModuleDestroy {
         'EX',
         TTL.IDEMPOTENCY,
       );
-    } catch { }
+    } catch {}
   }
 
   // ═══════════════════════════════════════════════════════════════
@@ -195,11 +201,14 @@ export class RiderRedisService implements OnModuleDestroy {
   // ═══════════════════════════════════════════════════════════════
 
   /** Mark a rider as online. TTL 5 minutes (must be refreshed by GPS updates). */
-  async setRiderOnline(riderId: string, ttlSeconds = TTL.RIDER_ONLINE): Promise<void> {
+  async setRiderOnline(
+    riderId: string,
+    ttlSeconds = TTL.RIDER_ONLINE,
+  ): Promise<void> {
     if (!this.client) return;
     try {
       await this.client.set(`rider:online:${riderId}`, '1', 'EX', ttlSeconds);
-    } catch { }
+    } catch {}
   }
 
   /** Mark a rider as offline manually. */
@@ -207,7 +216,7 @@ export class RiderRedisService implements OnModuleDestroy {
     if (!this.client) return;
     try {
       await this.client.del(`rider:online:${riderId}`);
-    } catch { }
+    } catch {}
   }
 
   /** Check if a rider is currently online. */
@@ -222,7 +231,11 @@ export class RiderRedisService implements OnModuleDestroy {
   }
 
   /** Cache rider location for fast proximity queries. */
-  async setRiderLocation(riderId: string, lat: number, lng: number): Promise<void> {
+  async setRiderLocation(
+    riderId: string,
+    lat: number,
+    lng: number,
+  ): Promise<void> {
     if (!this.client) return;
     try {
       await this.client.set(
@@ -231,11 +244,13 @@ export class RiderRedisService implements OnModuleDestroy {
         'EX',
         TTL.LOCATION,
       );
-    } catch { }
+    } catch {}
   }
 
   /** Get a single rider's cached location. */
-  async getRiderLocation(riderId: string): Promise<{ lat: number; lng: number } | null> {
+  async getRiderLocation(
+    riderId: string,
+  ): Promise<{ lat: number; lng: number } | null> {
     if (!this.client) return null;
     try {
       const raw = await this.client.get(`rider:loc:${riderId}`);
@@ -247,7 +262,9 @@ export class RiderRedisService implements OnModuleDestroy {
   }
 
   /** Batch-get multiple rider locations in a single call. */
-  async getRiderLocations(riderIds: string[]): Promise<({ lat: number; lng: number } | null)[]> {
+  async getRiderLocations(
+    riderIds: string[],
+  ): Promise<({ lat: number; lng: number } | null)[]> {
     if (!this.client || riderIds.length === 0) return riderIds.map(() => null);
     try {
       const keys = riderIds.map((id) => `rider:loc:${id}`);
@@ -272,7 +289,8 @@ export class RiderRedisService implements OnModuleDestroy {
     if (!this.client || riderIds.length === 0) return;
     try {
       const key = `rider:eligible:${orderId}`;
-      await this.client.pipeline()
+      await this.client
+        .pipeline()
         .sadd(key, ...riderIds)
         .expire(key, TTL.ELIGIBLE_RIDERS)
         .exec();
@@ -296,7 +314,7 @@ export class RiderRedisService implements OnModuleDestroy {
     if (!this.client) return;
     try {
       await this.client.del(`rider:eligible:${orderId}`);
-    } catch { }
+    } catch {}
   }
 
   // ═══════════════════════════════════════════════════════════════
@@ -336,6 +354,6 @@ export class RiderRedisService implements OnModuleDestroy {
     if (!this.client) return;
     try {
       await this.client.del(this.pinAttemptKey(orderId));
-    } catch { }
+    } catch {}
   }
 }

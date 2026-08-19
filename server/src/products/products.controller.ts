@@ -14,7 +14,10 @@ import {
   Req,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
-import { FilesInterceptor, AnyFilesInterceptor } from '@nestjs/platform-express';
+import {
+  FilesInterceptor,
+  AnyFilesInterceptor,
+} from '@nestjs/platform-express';
 import {
   ApiTags,
   ApiOperation,
@@ -45,7 +48,7 @@ const MULTER_IMAGE_OPTIONS = {
 @ApiTags('products')
 @Controller('products')
 export class ProductsController {
-  constructor(private readonly productsService: ProductsService) { }
+  constructor(private readonly productsService: ProductsService) {}
 
   // ─── PUBLIC ENDPOINTS ─────────────────────────────────────────
 
@@ -63,13 +66,13 @@ export class ProductsController {
     @Param('id', ParseUUIDPipe) id: string,
     @Query('lat') lat?: string,
     @Query('lng') lng?: string,
-    @Query('pincode') pincode?: string
+    @Query('pincode') pincode?: string,
   ) {
     const product = await this.productsService.findOne(
       id,
       lat ? parseFloat(lat) : undefined,
       lng ? parseFloat(lng) : undefined,
-      pincode
+      pincode,
     );
     return this.stripStorePriceFromResponse(product);
   }
@@ -78,7 +81,9 @@ export class ProductsController {
   @ApiBearerAuth()
   @UseGuards(AuthGuard('jwt'), RolesGuard, StoreGuard)
   @Roles('ADMIN', 'STORE_MANAGER')
-  @ApiOperation({ summary: 'List products for my store (Store Admin / Store Manager)' })
+  @ApiOperation({
+    summary: 'List products for my store (Store Admin / Store Manager)',
+  })
   findStoreProducts(@Req() req: any) {
     const storeId = req.user?.storeId;
     if (!storeId && req.user.role !== 'ADMIN') {
@@ -114,7 +119,10 @@ export class ProductsController {
         isGrocery: { type: 'boolean' },
         storeLocation: { type: 'string' },
         images: { type: 'array', items: { type: 'string', format: 'binary' } },
-        variantsJson: { type: 'string', description: 'JSON string of variants' },
+        variantsJson: {
+          type: 'string',
+          description: 'JSON string of variants',
+        },
       },
       required: ['name', 'price', 'category', 'stock'],
     },
@@ -125,11 +133,11 @@ export class ProductsController {
     @Req() req: any,
   ) {
     const files = allFiles || [];
-    const productImages = files.filter(f => f.fieldname === 'images');
+    const productImages = files.filter((f) => f.fieldname === 'images');
     const variantImageMap: Record<number, Express.Multer.File[]> = {};
     files
-      .filter(f => f.fieldname.startsWith('variantImage_'))
-      .forEach(f => {
+      .filter((f) => f.fieldname.startsWith('variantImage_'))
+      .forEach((f) => {
         const idx = parseInt(f.fieldname.split('_')[1], 10);
         if (!variantImageMap[idx]) variantImageMap[idx] = [];
         variantImageMap[idx].push(f);
@@ -139,7 +147,12 @@ export class ProductsController {
       dto.variants = JSON.parse(dto['variantsJson']);
     }
 
-    return this.productsService.createWithImages(dto, productImages, req.user?.storeId, variantImageMap);
+    return this.productsService.createWithImages(
+      dto,
+      productImages,
+      req.user?.storeId,
+      variantImageMap,
+    );
   }
 
   @Patch(':id')
@@ -155,7 +168,12 @@ export class ProductsController {
     @UploadedFiles() files: Express.Multer.File[],
     @Req() req: any,
   ) {
-    return this.productsService.updateWithImages(id, dto, files, req.user?.storeId);
+    return this.productsService.updateWithImages(
+      id,
+      dto,
+      files,
+      req.user?.storeId,
+    );
   }
 
   @Delete(':id')
@@ -204,7 +222,11 @@ export class ProductsController {
     @Body() dto: RemoveImageDto,
     @Req() req: any,
   ) {
-    return this.productsService.removeImage(id, dto.imageUrl, req.user?.storeId);
+    return this.productsService.removeImage(
+      id,
+      dto.imageUrl,
+      req.user?.storeId,
+    );
   }
 
   @Post(':id/variants')
@@ -233,7 +255,11 @@ export class ProductsController {
     @Body() dto: any,
     @UploadedFiles() files: Express.Multer.File[],
   ) {
-    return this.productsService.updateVariantWithImages(variantId, dto, files || []);
+    return this.productsService.updateVariantWithImages(
+      variantId,
+      dto,
+      files || [],
+    );
   }
 
   @Delete(':id/variants/:variantId')
@@ -265,10 +291,13 @@ export class ProductsController {
   private stripStorePriceFromResponse(res: any) {
     if (!res) return res;
     if (Array.isArray(res)) {
-      return res.map(p => this.stripStorePrice(p));
+      return res.map((p) => this.stripStorePrice(p));
     }
     if (res.data && Array.isArray(res.data)) {
-      return { ...res, data: res.data.map((p: any) => this.stripStorePrice(p)) };
+      return {
+        ...res,
+        data: res.data.map((p: any) => this.stripStorePrice(p)),
+      };
     }
     return this.stripStorePrice(res);
   }

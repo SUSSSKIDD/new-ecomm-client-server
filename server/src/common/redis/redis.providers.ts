@@ -1,7 +1,11 @@
 import { Provider, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import Redis from 'ioredis';
-import { REDIS_CACHE, REDIS_DELIVERY, REDIS_CACHE_SUB } from './redis.constants.js';
+import {
+  REDIS_CACHE,
+  REDIS_DELIVERY,
+  REDIS_CACHE_SUB,
+} from './redis.constants.js';
 
 function createRedisFactory(
   token: symbol,
@@ -24,7 +28,9 @@ function createRedisFactory(
         lazyConnect: false,
       });
       client.on('connect', () => logger.log(`${label} connected`));
-      client.on('error', (err) => logger.error(`${label} error: ${err.message}`));
+      client.on('error', (err) =>
+        logger.error(`${label} error: ${err.message}`),
+      );
       return client;
     },
     inject: [ConfigService],

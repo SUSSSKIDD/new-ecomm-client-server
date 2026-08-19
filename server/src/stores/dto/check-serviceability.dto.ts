@@ -13,7 +13,11 @@ export class CheckServiceabilityDto {
   @IsNumber()
   lng: number;
 
-  @ApiProperty({ description: 'Optional user pincode', example: '221104', required: false })
+  @ApiProperty({
+    description: 'Optional user pincode',
+    example: '221104',
+    required: false,
+  })
   @IsOptional()
   @IsString()
   pincode?: string;

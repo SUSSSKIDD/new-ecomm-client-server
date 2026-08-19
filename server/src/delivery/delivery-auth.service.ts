@@ -13,7 +13,7 @@ export class DeliveryAuthService {
     private readonly prisma: PrismaService,
     private readonly jwtService: JwtService,
     private readonly cache: RedisCacheService,
-  ) { }
+  ) {}
 
   /**
    * Authenticate a delivery person by phone + PIN.
@@ -31,7 +31,9 @@ export class DeliveryAuthService {
     const rlKey = `pin:rl:delivery:${dto.phone}`;
     const attempts = await this.cache.incr(rlKey, 300);
     if (attempts > 5) {
-      throw new UnauthorizedException('Too many failed attempts. Lockout for 5 minutes.');
+      throw new UnauthorizedException(
+        'Too many failed attempts. Lockout for 5 minutes.',
+      );
     }
 
     const pinMatch = await bcrypt.compare(dto.pin, person.pinHash);

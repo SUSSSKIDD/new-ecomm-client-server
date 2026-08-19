@@ -48,7 +48,11 @@ export class OrderFulfillmentService {
     lng: number,
     cartItems: CartItemInput[],
   ): Promise<FulfillmentResult> {
-    const allocation = await this.allocationService.allocate(lat, lng, cartItems);
+    const allocation = await this.allocationService.allocate(
+      lat,
+      lng,
+      cartItems,
+    );
 
     const availableItems: FulfillmentItem[] = [];
     for (const storeAlloc of allocation.storeAllocations) {
@@ -69,8 +73,8 @@ export class OrderFulfillmentService {
       }
     }
 
-    const unavailableItems: FulfillmentItem[] = allocation.unfulfillableItems.map(
-      (item) => ({
+    const unavailableItems: FulfillmentItem[] =
+      allocation.unfulfillableItems.map((item) => ({
         productId: item.productId,
         name: item.name,
         price: item.price,
@@ -81,8 +85,7 @@ export class OrderFulfillmentService {
         reason: 'out_of_stock',
         variantId: item.variantId,
         variantLabel: item.variantLabel,
-      }),
-    );
+      }));
 
     return {
       availableItems,
@@ -127,8 +130,8 @@ export class OrderFulfillmentService {
       }
     }
 
-    const unavailableItems: FulfillmentItem[] = allocation.unfulfillableItems.map(
-      (item) => ({
+    const unavailableItems: FulfillmentItem[] =
+      allocation.unfulfillableItems.map((item) => ({
         productId: item.productId,
         name: item.name,
         price: item.price,
@@ -139,8 +142,7 @@ export class OrderFulfillmentService {
         reason: 'out_of_stock',
         variantId: item.variantId,
         variantLabel: item.variantLabel,
-      }),
-    );
+      }));
 
     return {
       availableItems,

@@ -19,7 +19,7 @@ export class SmsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly msg91: Msg91Service,
-  ) { }
+  ) {}
 
   // ── OTP (replaces TwilioService) ──────────────────────────────────
 

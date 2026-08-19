@@ -4,9 +4,9 @@ import { LedgerController } from './ledger.controller';
 import { PrismaModule } from '../prisma.module';
 
 @Module({
-    imports: [PrismaModule],
-    controllers: [LedgerController],
-    providers: [LedgerService],
-    exports: [LedgerService],
+  imports: [PrismaModule],
+  controllers: [LedgerController],
+  providers: [LedgerService],
+  exports: [LedgerService],
 })
-export class LedgerModule { }
+export class LedgerModule {}

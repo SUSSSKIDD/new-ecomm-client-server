@@ -1,4 +1,11 @@
-import { Inject, Injectable, Logger, OnModuleDestroy, OnModuleInit, ServiceUnavailableException } from '@nestjs/common';
+import {
+  Inject,
+  Injectable,
+  Logger,
+  OnModuleDestroy,
+  OnModuleInit,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { Subject } from 'rxjs';
 import Redis from 'ioredis';
 import { REDIS_CACHE, REDIS_CACHE_SUB } from '../common/redis/redis.constants';
@@ -34,13 +41,18 @@ export class UserSseService implements OnModuleInit, OnModuleDestroy {
   ) {}
 
   onModuleInit() {
-    this.staleCheckInterval = setInterval(() => {
-      this.sweepStaleConnections();
-    }, 2 * 60 * 1000);
+    this.staleCheckInterval = setInterval(
+      () => {
+        this.sweepStaleConnections();
+      },
+      2 * 60 * 1000,
+    );
 
     if (this.subscriber) {
       this.subscriber.subscribe(UserSseService.CHANNEL).catch((err: any) => {
-        this.logger.error(`Failed to subscribe to ${UserSseService.CHANNEL}: ${err?.message || err}`);
+        this.logger.error(
+          `Failed to subscribe to ${UserSseService.CHANNEL}: ${err?.message || err}`,
+        );
       });
       this.subscriber.on('message', (channel, message) => {
         if (channel !== UserSseService.CHANNEL) return;
@@ -52,7 +64,9 @@ export class UserSseService implements OnModuleInit, OnModuleDestroy {
             entry.lastActivity = Date.now();
           }
         } catch (err: any) {
-          this.logger.error(`Pub/Sub message parse error: ${err?.message || err}`);
+          this.logger.error(
+            `Pub/Sub message parse error: ${err?.message || err}`,
+          );
         }
       });
       this.logger.log('User SSE Pub/Sub subscriber initialized');
@@ -72,7 +86,9 @@ export class UserSseService implements OnModuleInit, OnModuleDestroy {
 
   register(userId: string): Subject<SseEvent> {
     if (this.connections.size >= UserSseService.MAX_CONNECTIONS) {
-      throw new ServiceUnavailableException('User SSE connection limit reached');
+      throw new ServiceUnavailableException(
+        'User SSE connection limit reached',
+      );
     }
     this.unregister(userId);
 
@@ -98,12 +114,14 @@ export class UserSseService implements OnModuleInit, OnModuleDestroy {
     const payload = JSON.stringify(message);
     const entry = this.connections.get(userId);
     if (entry) {
-        entry.subject.next({ data: payload });
-        entry.lastActivity = Date.now();
+      entry.subject.next({ data: payload });
+      entry.lastActivity = Date.now();
     }
     // Cross-instance
     if (this.publisher) {
-        this.publisher.publish(UserSseService.CHANNEL, JSON.stringify({ userId, payload })).catch(() => {});
+      this.publisher
+        .publish(UserSseService.CHANNEL, JSON.stringify({ userId, payload }))
+        .catch(() => {});
     }
   }
 

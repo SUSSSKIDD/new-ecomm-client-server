@@ -33,10 +33,7 @@ import {
 import { Request } from 'express';
 import type { Response } from 'express';
 import { OrdersService } from './orders.service';
-import {
-  CreateOrderDto,
-  OrderPreviewDto,
-} from './dto/create-order.dto';
+import { CreateOrderDto, OrderPreviewDto } from './dto/create-order.dto';
 import { OrderQueryDto } from './dto/order-query.dto';
 import { ExportQueryDto } from './dto/export-query.dto';
 
@@ -52,17 +49,16 @@ export class OrdersController {
   constructor(
     private readonly ordersService: OrdersService,
     private readonly userSseService: UserSseService,
-  ) { }
+  ) {}
 
   @Sse('sse')
   @ApiOperation({ summary: 'Real-time SSE order status updates for the user' })
   sse(@Req() req: AuthenticatedRequest): Observable<MessageEvent> {
     const subject = this.userSseService.register(req.user.sub);
-    return subject.asObservable().pipe(
-      map((payload) => ({ data: payload.data } as MessageEvent)),
-    );
+    return subject
+      .asObservable()
+      .pipe(map((payload) => ({ data: payload.data })));
   }
-
 
   @Post('preview')
   @HttpCode(200)
@@ -135,7 +131,11 @@ export class OrdersController {
     }
 
     const storeId = req.user.storeId;
-    if (!storeId) return { data: [], meta: { total: 0, page: 1, limit: 10, totalPages: 0 } };
+    if (!storeId)
+      return {
+        data: [],
+        meta: { total: 0, page: 1, limit: 10, totalPages: 0 },
+      };
     return this.ordersService.findStoreOrders(storeId, query);
   }
 
@@ -155,7 +155,9 @@ export class OrdersController {
   @UseGuards(RolesGuard)
   @Roles('ADMIN', 'STORE_MANAGER')
   @HttpCode(200)
-  @ApiOperation({ summary: 'Manually trigger delivery assignment for an order' })
+  @ApiOperation({
+    summary: 'Manually trigger delivery assignment for an order',
+  })
   async assignDelivery(
     @Req() req: AuthenticatedRequest,
     @Param('id', ParseUUIDPipe) id: string,
@@ -173,7 +175,11 @@ export class OrdersController {
     @Param('id', ParseUUIDPipe) id: string,
     @Body('deliveryPersonId') riderId: string,
   ) {
-    return this.ordersService.manualAssignDelivery(id, riderId, req.user.storeId);
+    return this.ordersService.manualAssignDelivery(
+      id,
+      riderId,
+      req.user.storeId,
+    );
   }
 
   @Get('admin/export/csv')
@@ -194,7 +200,10 @@ export class OrdersController {
     );
 
     res.header('Content-Type', 'text/csv');
-    res.header('Content-Disposition', `attachment; filename="export_${new Date().toISOString().slice(0, 10)}.csv"`);
+    res.header(
+      'Content-Disposition',
+      `attachment; filename="export_${new Date().toISOString().slice(0, 10)}.csv"`,
+    );
     res.send(csv);
   }
 }

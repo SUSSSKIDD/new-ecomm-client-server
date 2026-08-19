@@ -94,7 +94,12 @@ export class RedisCacheService implements OnModuleDestroy {
 
   /** Execute multiple commands in a single round-trip via pipeline. */
   async pipeline(
-    commands: Array<{ op: 'get' | 'set' | 'del'; key: string; value?: unknown; ttl?: number }>,
+    commands: Array<{
+      op: 'get' | 'set' | 'del';
+      key: string;
+      value?: unknown;
+      ttl?: number;
+    }>,
   ): Promise<unknown[]> {
     if (!this.client || commands.length === 0) return [];
     try {
@@ -185,7 +190,7 @@ export class RedisCacheService implements OnModuleDestroy {
         end
         return count
       `;
-      return await this.client.eval(script, 1, key, ttlSeconds) as number;
+      return (await this.client.eval(script, 1, key, ttlSeconds)) as number;
     } catch (e) {
       this.logger.error(`incr failed for ${key}: ${e}`);
       return 0;
@@ -194,7 +199,12 @@ export class RedisCacheService implements OnModuleDestroy {
 
   // ── Geospatial ─────────────────────────────────────────────────────
 
-  async geoAdd(key: string, longitude: number, latitude: number, member: string): Promise<void> {
+  async geoAdd(
+    key: string,
+    longitude: number,
+    latitude: number,
+    member: string,
+  ): Promise<void> {
     if (!this.client) return;
     try {
       await this.client.geoadd(key, longitude, latitude, member);
@@ -222,7 +232,7 @@ export class RedisCacheService implements OnModuleDestroy {
   ): Promise<string[]> {
     if (!this.client) return [];
     try {
-      const results = await this.client.call(
+      const results = (await this.client.call(
         'GEOSEARCH',
         key,
         'FROMLONLAT',
@@ -234,7 +244,7 @@ export class RedisCacheService implements OnModuleDestroy {
         'ASC',
         'COUNT',
         String(limitCount),
-      ) as string[];
+      )) as string[];
       return results || [];
     } catch (e) {
       this.logger.error(`geoSearchRadius failed for ${key}: ${e}`);

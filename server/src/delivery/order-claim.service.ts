@@ -22,7 +22,9 @@ interface ClaimConfig {
   entityId: string;
   entityLabel: string;
   validStatuses: string[];
-  findEntity: (tx: any) => Promise<{ id: string; number: string; status: string } | null>;
+  findEntity: (
+    tx: any,
+  ) => Promise<{ id: string; number: string; status: string } | null>;
   findExistingAssignment: (tx: any) => Promise<unknown | null>;
   createAssignment: (tx: any, riderId: string) => Promise<void>;
   getOrderNumber: () => Promise<string | undefined>;
@@ -37,7 +39,7 @@ export class OrderClaimService {
     private readonly riderRedis: RiderRedisService,
     private readonly orderPool: OrderPoolService,
     private readonly sseService: DeliverySseService,
-  ) { }
+  ) {}
 
   /**
    * Generic claim template — 3-layer race condition protection:
@@ -45,21 +47,36 @@ export class OrderClaimService {
    * 2. Prisma $transaction — DB-level verification
    * 3. DB unique constraint — ultimate safety net
    */
-  private async genericClaim(riderId: string, config: ClaimConfig): Promise<ClaimResult> {
+  private async genericClaim(
+    riderId: string,
+    config: ClaimConfig,
+  ): Promise<ClaimResult> {
     const { entityId, entityLabel } = config;
 
     // Layer 0: Idempotency check
-    const alreadyClaimed = await this.riderRedis.checkIdempotency(entityId, riderId);
+    const alreadyClaimed = await this.riderRedis.checkIdempotency(
+      entityId,
+      riderId,
+    );
     if (alreadyClaimed) {
-      this.logger.log(`Idempotent retry: rider ${riderId} already claimed ${entityLabel} ${entityId}`);
+      this.logger.log(
+        `Idempotent retry: rider ${riderId} already claimed ${entityLabel} ${entityId}`,
+      );
       const orderNumber = await config.getOrderNumber();
-      return { success: true, orderId: entityId, orderNumber, idempotent: true };
+      return {
+        success: true,
+        orderId: entityId,
+        orderNumber,
+        idempotent: true,
+      };
     }
 
     // Layer 1: Redis distributed lock (SET NX)
     const lockAcquired = await this.riderRedis.acquireLock(entityId, riderId);
     if (!lockAcquired) {
-      throw new ConflictException(`${entityLabel} already being claimed by another rider`);
+      throw new ConflictException(
+        `${entityLabel} already being claimed by another rider`,
+      );
     }
 
     try {
@@ -68,15 +85,22 @@ export class OrderClaimService {
         const entity = await config.findEntity(tx);
         if (!entity) throw new NotFoundException(`${entityLabel} not found`);
         if (!config.validStatuses.includes(entity.status)) {
-          throw new ConflictException(`${entityLabel} is no longer available for claiming`);
+          throw new ConflictException(
+            `${entityLabel} is no longer available for claiming`,
+          );
         }
 
         const existing = await config.findExistingAssignment(tx);
-        if (existing) throw new ConflictException(`${entityLabel} already assigned`);
+        if (existing)
+          throw new ConflictException(`${entityLabel} already assigned`);
 
-        const rider = await tx.deliveryPerson.findUnique({ where: { id: riderId } });
+        const rider = await tx.deliveryPerson.findUnique({
+          where: { id: riderId },
+        });
         if (!rider || rider.status !== DeliveryPersonStatus.FREE) {
-          throw new ConflictException(`You must be in FREE status to claim ${entityLabel.toLowerCase()}s`);
+          throw new ConflictException(
+            `You must be in FREE status to claim ${entityLabel.toLowerCase()}s`,
+          );
         }
 
         // Layer 3: Create assignment (unique constraint is the final safety net)
@@ -91,7 +115,9 @@ export class OrderClaimService {
       });
 
       // Post-claim cleanup with retries
-      await this.safeCleanup(`removeOrder(${entityId})`, () => this.orderPool.removeOrder(entityId));
+      await this.safeCleanup(`removeOrder(${entityId})`, () =>
+        this.orderPool.removeOrder(entityId),
+      );
 
       // Notify the winner
       this.sseService.notify(riderId, {
@@ -100,8 +126,13 @@ export class OrderClaimService {
       });
 
       // Notify eligible riders to remove this order from their UI (O(eligible) not O(all))
-      const eligibleRiderIds = await this.riderRedis.getEligibleRiders(entityId);
-      this.sseService.broadcastOrderClaimed(riderId, entityId, eligibleRiderIds);
+      const eligibleRiderIds =
+        await this.riderRedis.getEligibleRiders(entityId);
+      this.sseService.broadcastOrderClaimed(
+        riderId,
+        entityId,
+        eligibleRiderIds,
+      );
 
       await this.safeCleanup(`setIdempotency(${entityId})`, () =>
         this.riderRedis.setIdempotency(entityId, riderId),
@@ -110,16 +141,26 @@ export class OrderClaimService {
         this.riderRedis.deleteEligibleRiders(entityId),
       );
 
-      this.logger.log(`${entityLabel} ${result.orderNumber} claimed by rider ${riderId}`);
-      return { success: true, orderId: entityId, orderNumber: result.orderNumber };
+      this.logger.log(
+        `${entityLabel} ${result.orderNumber} claimed by rider ${riderId}`,
+      );
+      return {
+        success: true,
+        orderId: entityId,
+        orderNumber: result.orderNumber,
+      };
     } catch (err) {
       if (err?.code !== 'P2002') {
         await this.riderRedis.releaseLock(entityId, riderId);
       }
       // Layer 3 fallback: unique constraint violation
       if (err?.code === 'P2002') {
-        this.logger.warn(`Race resolved via DB constraint: ${entityLabel} ${entityId}`);
-        throw new ConflictException(`${entityLabel} already claimed by another rider`);
+        this.logger.warn(
+          `Race resolved via DB constraint: ${entityLabel} ${entityId}`,
+        );
+        throw new ConflictException(
+          `${entityLabel} already claimed by another rider`,
+        );
       }
       throw err;
     }
@@ -136,12 +177,16 @@ export class OrderClaimService {
           where: { id: orderId },
           select: { id: true, orderNumber: true, status: true },
         });
-        return order ? { id: order.id, number: order.orderNumber, status: order.status } : null;
+        return order
+          ? { id: order.id, number: order.orderNumber, status: order.status }
+          : null;
       },
-      findExistingAssignment: (tx) => tx.orderAssignment.findUnique({ where: { orderId } }),
-      createAssignment: (tx, rid) => tx.orderAssignment.create({
-        data: { orderId, deliveryPersonId: rid },
-      }),
+      findExistingAssignment: (tx) =>
+        tx.orderAssignment.findUnique({ where: { orderId } }),
+      createAssignment: (tx, rid) =>
+        tx.orderAssignment.create({
+          data: { orderId, deliveryPersonId: rid },
+        }),
       getOrderNumber: async () => {
         const order = await this.prisma.order.findUnique({
           where: { id: orderId },
@@ -153,7 +198,10 @@ export class OrderClaimService {
   }
 
   /** Claim a parcel order. */
-  async claimParcelOrder(riderId: string, parcelOrderId: string): Promise<ClaimResult> {
+  async claimParcelOrder(
+    riderId: string,
+    parcelOrderId: string,
+  ): Promise<ClaimResult> {
     return this.genericClaim(riderId, {
       entityId: parcelOrderId,
       entityLabel: 'Parcel',
@@ -163,9 +211,16 @@ export class OrderClaimService {
           where: { id: parcelOrderId },
           select: { id: true, parcelNumber: true, status: true },
         });
-        return parcel ? { id: parcel.id, number: parcel.parcelNumber, status: parcel.status } : null;
+        return parcel
+          ? {
+              id: parcel.id,
+              number: parcel.parcelNumber,
+              status: parcel.status,
+            }
+          : null;
       },
-      findExistingAssignment: (tx) => tx.parcelAssignment.findUnique({ where: { parcelOrderId } }),
+      findExistingAssignment: (tx) =>
+        tx.parcelAssignment.findUnique({ where: { parcelOrderId } }),
       createAssignment: async (tx, rid) => {
         await tx.parcelAssignment.create({
           data: { parcelOrderId, deliveryPersonId: rid },
@@ -193,7 +248,9 @@ export class OrderClaimService {
         return;
       } catch (err) {
         if (attempt >= 3) {
-          this.logger.error(`REDIS CLEANUP FAILED (${description}) after 3 attempts: ${err.message}`);
+          this.logger.error(
+            `REDIS CLEANUP FAILED (${description}) after 3 attempts: ${err.message}`,
+          );
         } else {
           await new Promise((r) => setTimeout(r, 1000));
         }

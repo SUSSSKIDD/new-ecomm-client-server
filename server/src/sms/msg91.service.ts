@@ -40,14 +40,18 @@ export class Msg91Service {
     return this.configured;
   }
 
-  async sendSms(request: Msg91FlowRequest): Promise<{ requestId?: string; success: boolean }> {
+  async sendSms(
+    request: Msg91FlowRequest,
+  ): Promise<{ requestId?: string; success: boolean }> {
     if (!this.configured) {
       this.logger.warn('[DEV MODE] SMS not sent (MSG91 not configured)');
       return { success: true, requestId: `dev_${Date.now()}` };
     }
 
     if (this.authKey === 'mock_key') {
-      this.logger.log('🎭 [MOCK MODE] Skipping MSG91 API call. Success returned.');
+      this.logger.log(
+        '🎭 [MOCK MODE] Skipping MSG91 API call. Success returned.',
+      );
       return { success: true, requestId: `mock_${Date.now()}` };
     }
 

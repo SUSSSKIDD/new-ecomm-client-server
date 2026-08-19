@@ -1,4 +1,10 @@
-import { IsString, MinLength, MaxLength, IsIn, IsNotEmpty } from 'class-validator';
+import {
+  IsString,
+  MinLength,
+  MaxLength,
+  IsIn,
+  IsNotEmpty,
+} from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { STORE_CATEGORIES } from '../../common/constants/store-categories';
 
@@ -11,7 +17,10 @@ export class CreateCustomSubcategoryDto {
 }
 
 export class AdminCreateCustomSubcategoryDto extends CreateCustomSubcategoryDto {
-  @ApiProperty({ enum: STORE_CATEGORIES, description: 'Store type to add subcategory under' })
+  @ApiProperty({
+    enum: STORE_CATEGORIES,
+    description: 'Store type to add subcategory under',
+  })
   @IsString()
   @IsIn([...STORE_CATEGORIES])
   storeType: string;
@@ -29,7 +38,10 @@ export class UpsertCategoryConfigDto {
   @MaxLength(100)
   subcategory: string;
 
-  @ApiProperty({ enum: ['NONE', 'PHOTO_UPLOAD', 'DESIGN_UPLOAD'], description: 'Upload type' })
+  @ApiProperty({
+    enum: ['NONE', 'PHOTO_UPLOAD', 'DESIGN_UPLOAD'],
+    description: 'Upload type',
+  })
   @IsString()
   @IsIn(['NONE', 'PHOTO_UPLOAD', 'DESIGN_UPLOAD'])
   uploadType: string;

@@ -11,7 +11,10 @@ import { CreateProductDto } from './dto/create-product.dto';
 import { UpdateProductDto } from './dto/update-product.dto';
 import { ProductQueryDto } from './dto/product-query.dto';
 import { Prisma } from '@prisma/client';
-import { StoreCategoryType, STORE_CATEGORY_LABELS } from '../common/constants/store-categories';
+import {
+  StoreCategoryType,
+  STORE_CATEGORY_LABELS,
+} from '../common/constants/store-categories';
 import { SubcategoryService } from '../stores/subcategory.service';
 import { StoresService } from '../stores/stores.service';
 import { RedisCacheService } from '../common/services/redis-cache.service';
@@ -29,7 +32,7 @@ export class ProductsService {
     private readonly cache: RedisCacheService,
     private readonly subcategoryService: SubcategoryService,
     private readonly storesService: StoresService,
-  ) { }
+  ) {}
 
   /**
    * Create a product with optional image file uploads.
@@ -60,20 +63,36 @@ export class ProductsService {
     }
 
     // Remove images and variants from dto since we handle it separately
-    const { images: _ignored, variants, variantsJson: _ignoredJson, ...productData } = dto as any;
+    const {
+      images: _ignored,
+      variants,
+      variantsJson: _ignoredJson,
+      ...productData
+    } = dto as any;
 
     if (storeId) {
-      const store = await this.prisma.store.findUnique({ where: { id: storeId } });
+      const store = await this.prisma.store.findUnique({
+        where: { id: storeId },
+      });
       if (!store) throw new NotFoundException('Store not found');
 
-      const isValid = await this.subcategoryService.isValidSubcategory(store.storeType, dto.category);
+      const isValid = await this.subcategoryService.isValidSubcategory(
+        store.storeType,
+        dto.category,
+      );
       if (!isValid) {
-        const allSubs = await this.subcategoryService.getSubcategories(store.storeType);
-        throw new BadRequestException(`Category "${dto.category}" is not allowed for store type ${store.storeType}. Allowed: ${allSubs.join(', ')}`);
+        const allSubs = await this.subcategoryService.getSubcategories(
+          store.storeType,
+        );
+        throw new BadRequestException(
+          `Category "${dto.category}" is not allowed for store type ${store.storeType}. Allowed: ${allSubs.join(', ')}`,
+        );
       }
       // Set category to main store type label, and subCategory to the specific option selected
       productData.subCategory = dto.category;
-      productData.category = STORE_CATEGORY_LABELS[store.storeType as StoreCategoryType] || store.storeType;
+      productData.category =
+        STORE_CATEGORY_LABELS[store.storeType as StoreCategoryType] ||
+        store.storeType;
       productData.isGrocery = store.storeType === 'GROCERY';
     }
 
@@ -84,7 +103,9 @@ export class ProductsService {
     if (variantImageMap) {
       for (const [idx, filesList] of Object.entries(variantImageMap)) {
         if (filesList.length > ProductsService.MAX_IMAGES) {
-          throw new BadRequestException(`Maximum ${ProductsService.MAX_IMAGES} images allowed per variant`);
+          throw new BadRequestException(
+            `Maximum ${ProductsService.MAX_IMAGES} images allowed per variant`,
+          );
         }
         const urls = await this.storage.uploadMany(filesList); // uploads to products folder by default on service
         variantUploadedUrls[Number(idx)] = urls;
@@ -105,15 +126,22 @@ export class ProductsService {
           ...productData,
           images: imageUrls,
           storeId,
-          storeInventory: storeId ? {
-            create: {
-              storeId,
-              stock: (variantsWithImages && variantsWithImages.length > 0) ? 0 : (productData.stock || 0)
-            }
-          } : undefined,
-          variants: variantsWithImages?.length ? {
-            create: variantsWithImages
-          } : undefined,
+          storeInventory: storeId
+            ? {
+                create: {
+                  storeId,
+                  stock:
+                    variantsWithImages && variantsWithImages.length > 0
+                      ? 0
+                      : productData.stock || 0,
+                },
+              }
+            : undefined,
+          variants: variantsWithImages?.length
+            ? {
+                create: variantsWithImages,
+              }
+            : undefined,
         },
         include: { variants: true },
       });
@@ -126,7 +154,7 @@ export class ProductsService {
     } catch (error) {
       if (allUploadedUrls.length > 0) {
         this.logger.warn('DB insert failed, cleaning up uploaded images');
-        await this.storage.deleteMany(allUploadedUrls).catch(() => { });
+        await this.storage.deleteMany(allUploadedUrls).catch(() => {});
       }
       throw error;
     }
@@ -153,13 +181,15 @@ export class ProductsService {
     const where: Prisma.ProductWhereInput = {};
 
     if (search) {
-      where.AND = [{
-        OR: [
-          { name: { contains: search, mode: 'insensitive' } },
-          { description: { contains: search, mode: 'insensitive' } },
-          { category: { contains: search, mode: 'insensitive' } },
-        ]
-      }];
+      where.AND = [
+        {
+          OR: [
+            { name: { contains: search, mode: 'insensitive' } },
+            { description: { contains: search, mode: 'insensitive' } },
+            { category: { contains: search, mode: 'insensitive' } },
+          ],
+        },
+      ];
     }
 
     if (category) {
@@ -176,9 +206,13 @@ export class ProductsService {
     let storeIdsHash = '';
     let storeIds: string[] = [];
     if ((lat !== undefined && lng !== undefined) || pincode) {
-      const nearbyStores = await this.storesService.findNearbyStores(lat ?? 0, lng ?? 0, pincode);
-      storeIds = nearbyStores.map(s => s.id).sort();
-      
+      const nearbyStores = await this.storesService.findNearbyStores(
+        lat ?? 0,
+        lng ?? 0,
+        pincode,
+      );
+      storeIds = nearbyStores.map((s) => s.id).sort();
+
       if (storeIds.length === 0) {
         return paginate([], 0, page, limit);
       }
@@ -187,8 +221,8 @@ export class ProductsService {
       const geoCondition = {
         OR: [
           { storeId: { in: storeIds } },
-          { storeInventory: { some: { storeId: { in: storeIds } } } }
-        ]
+          { storeInventory: { some: { storeId: { in: storeIds } } } },
+        ],
       };
 
       if (where.AND) {
@@ -211,12 +245,14 @@ export class ProductsService {
         orderBy: { [sortBy]: sortOrder },
         include: {
           variants: { where: { isActive: true }, orderBy: { price: 'asc' } },
-          ...(storeIds.length > 0 ? {
-            storeInventory: {
-              where: { storeId: { in: storeIds } },
-              select: { stock: true }
-            }
-          } : {})
+          ...(storeIds.length > 0
+            ? {
+                storeInventory: {
+                  where: { storeId: { in: storeIds } },
+                  select: { stock: true },
+                },
+              }
+            : {}),
         },
       }),
       this.prisma.product.count({ where }),
@@ -224,20 +260,24 @@ export class ProductsService {
 
     const processedProducts = products.map((p: any) => {
       if (p.storeInventory !== undefined) {
-        const localStock = p.storeInventory && p.storeInventory.length > 0 
-           ? p.storeInventory.reduce((acc: number, inv: any) => acc + inv.stock, 0)
-           : p.stock;
-        
+        const localStock =
+          p.storeInventory && p.storeInventory.length > 0
+            ? p.storeInventory.reduce(
+                (acc: number, inv: any) => acc + inv.stock,
+                0,
+              )
+            : p.stock;
+
         const { storeInventory, ...rest } = p;
         return { ...rest, stock: localStock };
       }
       return p;
     });
 
-
-
     const inStock = processedProducts.filter((p: any) => (p.stock || 0) > 0);
-    const outOfStock = processedProducts.filter((p: any) => (p.stock || 0) <= 0);
+    const outOfStock = processedProducts.filter(
+      (p: any) => (p.stock || 0) <= 0,
+    );
     const sortedProducts = [...inStock, ...outOfStock];
 
     const result = paginate(sortedProducts, total, page, limit);
@@ -251,20 +291,26 @@ export class ProductsService {
   async findOne(id: string, lat?: number, lng?: number, pincode?: string) {
     let storeIds: string[] = [];
     if ((lat !== undefined && lng !== undefined) || pincode) {
-      const nearbyStores = await this.storesService.findNearbyStores(lat ?? 0, lng ?? 0, pincode);
-      storeIds = nearbyStores.map(s => s.id);
+      const nearbyStores = await this.storesService.findNearbyStores(
+        lat ?? 0,
+        lng ?? 0,
+        pincode,
+      );
+      storeIds = nearbyStores.map((s) => s.id);
     }
 
     const product = await this.prisma.product.findUnique({
       where: { id },
       include: {
         variants: { where: { isActive: true }, orderBy: { price: 'asc' } },
-        ...(storeIds.length > 0 ? {
-          storeInventory: {
-            where: { storeId: { in: storeIds } },
-            select: { stock: true }
-          }
-        } : {})
+        ...(storeIds.length > 0
+          ? {
+              storeInventory: {
+                where: { storeId: { in: storeIds } },
+                select: { stock: true },
+              },
+            }
+          : {}),
       },
     });
 
@@ -277,9 +323,14 @@ export class ProductsService {
     }
 
     if (storeIds.length > 0 && (product as any).storeInventory !== undefined) {
-      const localStock = (product as any).storeInventory && (product as any).storeInventory.length > 0
-        ? (product as any).storeInventory.reduce((acc: number, inv: any) => acc + inv.stock, 0)
-        : product.stock;
+      const localStock =
+        (product as any).storeInventory &&
+        (product as any).storeInventory.length > 0
+          ? (product as any).storeInventory.reduce(
+              (acc: number, inv: any) => acc + inv.stock,
+              0,
+            )
+          : product.stock;
       const { storeInventory, ...rest } = product as any;
       return { ...rest, stock: localStock };
     }
@@ -307,10 +358,10 @@ export class ProductsService {
       storeInventory: undefined,
     }));
 
-
-
     const inStock = processedProducts.filter((p: any) => (p.stock || 0) > 0);
-    const outOfStock = processedProducts.filter((p: any) => (p.stock || 0) <= 0);
+    const outOfStock = processedProducts.filter(
+      (p: any) => (p.stock || 0) <= 0,
+    );
     return [...inStock, ...outOfStock];
   }
 
@@ -332,16 +383,20 @@ export class ProductsService {
       updateData.storeInventory = {
         updateMany: {
           where: { storeId: product.storeId },
-          data: { stock: dto.stock }
-        }
+          data: { stock: dto.stock },
+        },
       };
     }
 
     if (dto.category && product.storeId) {
-      const store = await this.prisma.store.findUnique({ where: { id: product.storeId } });
+      const store = await this.prisma.store.findUnique({
+        where: { id: product.storeId },
+      });
       if (store) {
         updateData.subCategory = dto.category;
-        updateData.category = STORE_CATEGORY_LABELS[store.storeType as StoreCategoryType] || store.storeType;
+        updateData.category =
+          STORE_CATEGORY_LABELS[store.storeType as StoreCategoryType] ||
+          store.storeType;
       }
     }
 
@@ -380,7 +435,12 @@ export class ProductsService {
     }
 
     try {
-      const { variants, variantsJson, images: _ignored, ...updateData } = dto as any;
+      const {
+        variants,
+        variantsJson,
+        images: _ignored,
+        ...updateData
+      } = dto as any;
       if (newImageUrls.length > 0) {
         updateData.images = [...(product.images || []), ...newImageUrls];
       }
@@ -389,16 +449,20 @@ export class ProductsService {
         updateData.storeInventory = {
           updateMany: {
             where: { storeId: product.storeId },
-            data: { stock: dto.stock }
-          }
+            data: { stock: dto.stock },
+          },
         };
       }
 
       if (dto.category && product.storeId) {
-        const store = await this.prisma.store.findUnique({ where: { id: product.storeId } });
+        const store = await this.prisma.store.findUnique({
+          where: { id: product.storeId },
+        });
         if (store) {
           updateData.subCategory = dto.category;
-          updateData.category = STORE_CATEGORY_LABELS[store.storeType as StoreCategoryType] || store.storeType;
+          updateData.category =
+            STORE_CATEGORY_LABELS[store.storeType as StoreCategoryType] ||
+            store.storeType;
         }
       }
 
@@ -407,12 +471,14 @@ export class ProductsService {
         data: updateData,
       });
 
-      this.logger.log(`Product updated: ${updated.name} (${id}) with ${newImageUrls.length} new images`);
+      this.logger.log(
+        `Product updated: ${updated.name} (${id}) with ${newImageUrls.length} new images`,
+      );
       await this.cache.bumpVersion('products');
       return updated;
     } catch (error) {
       if (newImageUrls.length > 0) {
-        await this.storage.deleteMany(newImageUrls).catch(() => { });
+        await this.storage.deleteMany(newImageUrls).catch(() => {});
       }
       throw error;
     }
@@ -483,7 +549,7 @@ export class ProductsService {
       return updated;
     } catch (error) {
       // Clean up uploaded images if transaction failed
-      await this.storage.deleteMany(newUrls).catch(() => { });
+      await this.storage.deleteMany(newUrls).catch(() => {});
       throw error;
     }
   }
@@ -514,7 +580,11 @@ export class ProductsService {
     return updated;
   }
 
-  async addVariantWithImages(productId: string, dto: any, files: Express.Multer.File[]) {
+  async addVariantWithImages(
+    productId: string,
+    dto: any,
+    files: Express.Multer.File[],
+  ) {
     await this.findOne(productId);
     const { price, mrp, storePrice, stock, taxRate, ...rest } = dto;
     const cleanDto: any = {
@@ -523,33 +593,54 @@ export class ProductsService {
       mrp: mrp ? Number(mrp) : undefined,
       storePrice: storePrice ? Number(storePrice) : undefined,
       stock: stock !== undefined ? Number(stock) : undefined,
-      taxRate: taxRate !== undefined && taxRate !== '' ? Number(taxRate) : undefined,
+      taxRate:
+        taxRate !== undefined && taxRate !== '' ? Number(taxRate) : undefined,
     };
     let images: string[] = [];
     if (files.length > 0) {
-      images = await this.storage.uploadMany(files.slice(0, ProductsService.MAX_IMAGES));
+      images = await this.storage.uploadMany(
+        files.slice(0, ProductsService.MAX_IMAGES),
+      );
     }
     const variant = await (this.prisma as any).productVariant.create({
-      data: { ...cleanDto, productId, images }
+      data: { ...cleanDto, productId, images },
     });
     await this.cache.bumpVersion('products');
     return variant;
   }
 
-  async updateVariantWithImages(variantId: string, dto: any, files: Express.Multer.File[]) {
-    const existing = await (this.prisma as any).productVariant.findUniqueOrThrow({ where: { id: variantId } });
-    const { price, mrp, storePrice, stock, taxRate, clearTaxRate, ...rest } = dto;
+  async updateVariantWithImages(
+    variantId: string,
+    dto: any,
+    files: Express.Multer.File[],
+  ) {
+    const existing = await (
+      this.prisma as any
+    ).productVariant.findUniqueOrThrow({ where: { id: variantId } });
+    const { price, mrp, storePrice, stock, taxRate, clearTaxRate, ...rest } =
+      dto;
     const cleanDto: any = {
       ...rest,
       price: price !== undefined ? Number(price) : undefined,
       mrp: mrp !== undefined ? (mrp ? Number(mrp) : null) : undefined,
-      storePrice: storePrice !== undefined ? (storePrice ? Number(storePrice) : null) : undefined,
+      storePrice:
+        storePrice !== undefined
+          ? storePrice
+            ? Number(storePrice)
+            : null
+          : undefined,
       stock: stock !== undefined ? Number(stock) : undefined,
-      taxRate: clearTaxRate === 'true' ? null
-        : taxRate !== undefined && taxRate !== '' ? Number(taxRate) : undefined,
+      taxRate:
+        clearTaxRate === 'true'
+          ? null
+          : taxRate !== undefined && taxRate !== ''
+            ? Number(taxRate)
+            : undefined,
     };
     // Remove undefined keys so Prisma doesn't overwrite unchanged fields
-    Object.keys(cleanDto).forEach(k => cleanDto[k] === undefined && delete cleanDto[k]);
+    Object.keys(cleanDto).forEach(
+      (k) => cleanDto[k] === undefined && delete cleanDto[k],
+    );
 
     let images = existing.images || [];
     if (files.length > 0) {
@@ -566,7 +657,9 @@ export class ProductsService {
   }
 
   async deleteVariant(variantId: string) {
-    await (this.prisma as any).productVariant.delete({ where: { id: variantId } });
+    await (this.prisma as any).productVariant.delete({
+      where: { id: variantId },
+    });
     await this.cache.bumpVersion('products');
     return { success: true };
   }

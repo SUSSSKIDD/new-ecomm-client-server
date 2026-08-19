@@ -10,7 +10,12 @@ export function haversineDistance(
   lat2: number,
   lng2: number,
 ): number {
-  if (!Number.isFinite(lat1) || !Number.isFinite(lng1) || !Number.isFinite(lat2) || !Number.isFinite(lng2)) {
+  if (
+    !Number.isFinite(lat1) ||
+    !Number.isFinite(lng1) ||
+    !Number.isFinite(lat2) ||
+    !Number.isFinite(lng2)
+  ) {
     return Infinity;
   }
   const R = 6371; // Earth's radius in km

@@ -12,7 +12,10 @@ import { RedisCacheService } from '../common/services/redis-cache.service';
 import { StockService } from '../common/services/stock.service';
 import { UserSseService } from '../sse/user-sse.service';
 import { paginate } from '../common/utils/pagination.util';
-import { OrderFulfillmentService, FulfillmentResult } from './order-fulfillment.service';
+import {
+  OrderFulfillmentService,
+  FulfillmentResult,
+} from './order-fulfillment.service';
 import { AllocationResult } from './allocation.service';
 import { AutoAssignService } from '../delivery/auto-assign.service';
 import { LedgerService } from '../ledger/ledger.service';
@@ -24,13 +27,18 @@ import {
   FulfillmentPreview,
   AllocationPreview,
 } from './interfaces/order-preview.interface';
-import { DeliveryPersonStatus, OrderStatus, PaymentMethod, PaymentStatus, Prisma } from '@prisma/client';
+import {
+  DeliveryPersonStatus,
+  OrderStatus,
+  PaymentMethod,
+  PaymentStatus,
+  Prisma,
+} from '@prisma/client';
 import { randomBytes, randomInt } from 'crypto';
 import { TTL } from '../common/redis/ttl.config.js';
 
 import { DeliverySseService } from '../sse/delivery-sse.service';
 import { OrderPoolService } from '../delivery/order-pool.service';
-
 
 @Injectable()
 export class OrdersService {
@@ -84,7 +92,10 @@ export class OrdersService {
    * PENDING orders: always cancellable.
    * CONFIRMED orders (COD auto-confirm): cancellable within 30 seconds of confirmedAt.
    */
-  private computeGraceFields(order: { status: string; confirmedAt?: Date | null }) {
+  private computeGraceFields(order: {
+    status: string;
+    confirmedAt?: Date | null;
+  }) {
     if (order.status === 'CONFIRMED' && order.confirmedAt) {
       const elapsed = Date.now() - new Date(order.confirmedAt).getTime();
       return { canCancel: elapsed < OrdersService.CANCEL_GRACE_MS };
@@ -132,21 +143,27 @@ export class OrdersService {
 
       await Promise.all(
         Array.from(storeAmounts.entries()).map(([storeId, amount]) =>
-          this.ledgerService.create({
-            storeId,
-            date: now,
-            amount,
-            paymentMethod: method,
-            referenceNotes: `Order ${order.orderNumber} (${paymentMethod})`,
-          }).catch((err) =>
-            this.logger.error(`Ledger entry failed for order ${order.orderNumber} store ${storeId}: ${err.message}`),
-          ),
+          this.ledgerService
+            .create({
+              storeId,
+              date: now,
+              amount,
+              paymentMethod: method,
+              referenceNotes: `Order ${order.orderNumber} (${paymentMethod})`,
+            })
+            .catch((err) =>
+              this.logger.error(
+                `Ledger entry failed for order ${order.orderNumber} store ${storeId}: ${err.message}`,
+              ),
+            ),
         ),
       );
 
       this.logger.log(`Ledger entries created for order ${order.orderNumber}`);
     } catch (err) {
-      this.logger.error(`Ledger creation failed for order ${order.orderNumber}: ${err.message}`);
+      this.logger.error(
+        `Ledger creation failed for order ${order.orderNumber}: ${err.message}`,
+      );
     }
   }
 
@@ -155,9 +172,7 @@ export class OrdersService {
    * Each item must carry a `taxRate` property (flat rupee amount, e.g. 18 = ₹18 per unit).
    * Tax is never applied to the delivery fee.
    */
-  private calculateTotals(
-    items: (PreviewItem & { taxRate?: number })[],
-  ): {
+  private calculateTotals(items: (PreviewItem & { taxRate?: number })[]): {
     subtotal: number;
     deliveryFee: number;
     tax: number;
@@ -183,7 +198,7 @@ export class OrdersService {
   }
 
   /**
-   * Preview the order. 
+   * Preview the order.
    * Priority: overrideItems (Buy Now) > cart.
    * If addressId is provided, includes fulfillment data (store assignments).
    */
@@ -218,42 +233,47 @@ export class OrdersService {
     });
     const productMap = new Map(products.map((p) => [p.id, p]));
 
-    const items: (PreviewItem & { taxRate: number })[] = rawItems.map((rawItem) => {
-      const product = productMap.get(rawItem.productId);
-      if (!product) {
+    const items: (PreviewItem & { taxRate: number })[] = rawItems.map(
+      (rawItem) => {
+        const product = productMap.get(rawItem.productId);
+        if (!product) {
+          return {
+            productId: rawItem.productId,
+            name: rawItem.name || 'Unknown Product',
+            price: rawItem.price || 0,
+            quantity: rawItem.quantity,
+            total: (rawItem.price || 0) * rawItem.quantity,
+            image: rawItem.image || null,
+            inStock: false,
+            taxRate: 0,
+            variantId: rawItem.variantId,
+            variantLabel: rawItem.variantLabel,
+          };
+        }
+
+        // Check for variant-specific data
+        const variant = product.variants?.find(
+          (v) => v.id === rawItem.variantId,
+        );
+        const displayPrice = variant ? variant.price : product.price;
+        const displayStock = variant ? variant.stock : product.stock;
+        const displayImage =
+          (variant?.images && variant.images[0]) || product.images?.[0] || null;
+
         return {
-          productId: rawItem.productId,
-          name: rawItem.name || 'Unknown Product',
-          price: rawItem.price || 0,
+          productId: product.id,
+          name: product.name,
+          price: displayPrice,
           quantity: rawItem.quantity,
-          total: (rawItem.price || 0) * rawItem.quantity,
-          image: rawItem.image || null,
-          inStock: false,
-          taxRate: 0,
+          total: displayPrice * rawItem.quantity,
+          image: displayImage,
+          inStock: displayStock >= rawItem.quantity,
+          taxRate: (variant as any)?.taxRate ?? (product as any).taxRate ?? 0,
           variantId: rawItem.variantId,
           variantLabel: rawItem.variantLabel,
         };
-      }
-
-      // Check for variant-specific data
-      const variant = product.variants?.find(v => v.id === rawItem.variantId);
-      const displayPrice = variant ? variant.price : product.price;
-      const displayStock = variant ? variant.stock : product.stock;
-      const displayImage = (variant?.images && variant.images[0]) || product.images?.[0] || null;
-
-      return {
-        productId: product.id,
-        name: product.name,
-        price: displayPrice,
-        quantity: rawItem.quantity,
-        total: displayPrice * rawItem.quantity,
-        image: displayImage,
-        inStock: displayStock >= rawItem.quantity,
-        taxRate: (variant as any)?.taxRate ?? (product as any).taxRate ?? 0,
-        variantId: rawItem.variantId,
-        variantLabel: rawItem.variantLabel,
-      };
-    });
+      },
+    );
 
     const totals = this.calculateTotals(items);
 
@@ -283,13 +303,16 @@ export class OrdersService {
 
     // Single allocation call — derives both fulfillment and allocation preview
     const allocation = await this.fulfillmentService.resolveAllocation(
-      address.lat, address.lng, itemInputs,
+      address.lat,
+      address.lng,
+      itemInputs,
     );
-    const fulfillment = this.fulfillmentService.allocationToFulfillment(allocation);
+    const fulfillment =
+      this.fulfillmentService.allocationToFulfillment(allocation);
 
     // Re-calculate totals based on available items only
-    const availablePreviewItems: (PreviewItem & { taxRate: number })[] = fulfillment.availableItems.map(
-      (fi) => ({
+    const availablePreviewItems: (PreviewItem & { taxRate: number })[] =
+      fulfillment.availableItems.map((fi) => ({
         productId: fi.productId,
         name: fi.name,
         price: fi.price,
@@ -297,11 +320,14 @@ export class OrdersService {
         total: fi.total,
         image: fi.image,
         inStock: true,
-        taxRate: (() => { const p = productMap.get(fi.productId) as any; const v = p?.variants?.find((x: any) => x.id === fi.variantId); return v?.taxRate ?? p?.taxRate ?? 0; })(),
+        taxRate: (() => {
+          const p = productMap.get(fi.productId) as any;
+          const v = p?.variants?.find((x: any) => x.id === fi.variantId);
+          return v?.taxRate ?? p?.taxRate ?? 0;
+        })(),
         variantId: fi.variantId,
         variantLabel: fi.variantLabel,
-      }),
-    );
+      }));
 
     const adjustedTotals = this.calculateTotals(availablePreviewItems);
 
@@ -318,7 +344,7 @@ export class OrdersService {
           subtotal: sa.items.reduce((s, i) => s + i.price * i.quantity, 0),
         })),
       },
-    } as FulfillmentPreview;
+    };
   }
 
   /**
@@ -360,22 +386,22 @@ export class OrdersService {
       isBuyNow = true;
       const productIds = dto.items.map((i) => i.productId);
       const products = await this.prisma.product.findMany({
-         where: { id: { in: productIds } },
-       });
- 
-       if (products.length !== dto.items.length) {
-         throw new BadRequestException('One or more products not found');
-       }
-  
-       const itemMap = new Map(dto.items.map((i) => [i.productId, i.quantity]));
-       itemsToOrder = products.map((p) => ({
-         productId: p.id,
-         name: p.name,
-         price: p.price,
-         quantity: itemMap.get(p.id) ?? 1,
-         image: p.images?.[0] ?? null,
-         taxRate: (p as any).taxRate ?? 0,
-       }));
+        where: { id: { in: productIds } },
+      });
+
+      if (products.length !== dto.items.length) {
+        throw new BadRequestException('One or more products not found');
+      }
+
+      const itemMap = new Map(dto.items.map((i) => [i.productId, i.quantity]));
+      itemsToOrder = products.map((p) => ({
+        productId: p.id,
+        name: p.name,
+        price: p.price,
+        quantity: itemMap.get(p.id) ?? 1,
+        image: p.images?.[0] ?? null,
+        taxRate: (p as any).taxRate ?? 0,
+      }));
     } else {
       // Normal flow: use cart
       const cart = await this.cartService.getCart(userId);
@@ -388,7 +414,9 @@ export class OrdersService {
         const confirmedMap = new Map(
           dto.confirmedItems.map((ci) => [ci.productId, ci.quantity]),
         );
-        itemsToOrder = cart.items.filter((ci) => confirmedMap.has(ci.productId));
+        itemsToOrder = cart.items.filter((ci) =>
+          confirmedMap.has(ci.productId),
+        );
         itemsToOrder = itemsToOrder.map((ci) => ({
           ...ci,
           quantity: confirmedMap.get(ci.productId) ?? ci.quantity,
@@ -409,13 +437,13 @@ export class OrdersService {
     // Build cart item inputs from cart snapshot
     const cartItemInputsForFulfillment = needsFulfillment
       ? itemsToOrder.map((ci) => ({
-        productId: ci.productId,
-        name: ci.name,
-        price: ci.price,
-        quantity: ci.quantity,
-        image: ci.image ?? null,
-        variantId: (ci as any).variantId, // Added
-      }))
+          productId: ci.productId,
+          name: ci.name,
+          price: ci.price,
+          quantity: ci.quantity,
+          image: ci.image ?? null,
+          variantId: ci.variantId, // Added
+        }))
       : null;
 
     // Run product fetch + allocation resolution in parallel
@@ -426,7 +454,9 @@ export class OrdersService {
       }),
       needsFulfillment
         ? this.fulfillmentService.resolveAllocation(
-            lat!, lng!, cartItemInputsForFulfillment!,
+            lat,
+            lng,
+            cartItemInputsForFulfillment!,
           )
         : Promise.resolve(null),
     ]);
@@ -474,14 +504,30 @@ export class OrdersService {
     if (!allocationResult || allocationResult.type === 'SINGLE_STORE') {
       // Single-store path (or no fulfillment data)
       order = await this.createSingleStoreOrder(
-        userId, dto, idempotencyKey, address, itemsToOrder, productMap,
-        allocationResult, orderStatus, paymentStatus, confirmedAt,
+        userId,
+        dto,
+        idempotencyKey,
+        address,
+        itemsToOrder,
+        productMap,
+        allocationResult,
+        orderStatus,
+        paymentStatus,
+        confirmedAt,
       );
     } else {
       // Multi-store path
       order = await this.createMultiStoreOrder(
-        userId, dto, idempotencyKey, address, itemsToOrder, productMap,
-        allocationResult, orderStatus, paymentStatus, confirmedAt,
+        userId,
+        dto,
+        idempotencyKey,
+        address,
+        itemsToOrder,
+        productMap,
+        allocationResult,
+        orderStatus,
+        paymentStatus,
+        confirmedAt,
       );
     }
 
@@ -538,7 +584,9 @@ export class OrdersService {
 
     const orderItems = itemsToOrder.map((cartItem) => {
       const product = productMap.get(cartItem.productId)!;
-      const variant = (product.variants as any[])?.find(v => v.id === cartItem.variantId);
+      const variant = (product.variants as any[])?.find(
+        (v) => v.id === cartItem.variantId,
+      );
       const finalPrice = variant ? variant.price : product.price;
 
       return {
@@ -547,7 +595,7 @@ export class OrdersService {
         price: finalPrice,
         quantity: cartItem.quantity,
         total: finalPrice * cartItem.quantity,
-        taxRate: (variant as any)?.taxRate ?? product.taxRate ?? 0,
+        taxRate: variant?.taxRate ?? product.taxRate ?? 0,
         storeId: storeAssignments?.get(product.id) ?? null,
         selectedSize: cartItem.selectedSize ?? null,
         userUploadUrls: cartItem.userUploadUrls ?? [],
@@ -580,7 +628,7 @@ export class OrdersService {
           status: orderStatus,
           paymentMethod: dto.paymentMethod,
           paymentStatus,
-          deliveryAddress: address as any,
+          deliveryAddress: address,
           subtotal,
           deliveryFee,
           tax,
@@ -626,7 +674,9 @@ export class OrdersService {
     confirmedAt: Date | null,
   ) {
     // Build a lookup for cart item custom fields
-    const cartItemLookup = new Map(itemsToOrder.map((ci) => [ci.productId, ci]));
+    const cartItemLookup = new Map(
+      itemsToOrder.map((ci) => [ci.productId, ci]),
+    );
 
     // Build order items per store from allocation
     const storeOrderItems = allocationResult.storeAllocations.map((sa) => ({
@@ -635,7 +685,9 @@ export class OrdersService {
       items: sa.items.map((item) => {
         const product = productMap.get(item.productId)!;
         const cartItem = cartItemLookup.get(item.productId);
-        const variant = (product.variants as any[])?.find(v => v.id === cartItem?.variantId);
+        const variant = (product.variants as any[])?.find(
+          (v) => v.id === cartItem?.variantId,
+        );
         const finalPrice = variant ? variant.price : product.price;
 
         return {
@@ -644,7 +696,7 @@ export class OrdersService {
           price: finalPrice,
           quantity: item.quantity,
           total: finalPrice * item.quantity,
-          taxRate: (variant as any)?.taxRate ?? (product as any).taxRate ?? 0,
+          taxRate: variant?.taxRate ?? product.taxRate ?? 0,
           storeId: sa.storeId,
           selectedSize: cartItem?.selectedSize ?? null,
           userUploadUrls: cartItem?.userUploadUrls ?? [],
@@ -682,7 +734,7 @@ export class OrdersService {
           status: orderStatus,
           paymentMethod: dto.paymentMethod,
           paymentStatus,
-          deliveryAddress: address as any,
+          deliveryAddress: address,
           subtotal,
           deliveryFee,
           tax,
@@ -698,7 +750,10 @@ export class OrdersService {
       let assignedDeliveryFee = 0;
       for (let i = 0; i < storeOrderItems.length; i++) {
         const storeGroup = storeOrderItems[i];
-        const childSubtotal = storeGroup.items.reduce((sum, item) => sum + item.total, 0);
+        const childSubtotal = storeGroup.items.reduce(
+          (sum, item) => sum + item.total,
+          0,
+        );
         const isLast = i === storeOrderItems.length - 1;
         // Split delivery fee proportionally — assign rounding remainder to last child
         const childDeliveryFee = isLast
@@ -709,9 +764,12 @@ export class OrdersService {
         assignedDeliveryFee += childDeliveryFee;
         // Per-item tax for this store's items only
         const childTax = storeGroup.items.reduce((acc, oi) => {
-          return acc + Math.round(oi.total * ((oi.taxRate ?? 0) / 100) * 100) / 100;
+          return (
+            acc + Math.round(oi.total * ((oi.taxRate ?? 0) / 100) * 100) / 100
+          );
         }, 0);
-        const childTotal = Math.round((childSubtotal + childDeliveryFee + childTax) * 100) / 100;
+        const childTotal =
+          Math.round((childSubtotal + childDeliveryFee + childTax) * 100) / 100;
 
         const childOrder = await tx.order.create({
           data: {
@@ -721,7 +779,7 @@ export class OrdersService {
             status: orderStatus,
             paymentMethod: dto.paymentMethod,
             paymentStatus,
-            deliveryAddress: address as any,
+            deliveryAddress: address,
             subtotal: childSubtotal,
             deliveryFee: childDeliveryFee,
             tax: childTax,
@@ -795,14 +853,20 @@ export class OrdersService {
       where: { id: parentOrderId },
       data: {
         status: parentStatus,
-        ...(parentStatus === OrderStatus.DELIVERED ? { deliveredAt: new Date() } : {}),
+        ...(parentStatus === OrderStatus.DELIVERED
+          ? { deliveredAt: new Date() }
+          : {}),
       },
     });
 
     // Notify user of parent order update
     this.userSseService.notify(updatedParent.userId, {
       type: 'ORDER_STATUS_UPDATED',
-      data: { orderId: parentOrderId, status: parentStatus, orderNumber: updatedParent.orderNumber },
+      data: {
+        orderId: parentOrderId,
+        status: parentStatus,
+        orderNumber: updatedParent.orderNumber,
+      },
     });
   }
 
@@ -956,7 +1020,16 @@ export class OrdersService {
         isParent: true,
         parentOrderId: true,
         items: {
-          select: { productId: true, quantity: true, storeId: true, id: true, name: true, price: true, total: true, orderId: true },
+          select: {
+            productId: true,
+            quantity: true,
+            storeId: true,
+            id: true,
+            name: true,
+            price: true,
+            total: true,
+            orderId: true,
+          },
         },
         childOrders: {
           select: {
@@ -964,7 +1037,16 @@ export class OrdersService {
             status: true,
             paymentStatus: true,
             items: {
-              select: { productId: true, quantity: true, storeId: true, id: true, name: true, price: true, total: true, orderId: true },
+              select: {
+                productId: true,
+                quantity: true,
+                storeId: true,
+                id: true,
+                name: true,
+                price: true,
+                total: true,
+                orderId: true,
+              },
             },
           },
         },
@@ -993,7 +1075,10 @@ export class OrdersService {
       : order;
 
     if (order.status === OrderStatus.CONFIRMED) {
-      const grace = this.computeGraceFields({ status: order.status, confirmedAt: graceOrder?.confirmedAt });
+      const grace = this.computeGraceFields({
+        status: order.status,
+        confirmedAt: graceOrder?.confirmedAt,
+      });
       if (!grace.canCancel) {
         throw new BadRequestException(
           'Grace period expired. Order can no longer be cancelled.',
@@ -1016,12 +1101,25 @@ export class OrdersService {
             status: true,
             paymentStatus: true,
             items: {
-              select: { productId: true, quantity: true, storeId: true, id: true, name: true, price: true, total: true, orderId: true },
+              select: {
+                productId: true,
+                quantity: true,
+                storeId: true,
+                id: true,
+                name: true,
+                price: true,
+                total: true,
+                orderId: true,
+              },
             },
           },
         });
         for (const child of freshChildren) {
-          if (child.status === OrderStatus.CANCELLED || child.status === OrderStatus.DELIVERED) continue;
+          if (
+            child.status === OrderStatus.CANCELLED ||
+            child.status === OrderStatus.DELIVERED
+          )
+            continue;
           if (child.items.length > 0) {
             await this.stockService.adjustStock(tx, child.items, 'increment');
           }
@@ -1029,7 +1127,7 @@ export class OrdersService {
             where: { id: child.id },
             data: {
               status: OrderStatus.CANCELLED,
-              paymentStatus: newPaymentStatus(child.paymentStatus as PaymentStatus),
+              paymentStatus: newPaymentStatus(child.paymentStatus),
             },
           });
         }
@@ -1038,7 +1136,7 @@ export class OrdersService {
           where: { id: orderId },
           data: {
             status: OrderStatus.CANCELLED,
-            paymentStatus: newPaymentStatus(order.paymentStatus as PaymentStatus),
+            paymentStatus: newPaymentStatus(order.paymentStatus),
           },
         });
       });
@@ -1052,7 +1150,7 @@ export class OrdersService {
           where: { id: orderId },
           data: {
             status: OrderStatus.CANCELLED,
-            paymentStatus: newPaymentStatus(order.paymentStatus as PaymentStatus),
+            paymentStatus: newPaymentStatus(order.paymentStatus),
           },
         });
       });
@@ -1077,7 +1175,13 @@ export class OrdersService {
       data: { orderId, status: OrderStatus.CANCELLED },
     });
 
-    return { ...cancelledOrder, ...this.computeGraceFields({ status: OrderStatus.CANCELLED, confirmedAt: order.confirmedAt }) };
+    return {
+      ...cancelledOrder,
+      ...this.computeGraceFields({
+        status: OrderStatus.CANCELLED,
+        confirmedAt: order.confirmedAt,
+      }),
+    };
   }
 
   /**
@@ -1108,7 +1212,9 @@ export class OrdersService {
     if (!order) throw new NotFoundException('Order not found');
 
     if (updateCount === 0) {
-      this.logger.log(`Order ${order.orderNumber} already marked as PAID, skipping`);
+      this.logger.log(
+        `Order ${order.orderNumber} already marked as PAID, skipping`,
+      );
       return order;
     }
 
@@ -1181,19 +1287,37 @@ export class OrdersService {
     const include = {
       items: true,
       user: { select: { name: true, phone: true } },
-      assignment: { include: { deliveryPerson: { select: { id: true, name: true, phone: true } } } },
+      assignment: {
+        include: {
+          deliveryPerson: { select: { id: true, name: true, phone: true } },
+        },
+      },
     } as const;
     const orderBy = [{ [sortBy]: sortOrder }, { id: 'asc' as const }];
 
     const [orders, total] = await Promise.all([
       cursor
-        ? this.prisma.order.findMany({ where, orderBy, include, cursor: { id: cursor }, skip: 1, take: Number(limit) })
-        : this.prisma.order.findMany({ where, orderBy, include, skip: (page - 1) * limit, take: Number(limit) }),
+        ? this.prisma.order.findMany({
+            where,
+            orderBy,
+            include,
+            cursor: { id: cursor },
+            skip: 1,
+            take: Number(limit),
+          })
+        : this.prisma.order.findMany({
+            where,
+            orderBy,
+            include,
+            skip: (page - 1) * limit,
+            take: Number(limit),
+          }),
       this.prisma.order.count({ where }),
     ]);
 
     const result = paginate(orders, total, page, limit);
-    const nextCursor = orders.length === Number(limit) ? orders[orders.length - 1].id : null;
+    const nextCursor =
+      orders.length === Number(limit) ? orders[orders.length - 1].id : null;
     return { ...result, nextCursor };
   }
   async findAllAdmin(query: OrderQueryDto) {
@@ -1212,11 +1336,19 @@ export class OrdersService {
     const include = {
       items: true,
       user: { select: { name: true, phone: true } },
-      assignment: { include: { deliveryPerson: { select: { id: true, name: true, phone: true } } } },
+      assignment: {
+        include: {
+          deliveryPerson: { select: { id: true, name: true, phone: true } },
+        },
+      },
       childOrders: {
         include: {
           items: true,
-          assignment: { include: { deliveryPerson: { select: { id: true, name: true, phone: true } } } },
+          assignment: {
+            include: {
+              deliveryPerson: { select: { id: true, name: true, phone: true } },
+            },
+          },
         },
         orderBy: { orderNumber: 'asc' as const },
       },
@@ -1225,17 +1357,37 @@ export class OrdersService {
 
     const [orders, total] = await Promise.all([
       cursor
-        ? this.prisma.order.findMany({ where, orderBy, include, cursor: { id: cursor }, skip: 1, take: Number(limit) })
-        : this.prisma.order.findMany({ where, orderBy, include, skip: (page - 1) * limit, take: Number(limit) }),
+        ? this.prisma.order.findMany({
+            where,
+            orderBy,
+            include,
+            cursor: { id: cursor },
+            skip: 1,
+            take: Number(limit),
+          })
+        : this.prisma.order.findMany({
+            where,
+            orderBy,
+            include,
+            skip: (page - 1) * limit,
+            take: Number(limit),
+          }),
       this.prisma.order.count({ where }),
     ]);
 
     const result = paginate(orders, total, page, limit);
-    const nextCursor = orders.length === Number(limit) ? orders[orders.length - 1].id : null;
+    const nextCursor =
+      orders.length === Number(limit) ? orders[orders.length - 1].id : null;
     return { ...result, nextCursor };
   }
 
-  async exportCsv(role: string, userStoreId?: string, startDate?: string, endDate?: string, queryStoreId?: string) {
+  async exportCsv(
+    role: string,
+    userStoreId?: string,
+    startDate?: string,
+    endDate?: string,
+    queryStoreId?: string,
+  ) {
     const storeId = role === 'STORE_MANAGER' ? userStoreId : queryStoreId;
 
     const where: Prisma.OrderWhereInput = {
@@ -1265,9 +1417,23 @@ export class OrdersService {
     ]);
 
     const headers = [
-      'Type', 'OrderNumber/TransactionId', 'Date', 'CustomerName', 'CustomerPhone',
-      'Status', 'PaymentMethod', 'PaymentStatus', 'Subtotal', 'DeliveryFee',
-      'Tax', 'Total', 'ItemCount', 'ItemsSummary', 'StoreName', 'StoreCode', 'ReferenceNotes'
+      'Type',
+      'OrderNumber/TransactionId',
+      'Date',
+      'CustomerName',
+      'CustomerPhone',
+      'Status',
+      'PaymentMethod',
+      'PaymentStatus',
+      'Subtotal',
+      'DeliveryFee',
+      'Tax',
+      'Total',
+      'ItemCount',
+      'ItemsSummary',
+      'StoreName',
+      'StoreCode',
+      'ReferenceNotes',
     ];
 
     const rows = [headers.join(',')];
@@ -1275,19 +1441,25 @@ export class OrdersService {
     const escape = (val: any) => {
       if (val === null || val === undefined) return '';
       const s = String(val).replace(/"/g, '""');
-      return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s}"` : s;
+      return s.includes(',') || s.includes('"') || s.includes('\n')
+        ? `"${s}"`
+        : s;
     };
 
     // Process Orders
     for (const order of orders) {
       let allItems = order.items || [];
       if (!storeId && (order as any).childOrders?.length > 0) {
-        allItems = (order as any).childOrders.flatMap((c: any) => c.items ?? []);
+        allItems = (order as any).childOrders.flatMap(
+          (c: any) => c.items ?? [],
+        );
       }
 
-      const itemsSummary = allItems.map(i => `${i.name} x${i.quantity}`).join('; ');
+      const itemsSummary = allItems
+        .map((i) => `${i.name} x${i.quantity}`)
+        .join('; ');
       const storeNames = order.storeTypeName || 'N/A';
-      
+
       const row = [
         'ORDER',
         order.orderNumber,
@@ -1304,8 +1476,8 @@ export class OrdersService {
         allItems.length,
         itemsSummary,
         storeNames,
-        '', 
-        '' 
+        '',
+        '',
       ];
       rows.push(row.map(escape).join(','));
     }
@@ -1316,16 +1488,20 @@ export class OrdersService {
         'LEDGER',
         entry.transactionId,
         entry.date.toISOString(),
-        '', '', '', 
+        '',
+        '',
+        '',
         entry.paymentMethod,
-        '', 
-        '', '', '', 
+        '',
+        '',
+        '',
+        '',
         entry.amount,
-        '', 
-        '', 
+        '',
+        '',
         (entry as any).store?.name || 'N/A',
         (entry as any).store?.storeCode || 'N/A',
-        entry.referenceNotes || ''
+        entry.referenceNotes || '',
       ];
       rows.push(row.map(escape).join(','));
     }
@@ -1338,10 +1514,14 @@ export class OrdersService {
   // DELIVERED can only be set by delivery person via completeDelivery()
   private static readonly VALID_TRANSITIONS: Record<string, OrderStatus[]> = {
     PENDING: [OrderStatus.CONFIRMED, OrderStatus.CANCELLED],
-    CONFIRMED: [OrderStatus.PROCESSING, OrderStatus.ORDER_PICKED, OrderStatus.CANCELLED],
+    CONFIRMED: [
+      OrderStatus.PROCESSING,
+      OrderStatus.ORDER_PICKED,
+      OrderStatus.CANCELLED,
+    ],
     PROCESSING: [OrderStatus.ORDER_PICKED, OrderStatus.CANCELLED],
     ORDER_PICKED: [OrderStatus.SHIPPED, OrderStatus.CANCELLED],
-    SHIPPED: [OrderStatus.CANCELLED],     // DELIVERED is set only by delivery person
+    SHIPPED: [OrderStatus.CANCELLED], // DELIVERED is set only by delivery person
     DELIVERED: [],
     CANCELLED: [],
   };
@@ -1406,7 +1586,9 @@ export class OrdersService {
         await this.syncParentStatus(order.parentOrderId);
       }
 
-      this.logger.log(`Order ${order.orderNumber} cancelled by admin with stock restoration`);
+      this.logger.log(
+        `Order ${order.orderNumber} cancelled by admin with stock restoration`,
+      );
       return cancelledOrder;
     }
 
@@ -1433,7 +1615,6 @@ export class OrdersService {
       type: 'ORDER_STATUS_UPDATED',
       data: { orderId: id, status, orderNumber: order.orderNumber },
     });
-
 
     return updated;
   }
@@ -1491,16 +1672,24 @@ export class OrdersService {
     }
 
     if (notifiedCount > 0) {
-      return { message: `No rider assigned yet, but broadcast sent to ${notifiedCount} nearby partners.` };
+      return {
+        message: `No rider assigned yet, but broadcast sent to ${notifiedCount} nearby partners.`,
+      };
     }
 
-    return { message: 'No free delivery partners available in the area at the moment.' };
+    return {
+      message: 'No free delivery partners available in the area at the moment.',
+    };
   }
 
   /**
    * Manually assign an order to a specific delivery person (admin action).
    */
-  async manualAssignDelivery(orderId: string, deliveryPersonId: string, storeId?: string) {
+  async manualAssignDelivery(
+    orderId: string,
+    deliveryPersonId: string,
+    storeId?: string,
+  ) {
     const order = await this.prisma.order.findUnique({
       where: { id: orderId },
       include: { items: true, assignment: true },
@@ -1510,12 +1699,16 @@ export class OrdersService {
     if (storeId) {
       const hasStoreItems = order.items.some((i) => i.storeId === storeId);
       if (!hasStoreItems) {
-        throw new ForbiddenException('Order does not contain items from your store');
+        throw new ForbiddenException(
+          'Order does not contain items from your store',
+        );
       }
     }
 
     if (['CANCELLED', 'DELIVERED', 'PENDING'].includes(order.status)) {
-      throw new BadRequestException(`Cannot assign delivery for order with status "${order.status}"`);
+      throw new BadRequestException(
+        `Cannot assign delivery for order with status "${order.status}"`,
+      );
     }
 
     if (order.assignment) {
@@ -1535,7 +1728,7 @@ export class OrdersService {
     }
 
     // 1. Remove from broadcast pool
-    await this.orderPoolService.removeOrder(orderId).catch(() => { });
+    await this.orderPoolService.removeOrder(orderId).catch(() => {});
 
     // 2. Create assignment + set rider BUSY atomically
     await this.prisma.$transaction([
@@ -1558,11 +1751,13 @@ export class OrdersService {
             orderNumber: true,
             total: true, // Use 'total' from schema
             paymentMethod: true,
-            items: { select: { id: true, name: true, quantity: true, total: true } },
-          }
+            items: {
+              select: { id: true, name: true, quantity: true, total: true },
+            },
+          },
         },
         deliveryPerson: true,
-      }
+      },
     });
 
     // 3. Notify riders via SSE

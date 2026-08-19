@@ -23,7 +23,6 @@ import { PrintModule } from './print/print.module';
 import { SseModule } from './sse/sse.module';
 import { SitemapModule } from './sitemap/sitemap.module';
 
-
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
@@ -52,9 +51,8 @@ import { SitemapModule } from './sitemap/sitemap.module';
     PrintModule,
     SseModule,
     SitemapModule,
-
   ],
   controllers: [AppController],
   providers: [AppService],
 })
-export class AppModule { }
+export class AppModule {}

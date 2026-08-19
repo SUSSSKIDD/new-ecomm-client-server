@@ -20,7 +20,7 @@ export class CartService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly cache: RedisCacheService,
-  ) { }
+  ) {}
 
   /**
    * Build the Redis key for a user's cart.
@@ -36,17 +36,19 @@ export class CartService {
     }
 
     // Refresh price/name snapshots from DB
-    const productIds = [...new Set(cart.items.map(i => i.productId))];
+    const productIds = [...new Set(cart.items.map((i) => i.productId))];
     const products = await this.prisma.product.findMany({
       where: { id: { in: productIds } },
       include: { variants: { where: { isActive: true } } },
     });
-    const productMap = new Map(products.map(p => [p.id, p]));
+    const productMap = new Map(products.map((p) => [p.id, p]));
 
-    cart.items = cart.items.map(item => {
+    cart.items = cart.items.map((item) => {
       const product = productMap.get(item.productId);
       if (!product) return item;
-      const variant = (product.variants as any[])?.find(v => v.id === item.variantId);
+      const variant = (product.variants as any[])?.find(
+        (v) => v.id === item.variantId,
+      );
       return {
         ...item,
         price: variant ? variant.price : product.price,
@@ -101,7 +103,7 @@ export class CartService {
 
     if (dto.variantId) {
       const variant = await (this.prisma as any).productVariant.findUnique({
-        where: { id: dto.variantId }
+        where: { id: dto.variantId },
       });
       if (!variant || variant.productId !== dto.productId) {
         throw new BadRequestException('Invalid variant');
@@ -120,9 +122,9 @@ export class CartService {
 
     const cart = await this.getCart(userId);
 
-
     const existingIndex = cart.items.findIndex(
-      (item) => item.productId === dto.productId && item.variantId === variantId,
+      (item) =>
+        item.productId === dto.productId && item.variantId === variantId,
     );
 
     if (existingIndex >= 0) {
@@ -139,16 +141,20 @@ export class CartService {
       cart.items[existingIndex].name = product.name;
       cart.items[existingIndex].image = product.images?.[0] ?? null;
       cart.items[existingIndex].taxRate = product.taxRate ?? 0;
-      cart.items[existingIndex].storeType = product.store?.storeType || 'GROCERY';
+      cart.items[existingIndex].storeType =
+        product.store?.storeType || 'GROCERY';
       cart.items[existingIndex].storeTypeName = product.store?.name || 'Store';
       if (variantId) {
         cart.items[existingIndex].variantId = variantId;
         cart.items[existingIndex].variantLabel = variantLabel;
       }
       // Update custom fields if provided
-      if (dto.selectedSize !== undefined) cart.items[existingIndex].selectedSize = dto.selectedSize;
-      if (dto.userUploadUrls !== undefined) cart.items[existingIndex].userUploadUrls = dto.userUploadUrls;
-      if (dto.printProductId !== undefined) cart.items[existingIndex].printProductId = dto.printProductId;
+      if (dto.selectedSize !== undefined)
+        cart.items[existingIndex].selectedSize = dto.selectedSize;
+      if (dto.userUploadUrls !== undefined)
+        cart.items[existingIndex].userUploadUrls = dto.userUploadUrls;
+      if (dto.printProductId !== undefined)
+        cart.items[existingIndex].printProductId = dto.printProductId;
     } else {
       // Add new item with price/name snapshot
       const newItem: CartItem = {
@@ -162,7 +168,9 @@ export class CartService {
         storeTypeName: product.store?.name || 'Store',
         ...(variantId ? { variantId, variantLabel } : {}),
         ...(dto.selectedSize && { selectedSize: dto.selectedSize }),
-        ...(dto.userUploadUrls?.length && { userUploadUrls: dto.userUploadUrls }),
+        ...(dto.userUploadUrls?.length && {
+          userUploadUrls: dto.userUploadUrls,
+        }),
         ...(dto.printProductId && { printProductId: dto.printProductId }),
       };
       cart.items.push(newItem);
@@ -216,7 +224,7 @@ export class CartService {
 
     if (variantId) {
       const variant = await this.prisma.productVariant.findUnique({
-        where: { id: variantId }
+        where: { id: variantId },
       });
       if (variant) {
         availableStock = variant.stock;
@@ -251,10 +259,16 @@ export class CartService {
   /**
    * Remove a specific item from the cart.
    */
-  async removeItem(userId: string, productId: string, variantId?: string): Promise<Cart> {
+  async removeItem(
+    userId: string,
+    productId: string,
+    variantId?: string,
+  ): Promise<Cart> {
     const cart = await this.getCart(userId);
     const initialLength = cart.items.length;
-    cart.items = cart.items.filter((item) => !(item.productId === productId && item.variantId === variantId));
+    cart.items = cart.items.filter(
+      (item) => !(item.productId === productId && item.variantId === variantId),
+    );
 
     if (cart.items.length === initialLength) {
       throw new NotFoundException(`Item ${productId} not in cart`);

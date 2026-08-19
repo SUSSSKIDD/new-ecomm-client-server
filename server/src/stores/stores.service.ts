@@ -45,14 +45,18 @@ export class StoresService {
     config: ConfigService,
   ) {
     const radius = config.get('MAX_DELIVERY_RADIUS_KM');
-    this.maxDeliveryRadiusKm = radius ? Number(radius) : DEFAULT_MAX_DELIVERY_RADIUS_KM;
+    this.maxDeliveryRadiusKm = radius
+      ? Number(radius)
+      : DEFAULT_MAX_DELIVERY_RADIUS_KM;
   }
 
   // ── Cache helpers ────────────────────────────────────────────────
 
   /** Get all active stores from cache (or DB fallback). */
   async getAllStoresFromCache(): Promise<CachedStore[]> {
-    const cached = await this.cache.get<CachedStore[]>(StoresService.STORES_CACHE_KEY);
+    const cached = await this.cache.get<CachedStore[]>(
+      StoresService.STORES_CACHE_KEY,
+    );
     if (cached) return cached;
 
     const stores = await this.prisma.store.findMany({
@@ -60,7 +64,11 @@ export class StoresService {
       select: { id: true, name: true, pincode: true, lat: true, lng: true },
     });
 
-    await this.cache.set(StoresService.STORES_CACHE_KEY, stores, StoresService.STORES_CACHE_TTL);
+    await this.cache.set(
+      StoresService.STORES_CACHE_KEY,
+      stores,
+      StoresService.STORES_CACHE_TTL,
+    );
 
     // Rebuild geo index so GEOSEARCH-based proximity works without Node.js Haversine
     await this.rebuildGeoIndex(stores);
@@ -70,9 +78,13 @@ export class StoresService {
 
   private async rebuildGeoIndex(stores: CachedStore[]): Promise<void> {
     await this.cache.del(StoresService.STORES_GEO_KEY);
-    const withCoords = stores.filter((s) => s.lat && s.lng && (s.lat !== 0 || s.lng !== 0));
+    const withCoords = stores.filter(
+      (s) => s.lat && s.lng && (s.lat !== 0 || s.lng !== 0),
+    );
     await Promise.all(
-      withCoords.map((s) => this.cache.geoAdd(StoresService.STORES_GEO_KEY, s.lng, s.lat, s.id)),
+      withCoords.map((s) =>
+        this.cache.geoAdd(StoresService.STORES_GEO_KEY, s.lng, s.lat, s.id),
+      ),
     );
   }
 
@@ -96,7 +108,12 @@ export class StoresService {
     pincode?: string,
   ): Promise<NearbyStore[]> {
     const nearbyIds = await this.cache.geoSearchRadius(
-      StoresService.STORES_GEO_KEY, lng, lat, radiusKm, 50, 'km',
+      StoresService.STORES_GEO_KEY,
+      lng,
+      lat,
+      radiusKm,
+      50,
+      'km',
     );
 
     const allStores = await this.getAllStoresFromCache();
@@ -108,7 +125,8 @@ export class StoresService {
         .filter((s): s is CachedStore => s != null)
         .map((s) => ({
           ...s,
-          distance: Math.round(haversineDistance(lat, lng, s.lat, s.lng) * 10) / 10,
+          distance:
+            Math.round(haversineDistance(lat, lng, s.lat, s.lng) * 10) / 10,
         }));
       if (nearby.length > 0) return nearby;
     }
@@ -116,19 +134,30 @@ export class StoresService {
     // Fallback: geo key empty (cold start / Redis flush) — in-memory Haversine
     const nearby = allStores
       .filter((s) => s.lat && s.lng && (s.lat !== 0 || s.lng !== 0))
-      .map((s) => ({ ...s, distance: Math.round(haversineDistance(lat, lng, s.lat, s.lng) * 10) / 10 }))
+      .map((s) => ({
+        ...s,
+        distance:
+          Math.round(haversineDistance(lat, lng, s.lat, s.lng) * 10) / 10,
+      }))
       .filter((s) => s.distance <= radiusKm)
       .sort((a, b) => a.distance - b.distance);
 
     if (nearby.length === 0 && pincode) {
-      return allStores.filter((s) => s.pincode === pincode).map((s) => ({ ...s, distance: 0 }));
+      return allStores
+        .filter((s) => s.pincode === pincode)
+        .map((s) => ({ ...s, distance: 0 }));
     }
     return nearby;
   }
 
   /** Check if user location is within delivery radius of any store. */
   async checkServiceability(lat: number, lng: number, pincode?: string) {
-    let nearby = await this.resolveNearbyByGeo(lat, lng, this.maxDeliveryRadiusKm, pincode);
+    let nearby = await this.resolveNearbyByGeo(
+      lat,
+      lng,
+      this.maxDeliveryRadiusKm,
+      pincode,
+    );
 
     // Pincode fallback if GPS finds nothing
     if (nearby.length === 0 && pincode) {
@@ -148,24 +177,47 @@ export class StoresService {
   }
 
   /** Get stores within a specific radius, sorted by distance. */
-  async findNearbyStores(lat: number, lng: number, pincode?: string, radiusKm: number = 10): Promise<NearbyStore[]> {
+  async findNearbyStores(
+    lat: number,
+    lng: number,
+    pincode?: string,
+    radiusKm: number = 10,
+  ): Promise<NearbyStore[]> {
     return this.resolveNearbyByGeo(lat, lng, radiusKm, pincode);
   }
 
   // ── CRUD ────────────────────────────────────────────────────────
 
-  private async generateStoreCode(storeType: string = 'GROCERY'): Promise<string> {
+  private async generateStoreCode(
+    storeType: string = 'GROCERY',
+  ): Promise<string> {
     let prefix = 'A';
 
     switch (storeType) {
-      case 'GROCERY': prefix = 'GY-'; break;
-      case 'PIZZA_TOWN': prefix = 'PZ-'; break;
-      case 'AUTO_SERVICE': prefix = 'AUTO-'; break;
-      case 'AUTO_PARTS_SHOP': prefix = 'AUTO-'; break;
-      case 'DROP_IN_FACTORY': prefix = 'PF-'; break;
-      case 'HEALTH_SERVICE': prefix = 'HS-'; break;
-      case 'HOME_SERVICE': prefix = 'HS-'; break;
-      default: prefix = 'A'; break;
+      case 'GROCERY':
+        prefix = 'GY-';
+        break;
+      case 'PIZZA_TOWN':
+        prefix = 'PZ-';
+        break;
+      case 'AUTO_SERVICE':
+        prefix = 'AUTO-';
+        break;
+      case 'AUTO_PARTS_SHOP':
+        prefix = 'AUTO-';
+        break;
+      case 'DROP_IN_FACTORY':
+        prefix = 'PF-';
+        break;
+      case 'HEALTH_SERVICE':
+        prefix = 'HS-';
+        break;
+      case 'HOME_SERVICE':
+        prefix = 'HS-';
+        break;
+      default:
+        prefix = 'A';
+        break;
     }
 
     const lastStore = await this.prisma.store.findFirst({
@@ -178,7 +230,9 @@ export class StoresService {
     }
 
     const safePrefix = prefix.replace(/-/g, '\\-');
-    const numMatch = lastStore.storeCode.match(new RegExp(`^${safePrefix}(\\d+)`));
+    const numMatch = lastStore.storeCode.match(
+      new RegExp(`^${safePrefix}(\\d+)`),
+    );
     if (numMatch) {
       const nextNum = parseInt(numMatch[1], 10) + 1;
       return `${prefix}${nextNum}`;
@@ -192,18 +246,31 @@ export class StoresService {
       try {
         const storeCode = await this.generateStoreCode(dto.storeType);
         const store = await this.prisma.store.create({
-          data: { ...dto, storeCode }
+          data: { ...dto, storeCode },
         });
         await this.invalidateCache();
-        this.logger.log(`Store created: ${store.name} (${store.id}) with code ${store.storeCode}`);
+        this.logger.log(
+          `Store created: ${store.name} (${store.id}) with code ${store.storeCode}`,
+        );
         return store;
       } catch (error) {
-        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002' && Array.isArray(error.meta?.target) && error.meta.target.includes('storeCode')) {
+        if (
+          error instanceof Prisma.PrismaClientKnownRequestError &&
+          error.code === 'P2002' &&
+          Array.isArray(error.meta?.target) &&
+          error.meta.target.includes('storeCode')
+        ) {
           retries--;
           this.logger.warn(`Store code collision, retries left: ${retries}`);
-          if (retries === 0) throw new BadRequestException('Failed to generate unique store code. Please try again.');
+          if (retries === 0)
+            throw new BadRequestException(
+              'Failed to generate unique store code. Please try again.',
+            );
         } else {
-          this.logger.error(`Failed to create store: ${error.message}`, error.stack);
+          this.logger.error(
+            `Failed to create store: ${error.message}`,
+            error.stack,
+          );
           throw error;
         }
       }
@@ -314,8 +381,13 @@ export class StoresService {
         },
       });
     } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2003') {
-        throw new NotFoundException(`Store ${storeId} or Product ${dto.productId} not found`);
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2003'
+      ) {
+        throw new NotFoundException(
+          `Store ${storeId} or Product ${dto.productId} not found`,
+        );
       }
       throw error;
     }
@@ -359,8 +431,13 @@ export class StoresService {
       );
       return { updated: totalUpdated };
     } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2003') {
-        throw new NotFoundException(`Store ${storeId} or one of the products not found`);
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2003'
+      ) {
+        throw new NotFoundException(
+          `Store ${storeId} or one of the products not found`,
+        );
       }
       throw error;
     }
@@ -380,21 +457,46 @@ export class StoresService {
         store: { select: { id: true, name: true } },
         variants: {
           where: { isActive: true },
-          select: { label: true, price: true, storePrice: true, mrp: true, taxRate: true },
+          select: {
+            label: true,
+            price: true,
+            storePrice: true,
+            mrp: true,
+            taxRate: true,
+          },
           orderBy: { price: 'asc' },
         },
       },
       orderBy: [{ storeId: 'asc' }, { category: 'asc' }, { name: 'asc' }],
     });
 
-    const HEADERS = ['Store Name', 'Category', 'Sub Category', 'Product Name', 'Variant', 'Price (₹)', 'MRP (₹)', 'Tax Rate (%)', 'Store Price (₹)'];
+    const HEADERS = [
+      'Store Name',
+      'Category',
+      'Sub Category',
+      'Product Name',
+      'Variant',
+      'Price (₹)',
+      'MRP (₹)',
+      'Tax Rate (%)',
+      'Store Price (₹)',
+    ];
 
-    const toRows = (p: typeof products[number], storeName: string) => {
+    const toRows = (p: (typeof products)[number], storeName: string) => {
       const base = [storeName, p.category, p.subCategory ?? '', p.name];
       if (p.variants.length > 0) {
-        return p.variants.map((v) => [...base, v.label, v.price, v.mrp ?? '', v.taxRate ?? p.taxRate, v.storePrice ?? '']);
+        return p.variants.map((v) => [
+          ...base,
+          v.label,
+          v.price,
+          v.mrp ?? '',
+          v.taxRate ?? p.taxRate,
+          v.storePrice ?? '',
+        ]);
       }
-      return [[...base, '', p.price, p.mrp ?? '', p.taxRate, p.storePrice ?? '']];
+      return [
+        [...base, '', p.price, p.mrp ?? '', p.taxRate, p.storePrice ?? ''],
+      ];
     };
 
     const addSheet = (wb: ExcelJS.Workbook, name: string, rows: any[][]) => {
@@ -404,7 +506,11 @@ export class StoresService {
       // Header style
       const headerRow = sheet.getRow(1);
       headerRow.font = { bold: true, color: { argb: 'FFFFFFFF' } };
-      headerRow.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF2563EB' } };
+      headerRow.fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FF2563EB' },
+      };
       headerRow.alignment = { vertical: 'middle', horizontal: 'center' };
       headerRow.height = 20;
 
@@ -425,7 +531,11 @@ export class StoresService {
       // Alternate row shading
       sheet.eachRow((row, idx) => {
         if (idx > 1 && idx % 2 === 0) {
-          row.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF3F4F6' } };
+          row.fill = {
+            type: 'pattern',
+            pattern: 'solid',
+            fgColor: { argb: 'FFF3F4F6' },
+          };
         }
       });
     };
@@ -441,7 +551,8 @@ export class StoresService {
     for (const p of products) {
       const storeName = p.store?.name ?? 'Unknown';
       const storeId = p.store?.id ?? 'unknown';
-      if (!byStore.has(storeId)) byStore.set(storeId, { name: storeName, rows: [] });
+      if (!byStore.has(storeId))
+        byStore.set(storeId, { name: storeName, rows: [] });
       const productRows = toRows(p, storeName);
       byStore.get(storeId)!.rows.push(...productRows);
       allRows.push(...productRows);

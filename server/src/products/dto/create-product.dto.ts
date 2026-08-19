@@ -1,4 +1,3 @@
-
 import {
   IsString,
   IsNotEmpty,
@@ -20,7 +19,12 @@ export class CreateVariantDto {
   @IsOptional() @Type(() => Number) @IsNumber() mrp?: number;
   @Type(() => Number) @IsNumber() stock: number;
   @IsOptional() @IsArray() @IsString({ each: true }) images?: string[];
-  @IsOptional() @Type(() => Number) @IsNumber() @Min(0) @Max(100) taxRate?: number;
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  taxRate?: number;
 }
 
 export class CreateProductDto {
@@ -107,7 +111,9 @@ export class CreateProductDto {
   @Type(() => CreateVariantDto)
   variants?: CreateVariantDto[];
 
-  @ApiPropertyOptional({ description: 'Product variants as JSON string (for multipart/form-data)' })
+  @ApiPropertyOptional({
+    description: 'Product variants as JSON string (for multipart/form-data)',
+  })
   @IsString()
   @IsOptional()
   variantsJson?: string;

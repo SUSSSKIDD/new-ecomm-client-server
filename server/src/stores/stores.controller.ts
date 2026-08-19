@@ -61,19 +61,23 @@ export class StoresController {
     private readonly storesService: StoresService,
     private readonly subcategoryService: SubcategoryService,
     private readonly localStorage: LocalStorageService,
-  ) { }
+  ) {}
 
   // ── Public ───────────────────────────────────────────────────────
 
   @Get('categories')
-  @ApiOperation({ summary: 'Get available store categories (static + custom merged)' })
+  @ApiOperation({
+    summary: 'Get available store categories (static + custom merged)',
+  })
   @ApiResponse({ status: 200, description: 'Store categories list' })
   async getCategories() {
     const [allCustom, allConfigs] = await Promise.all([
       this.subcategoryService.getAllCustomSubcategories(),
       this.subcategoryService.getAllCategoryConfigs(),
     ]);
-    const configMap = new Map<string, any>(allConfigs.map((c: any) => [`${c.storeType}:${c.subcategory}`, c]));
+    const configMap = new Map<string, any>(
+      allConfigs.map((c: any) => [`${c.storeType}:${c.subcategory}`, c]),
+    );
 
     const mergedSubcategories: Record<string, string[]> = {};
     const uploadTypes: Record<string, Record<string, string>> = {};
@@ -92,7 +96,8 @@ export class StoresController {
       for (const sub of mergedSubcategories[storeType]) {
         const conf = configMap.get(`${storeType}:${sub}`);
         if (conf) {
-          if (conf.uploadType && conf.uploadType !== 'NONE') typeMap[sub] = conf.uploadType;
+          if (conf.uploadType && conf.uploadType !== 'NONE')
+            typeMap[sub] = conf.uploadType;
           if (conf.bannerImage) bannerMap[sub] = conf.bannerImage;
         }
       }
@@ -104,7 +109,8 @@ export class StoresController {
         }
       }
       if (Object.keys(typeMap).length > 0) uploadTypes[storeType] = typeMap;
-      if (Object.keys(bannerMap).length > 0) bannerImages[storeType] = bannerMap;
+      if (Object.keys(bannerMap).length > 0)
+        bannerImages[storeType] = bannerMap;
     }
     return {
       categories: STORE_CATEGORIES,
@@ -121,7 +127,11 @@ export class StoresController {
   })
   @ApiResponse({ status: 200, description: 'Serviceability result' })
   checkServiceability(@Query() query: CheckServiceabilityDto) {
-    return this.storesService.checkServiceability(query.lat, query.lng, query.pincode);
+    return this.storesService.checkServiceability(
+      query.lat,
+      query.lng,
+      query.pincode,
+    );
   }
 
   // ── Admin CRUD ──────────────────────────────────────────────────
@@ -130,12 +140,20 @@ export class StoresController {
   @ApiBearerAuth()
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Roles('ADMIN')
-  @ApiOperation({ summary: 'Export all products as Excel with one sheet per store (Admin)' })
+  @ApiOperation({
+    summary: 'Export all products as Excel with one sheet per store (Admin)',
+  })
   async exportCatalogXlsx(@Res() res: Response) {
     const buffer = await this.storesService.exportCatalogXlsx();
     const date = new Date().toISOString().slice(0, 10);
-    res.header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.header('Content-Disposition', `attachment; filename="catalog_${date}.xlsx"`);
+    res.header(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    res.header(
+      'Content-Disposition',
+      `attachment; filename="catalog_${date}.xlsx"`,
+    );
     res.send(buffer);
   }
 
@@ -222,7 +240,9 @@ export class StoresController {
       return this.subcategoryService.getAllCustomSubcategories();
     }
     const store = await this.storesService.findOne(req.user.storeId!);
-    return this.subcategoryService.getCustomSubcategoriesByType(store.storeType);
+    return this.subcategoryService.getCustomSubcategoriesByType(
+      store.storeType,
+    );
   }
 
   @Post('subcategories/custom')
@@ -244,7 +264,9 @@ export class StoresController {
   @ApiBearerAuth()
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Roles('ADMIN')
-  @ApiOperation({ summary: 'Create custom subcategory for any store type (Admin)' })
+  @ApiOperation({
+    summary: 'Create custom subcategory for any store type (Admin)',
+  })
   createCustomSubcategoryAdmin(@Body() dto: AdminCreateCustomSubcategoryDto) {
     return this.subcategoryService.create(dto.storeType, dto.name);
   }
@@ -253,7 +275,9 @@ export class StoresController {
   @ApiBearerAuth()
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Roles('ADMIN')
-  @ApiOperation({ summary: 'Delete a custom subcategory and all related products' })
+  @ApiOperation({
+    summary: 'Delete a custom subcategory and all related products',
+  })
   deleteCustomSubcategory(@Param('id', ParseUUIDPipe) id: string) {
     return this.subcategoryService.remove(id);
   }
@@ -272,11 +296,11 @@ export class StoresController {
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Roles('ADMIN', 'STORE_MANAGER')
   @ApiOperation({ summary: 'Set upload type for a subcategory' })
-  upsertCategoryConfig(
-    @Body() dto: UpsertCategoryConfigDto,
-  ) {
+  upsertCategoryConfig(@Body() dto: UpsertCategoryConfigDto) {
     return this.subcategoryService.upsertCategoryConfig(
-      dto.storeType, dto.subcategory, dto.uploadType,
+      dto.storeType,
+      dto.subcategory,
+      dto.uploadType,
     );
   }
 
@@ -295,30 +319,50 @@ export class StoresController {
   @ApiBearerAuth()
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Roles('ADMIN', 'STORE_MANAGER')
-  @UseInterceptors(FileInterceptor('photo', {
-    storage: multer.memoryStorage(),
-    limits: { fileSize: 5 * 1024 * 1024 },
-    fileFilter: (_req: any, file: Express.Multer.File, cb: any) => {
-      if (['image/jpeg', 'image/png', 'image/webp', 'image/jpg'].includes(file.mimetype)) {
-        cb(null, true);
-      } else {
-        cb(new Error(`Invalid file type: ${file.mimetype}. Only JPEG, PNG, WebP allowed.`), false);
-      }
-    },
-  }))
+  @UseInterceptors(
+    FileInterceptor('photo', {
+      storage: multer.memoryStorage(),
+      limits: { fileSize: 5 * 1024 * 1024 },
+      fileFilter: (_req: any, file: Express.Multer.File, cb: any) => {
+        if (
+          ['image/jpeg', 'image/png', 'image/webp', 'image/jpg'].includes(
+            file.mimetype,
+          )
+        ) {
+          cb(null, true);
+        } else {
+          cb(
+            new Error(
+              `Invalid file type: ${file.mimetype}. Only JPEG, PNG, WebP allowed.`,
+            ),
+            false,
+          );
+        }
+      },
+    }),
+  )
   @ApiOperation({ summary: 'Upload/Update subcategory photo (SuperAdmin)' })
   async uploadSubcategoryPhoto(
-    @Body() dto: { storeType: string, subcategory: string },
+    @Body() dto: { storeType: string; subcategory: string },
     @UploadedFile() file: Express.Multer.File,
   ) {
     if (!file) throw new BadRequestException('No photo provided');
-    if (!dto.storeType || !dto.subcategory) throw new BadRequestException('storeType and subcategory required');
-    
+    if (!dto.storeType || !dto.subcategory)
+      throw new BadRequestException('storeType and subcategory required');
+
     // Upload banner image/video to local storage
-    const bannerImage = await this.localStorage.upload(file, `subcategories-${dto.storeType}`);
-    
+    const bannerImage = await this.localStorage.upload(
+      file,
+      `subcategories-${dto.storeType}`,
+    );
+
     // Update CategoryConfig (create if not exists)
-    const config = await this.subcategoryService.upsertCategoryConfig(dto.storeType, dto.subcategory, undefined, bannerImage);
+    const config = await this.subcategoryService.upsertCategoryConfig(
+      dto.storeType,
+      dto.subcategory,
+      undefined,
+      bannerImage,
+    );
     return { bannerImage, config };
   }
 
@@ -327,9 +371,15 @@ export class StoresController {
   @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Roles('ADMIN')
   @ApiOperation({ summary: 'Delete subcategory banner (SuperAdmin)' })
-  async deleteSubcategoryBanner(@Body() dto: { storeType: string, subcategory: string }) {
-     if (!dto.storeType || !dto.subcategory) throw new BadRequestException('storeType and subcategory required');
-     await this.subcategoryService.removeBannerImage(dto.storeType, dto.subcategory);
-     return { message: 'Banner removed successfully' };
+  async deleteSubcategoryBanner(
+    @Body() dto: { storeType: string; subcategory: string },
+  ) {
+    if (!dto.storeType || !dto.subcategory)
+      throw new BadRequestException('storeType and subcategory required');
+    await this.subcategoryService.removeBannerImage(
+      dto.storeType,
+      dto.subcategory,
+    );
+    return { message: 'Banner removed successfully' };
   }
 }

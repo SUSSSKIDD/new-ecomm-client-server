@@ -6,7 +6,17 @@ import { StockService } from './services/stock.service';
 
 @Global()
 @Module({
-  providers: [...redisProviders, RedisCacheService, LocalStorageService, StockService],
-  exports: [...redisProviders, RedisCacheService, LocalStorageService, StockService],
+  providers: [
+    ...redisProviders,
+    RedisCacheService,
+    LocalStorageService,
+    StockService,
+  ],
+  exports: [
+    ...redisProviders,
+    RedisCacheService,
+    LocalStorageService,
+    StockService,
+  ],
 })
 export class CommonModule {}

@@ -1,4 +1,11 @@
-import { Inject, Injectable, Logger, OnModuleDestroy, OnModuleInit, ServiceUnavailableException } from '@nestjs/common';
+import {
+  Inject,
+  Injectable,
+  Logger,
+  OnModuleDestroy,
+  OnModuleInit,
+  ServiceUnavailableException,
+} from '@nestjs/common';
 import { Subject } from 'rxjs';
 import Redis from 'ioredis';
 import { REDIS_CACHE, REDIS_CACHE_SUB } from '../common/redis/redis.constants';
@@ -35,15 +42,22 @@ export class DeliverySseService implements OnModuleInit, OnModuleDestroy {
 
   onModuleInit() {
     // Sweep stale connections every 2 minutes
-    this.staleCheckInterval = setInterval(() => {
-      this.sweepStaleConnections();
-    }, 2 * 60 * 1000);
+    this.staleCheckInterval = setInterval(
+      () => {
+        this.sweepStaleConnections();
+      },
+      2 * 60 * 1000,
+    );
 
     // Subscribe to Redis Pub/Sub for cross-instance SSE delivery
     if (this.subscriber) {
-      this.subscriber.subscribe(DeliverySseService.CHANNEL).catch((err: any) => {
-        this.logger.error(`Failed to subscribe to ${DeliverySseService.CHANNEL}: ${err?.message || err}`);
-      });
+      this.subscriber
+        .subscribe(DeliverySseService.CHANNEL)
+        .catch((err: any) => {
+          this.logger.error(
+            `Failed to subscribe to ${DeliverySseService.CHANNEL}: ${err?.message || err}`,
+          );
+        });
       this.subscriber.on('message', (channel, message) => {
         if (channel !== DeliverySseService.CHANNEL) return;
         try {
@@ -56,7 +70,9 @@ export class DeliverySseService implements OnModuleInit, OnModuleDestroy {
             }
           }
         } catch (err: any) {
-          this.logger.error(`Pub/Sub message parse error: ${err?.message || err}`);
+          this.logger.error(
+            `Pub/Sub message parse error: ${err?.message || err}`,
+          );
         }
       });
       this.logger.log('SSE Pub/Sub subscriber initialized');
@@ -90,7 +106,9 @@ export class DeliverySseService implements OnModuleInit, OnModuleDestroy {
       connectedAt: now,
       lastActivity: now,
     });
-    this.logger.log(`SSE connected: ${deliveryPersonId} (total: ${this.connections.size})`);
+    this.logger.log(
+      `SSE connected: ${deliveryPersonId} (total: ${this.connections.size})`,
+    );
     return subject;
   }
 
@@ -100,7 +118,9 @@ export class DeliverySseService implements OnModuleInit, OnModuleDestroy {
     if (existing) {
       existing.subject.complete();
       this.connections.delete(deliveryPersonId);
-      this.logger.log(`SSE disconnected: ${deliveryPersonId} (total: ${this.connections.size})`);
+      this.logger.log(
+        `SSE disconnected: ${deliveryPersonId} (total: ${this.connections.size})`,
+      );
     }
   }
 
@@ -115,7 +135,9 @@ export class DeliverySseService implements OnModuleInit, OnModuleDestroy {
         entry.subject.next({ data: payload });
         entry.lastActivity = Date.now();
       } catch (err) {
-        this.logger.error(`SSE notify failed for ${deliveryPersonId}: ${err.message}`);
+        this.logger.error(
+          `SSE notify failed for ${deliveryPersonId}: ${err.message}`,
+        );
         this.unregister(deliveryPersonId);
       }
     }
@@ -160,7 +182,9 @@ export class DeliverySseService implements OnModuleInit, OnModuleDestroy {
           entry.lastActivity = Date.now();
           sent++;
         } catch (err) {
-          this.logger.error(`SSE broadcast failed for rider ${riderId}: ${err.message}`);
+          this.logger.error(
+            `SSE broadcast failed for rider ${riderId}: ${err.message}`,
+          );
           this.unregister(riderId);
         }
       }
@@ -179,7 +203,11 @@ export class DeliverySseService implements OnModuleInit, OnModuleDestroy {
    * Only notifies riders who were actually shown this order — O(eligible) not O(all connections).
    * eligibleRiderIds: the set stored in Redis at broadcast time; pass [] if unknown.
    */
-  broadcastOrderClaimed(excludeRiderId: string | null, orderId: string, eligibleRiderIds: string[]): void {
+  broadcastOrderClaimed(
+    excludeRiderId: string | null,
+    orderId: string,
+    eligibleRiderIds: string[],
+  ): void {
     const message: SSEMessage = {
       type: 'ORDER_CLAIMED',
       data: { orderId },
@@ -196,7 +224,9 @@ export class DeliverySseService implements OnModuleInit, OnModuleDestroy {
         entry.lastActivity = Date.now();
         sent++;
       } catch (err) {
-        this.logger.error(`SSE claimed broadcast failed for rider ${riderId}: ${err.message}`);
+        this.logger.error(
+          `SSE claimed broadcast failed for rider ${riderId}: ${err.message}`,
+        );
         this.unregister(riderId);
       }
     }
@@ -220,7 +250,10 @@ export class DeliverySseService implements OnModuleInit, OnModuleDestroy {
     const remoteIds = targetIds.filter((id) => !this.connections.has(id));
     if (remoteIds.length === 0) return;
     this.publisher
-      .publish(DeliverySseService.CHANNEL, JSON.stringify({ targetIds: remoteIds, payload }))
+      .publish(
+        DeliverySseService.CHANNEL,
+        JSON.stringify({ targetIds: remoteIds, payload }),
+      )
       .catch((err) => {
         this.logger.error(`Pub/Sub publish error: ${err.message}`);
       });
@@ -232,13 +265,17 @@ export class DeliverySseService implements OnModuleInit, OnModuleDestroy {
     let swept = 0;
     for (const [id, entry] of this.connections) {
       if (now - entry.lastActivity > DeliverySseService.STALE_TIMEOUT_MS) {
-        this.logger.warn(`Sweeping stale SSE connection: ${id} (idle ${Math.round((now - entry.lastActivity) / 1000)}s)`);
+        this.logger.warn(
+          `Sweeping stale SSE connection: ${id} (idle ${Math.round((now - entry.lastActivity) / 1000)}s)`,
+        );
         this.unregister(id);
         swept++;
       }
     }
     if (swept > 0) {
-      this.logger.log(`Swept ${swept} stale SSE connections (remaining: ${this.connections.size})`);
+      this.logger.log(
+        `Swept ${swept} stale SSE connections (remaining: ${this.connections.size})`,
+      );
     }
   }
 }

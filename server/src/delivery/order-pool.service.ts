@@ -26,7 +26,8 @@ export class OrderPoolService {
     this.claimTimeoutMs =
       (config.get<number>('ORDER_CLAIM_TIMEOUT_SECONDS') ?? 120) * 1000;
     this.maxDeliveryRadiusKm =
-      config.get<number>('MAX_DELIVERY_RADIUS_KM') ?? DEFAULT_MAX_DELIVERY_RADIUS_KM;
+      config.get<number>('MAX_DELIVERY_RADIUS_KM') ??
+      DEFAULT_MAX_DELIVERY_RADIUS_KM;
   }
 
   /**
@@ -38,7 +39,7 @@ export class OrderPoolService {
     await this.deliveryQueue.add(
       'manual-assignment-timeout',
       { orderId, isParcel },
-      { delay: timeoutMs, removeOnComplete: true }
+      { delay: timeoutMs, removeOnComplete: true },
     );
   }
 
@@ -61,11 +62,18 @@ export class OrderPoolService {
       this.prisma.orderAssignment.findUnique({ where: { orderId } }),
     ]);
 
-    if (!order || existing || !OrderPoolService.BROADCAST_VALID.has(order.status)) return 0;
+    if (
+      !order ||
+      existing ||
+      !OrderPoolService.BROADCAST_VALID.has(order.status)
+    )
+      return 0;
 
     // Skip parent orders — each child order gets its own delivery assignment
     if (order.isParent) {
-      this.logger.log(`Skipping parent order ${order.orderNumber} — children have their own assignments`);
+      this.logger.log(
+        `Skipping parent order ${order.orderNumber} — children have their own assignments`,
+      );
       return 0;
     }
 
@@ -95,10 +103,16 @@ export class OrderPoolService {
     });
     if (!store || store.lat == null || store.lng == null) return 0;
 
-    const eligibleRiderIds = await this.getNearbyFreeRiders(store.lng, store.lat, { fallbackToGlobal: true });
+    const eligibleRiderIds = await this.getNearbyFreeRiders(
+      store.lng,
+      store.lat,
+      { fallbackToGlobal: true },
+    );
     const snapshot = this.buildOrderSnapshot(order, store);
 
-    await this.storeAndBroadcast(orderId, snapshot, eligibleRiderIds, { orderId });
+    await this.storeAndBroadcast(orderId, snapshot, eligibleRiderIds, {
+      orderId,
+    });
     return eligibleRiderIds.length;
   }
 
@@ -116,18 +130,29 @@ export class OrderPoolService {
 
     // Verify order still exists and is in a broadcastable state
     const [order, assignment] = await Promise.all([
-      this.prisma.order.findUnique({ where: { id: orderId }, select: { status: true } }),
+      this.prisma.order.findUnique({
+        where: { id: orderId },
+        select: { status: true },
+      }),
       this.prisma.orderAssignment.findUnique({ where: { orderId } }),
     ]);
 
     // Order deleted, in terminal state, or already assigned — remove from pool
-    if (!order || OrderPoolService.ORDER_TERMINAL.has(order.status) || assignment) {
-      this.logger.log(`Order ${orderId} is ${order?.status ?? 'deleted'} — removing from pool`);
+    if (
+      !order ||
+      OrderPoolService.ORDER_TERMINAL.has(order.status) ||
+      assignment
+    ) {
+      this.logger.log(
+        `Order ${orderId} is ${order?.status ?? 'deleted'} — removing from pool`,
+      );
       await this.removeOrder(orderId);
       return;
     }
 
-    this.logger.log(`Order ${orderId} unclaimed after timeout, re-broadcasting`);
+    this.logger.log(
+      `Order ${orderId} unclaimed after timeout, re-broadcasting`,
+    );
 
     // Clean up old eligible set and re-broadcast
     await this.riderRedis.deleteEligibleRiders(orderId);
@@ -143,18 +168,29 @@ export class OrderPoolService {
 
     // Verify parcel still exists and is in a broadcastable state
     const [parcel, assignment] = await Promise.all([
-      this.prisma.parcelOrder.findUnique({ where: { id: parcelOrderId }, select: { status: true } }),
+      this.prisma.parcelOrder.findUnique({
+        where: { id: parcelOrderId },
+        select: { status: true },
+      }),
       this.prisma.parcelAssignment.findUnique({ where: { parcelOrderId } }),
     ]);
 
     // Parcel deleted, in terminal state, or already assigned — remove from pool
-    if (!parcel || OrderPoolService.PARCEL_TERMINAL.has(parcel.status) || assignment) {
-      this.logger.log(`Parcel ${parcelOrderId} is ${parcel?.status ?? 'deleted'} — removing from pool`);
+    if (
+      !parcel ||
+      OrderPoolService.PARCEL_TERMINAL.has(parcel.status) ||
+      assignment
+    ) {
+      this.logger.log(
+        `Parcel ${parcelOrderId} is ${parcel?.status ?? 'deleted'} — removing from pool`,
+      );
       await this.removeOrder(parcelOrderId);
       return;
     }
 
-    this.logger.log(`Parcel ${parcelOrderId} unclaimed after timeout, re-broadcasting`);
+    this.logger.log(
+      `Parcel ${parcelOrderId} unclaimed after timeout, re-broadcasting`,
+    );
 
     await this.riderRedis.deleteEligibleRiders(parcelOrderId);
     await this.broadcastParcelOrder(parcelOrderId);
@@ -163,14 +199,21 @@ export class OrderPoolService {
   /**
    * Handle timeout for a manual assignment that wasn't accepted.
    */
-  async handleManualAssignmentTimeout(orderId: string, isParcel = false): Promise<void> {
+  async handleManualAssignmentTimeout(
+    orderId: string,
+    isParcel = false,
+  ): Promise<void> {
     if (isParcel) {
       const assignment = await this.prisma.parcelAssignment.findUnique({
         where: { parcelOrderId: orderId },
       });
       if (assignment && !assignment.acceptedAt) {
-        this.logger.log(`Manual parcel assignment for ${orderId} timed out. Reverting to pool.`);
-        await this.prisma.parcelAssignment.delete({ where: { id: assignment.id } });
+        this.logger.log(
+          `Manual parcel assignment for ${orderId} timed out. Reverting to pool.`,
+        );
+        await this.prisma.parcelAssignment.delete({
+          where: { id: assignment.id },
+        });
         await this.broadcastParcelOrder(orderId);
       }
     } else {
@@ -179,7 +222,9 @@ export class OrderPoolService {
         select: { id: true, acceptedAt: true, deliveryPersonId: true },
       });
       if (assignment && !assignment.acceptedAt) {
-        this.logger.log(`Manual order assignment for ${orderId} timed out. Freeing rider and re-broadcasting.`);
+        this.logger.log(
+          `Manual order assignment for ${orderId} timed out. Freeing rider and re-broadcasting.`,
+        );
         await this.prisma.$transaction([
           this.prisma.orderAssignment.delete({ where: { id: assignment.id } }),
           this.prisma.deliveryPerson.update({
@@ -214,10 +259,14 @@ export class OrderPoolService {
     // Filter to orders this specific rider is eligible to claim
     const eligibilityChecks = await Promise.all(
       orderIds.map((id) =>
-        this.riderRedis.getEligibleRiders(id).then((riders) => (riders.includes(riderId) ? id : null)),
+        this.riderRedis
+          .getEligibleRiders(id)
+          .then((riders) => (riders.includes(riderId) ? id : null)),
       ),
     );
-    const eligibleOrderIds = eligibilityChecks.filter((id): id is string => id !== null);
+    const eligibleOrderIds = eligibilityChecks.filter(
+      (id): id is string => id !== null,
+    );
     if (eligibleOrderIds.length === 0) return [];
 
     const snapshots = await this.riderRedis.getOrderSnapshots(eligibleOrderIds);
@@ -255,13 +304,17 @@ export class OrderPoolService {
       });
 
       const freeSet = new Set(freePersons.map((p) => p.id));
-      const eligible = nearestRiderIds.filter((id) => freeSet.has(id)).slice(0, 10);
+      const eligible = nearestRiderIds
+        .filter((id) => freeSet.has(id))
+        .slice(0, 10);
       if (eligible.length > 0) return eligible;
     }
 
     // Fallback to global FREE riders if enabled (used by parcels)
     if (options?.fallbackToGlobal) {
-      this.logger.warn(`No riders within ${this.maxDeliveryRadiusKm}km — falling back to global FREE riders`);
+      this.logger.warn(
+        `No riders within ${this.maxDeliveryRadiusKm}km — falling back to global FREE riders`,
+      );
       const freePersons = await this.prisma.deliveryPerson.findMany({
         where: { status: DeliveryPersonStatus.FREE, isActive: true },
         select: { id: true },
@@ -292,11 +345,11 @@ export class OrderPoolService {
       this.sseService.broadcastAvailableOrder(eligibleRiderIds, snapshot);
     }
 
-    await this.deliveryQueue.add(
-      'claim-timeout',
-      jobData,
-      { delay: this.claimTimeoutMs, removeOnComplete: true, removeOnFail: 100 },
-    );
+    await this.deliveryQueue.add('claim-timeout', jobData, {
+      delay: this.claimTimeoutMs,
+      removeOnComplete: true,
+      removeOnFail: 100,
+    });
   }
 
   private buildOrderSnapshot(order: any, store: any): Record<string, unknown> {
@@ -361,12 +414,10 @@ export class OrderPoolService {
 
     const snapshot = this.buildParcelSnapshot(parcel);
 
-    await this.storeAndBroadcast(
-      parcelOrderId,
-      snapshot,
-      eligibleRiderIds,
-      { orderId: parcelOrderId, isParcel: true },
-    );
+    await this.storeAndBroadcast(parcelOrderId, snapshot, eligibleRiderIds, {
+      orderId: parcelOrderId,
+      isParcel: true,
+    });
 
     this.logger.log(
       `Parcel ${parcel.parcelNumber} stored in pool. Alerting ${eligibleRiderIds.length} riders.`,

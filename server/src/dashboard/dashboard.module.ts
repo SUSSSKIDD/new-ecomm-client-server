@@ -5,8 +5,8 @@ import { PrismaService } from '../prisma.service';
 import { CommonModule } from '../common/common.module';
 
 @Module({
-    imports: [CommonModule],
-    controllers: [DashboardController],
-    providers: [DashboardService, PrismaService],
+  imports: [CommonModule],
+  controllers: [DashboardController],
+  providers: [DashboardService, PrismaService],
 })
-export class DashboardModule { }
+export class DashboardModule {}

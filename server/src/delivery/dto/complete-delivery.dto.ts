@@ -1,4 +1,11 @@
-import { IsIn, IsNotEmpty, IsString, ValidateIf, MinLength, MaxLength } from 'class-validator';
+import {
+  IsIn,
+  IsNotEmpty,
+  IsString,
+  ValidateIf,
+  MinLength,
+  MaxLength,
+} from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class CompleteDeliveryDto {
@@ -7,7 +14,10 @@ export class CompleteDeliveryDto {
   @IsIn(['DELIVERED', 'NOT_DELIVERED'])
   result: 'DELIVERED' | 'NOT_DELIVERED';
 
-  @ApiProperty({ description: 'Mandatory reason when result is NOT_DELIVERED', required: false })
+  @ApiProperty({
+    description: 'Mandatory reason when result is NOT_DELIVERED',
+    required: false,
+  })
   @ValidateIf((o) => o.result === 'NOT_DELIVERED')
   @IsString()
   @IsNotEmpty({ message: 'Reason is required when result is NOT_DELIVERED' })
@@ -15,7 +25,10 @@ export class CompleteDeliveryDto {
   @MaxLength(500)
   reason?: string;
 
-  @ApiProperty({ description: '4-digit delivery PIN provided by the customer', required: false })
+  @ApiProperty({
+    description: '4-digit delivery PIN provided by the customer',
+    required: false,
+  })
   @ValidateIf((o) => o.result === 'DELIVERED')
   @IsString()
   @IsNotEmpty({ message: 'Delivery PIN is required' })
