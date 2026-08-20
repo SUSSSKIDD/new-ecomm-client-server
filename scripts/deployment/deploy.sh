@@ -101,7 +101,7 @@ docker compose -f $DOCKER_COMPOSE_FILE up -d --no-deps server-$NEW_COLOR client-
 # 3. Wait for the new backend to be healthy
 echo "[3/6] Waiting for server-$NEW_COLOR to become healthy..."
 RETRIES=0
-MAX_RETRIES=20
+MAX_RETRIES=60
 HEALTHY=false
 
 while [ $RETRIES -lt $MAX_RETRIES ]; do
