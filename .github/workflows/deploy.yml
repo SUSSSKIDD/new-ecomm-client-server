@@ -88,6 +88,16 @@ jobs:
     needs: build-and-push
     runs-on: ubuntu-latest
     steps:
+      - name: Sync deployment files to VPS
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          source: "docker-compose.prod.yml,scripts/deployment/deploy.sh"
+          target: "/srv/projects/pratyush/neyokart"
+          strip_components: 0
+
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1
         with:
