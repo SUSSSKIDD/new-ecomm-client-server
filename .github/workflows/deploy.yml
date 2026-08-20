@@ -83,6 +83,8 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
           platforms: linux/amd64
+          build-args: |
+            VITE_API_URL=https://neyokart.com/api
 
   deploy:
     needs: build-and-push
