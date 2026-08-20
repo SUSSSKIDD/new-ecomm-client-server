@@ -6,7 +6,7 @@ echo " Starting Neyokart Blue/Green Deployment  "
 echo "=========================================="
 
 APP_DIR="/srv/projects/pratyush/neyokart"
-UPLOADS_DIR="/opt/srv/projects/pratyush/neyokart/uploads"
+UPLOADS_DIR="/srv/projects/pratyush/neyokart/uploads"
 DOCKER_COMPOSE_FILE="$APP_DIR/docker-compose.prod.yml"
 STATE_FILE="$APP_DIR/active_color.txt"
 
@@ -20,7 +20,7 @@ if [ ! -f "$APP_DIR/.env" ]; then
 fi
 
 # Ensure uploads directory exists and is writable by the container user (uid 1001 = nodeuser).
-# Docker mounts /opt/srv/projects/pratyush/neyokart/uploads → /app/uploads inside the container.
+# Docker mounts /srv/projects/pratyush/neyokart/uploads → /app/uploads inside the container.
 # If the host dir is missing or root-owned, the app crashes with EACCES on startup.
 mkdir -p "$UPLOADS_DIR"
 chown -R 1001:1001 "$UPLOADS_DIR" 2>/dev/null || true
