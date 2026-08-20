@@ -56,3 +56,4 @@ capacitor-cordova-android-plugins/
 **/app/src/main/assets/capacitor.plugins.json
 appbuild.md
 scratch/update_icons.sh
+.env

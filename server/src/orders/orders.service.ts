@@ -1528,6 +1528,19 @@ export class OrdersService {
     CANCELLED: [],
   };
 
+  /**
+   * Assert that the given store owns the order (order has items from this store).
+   * Throws ForbiddenException if the store does not own the order.
+   */
+  private assertStoreOwnsOrder(order: { items: { storeId: string | null }[] }, storeId: string): void {
+    const hasStoreItems = order.items.some((i) => i.storeId === storeId);
+    if (!hasStoreItems) {
+      throw new ForbiddenException(
+        'Order does not contain items from your store',
+      );
+    }
+  }
+
   async updateStatus(id: string, status: OrderStatus, storeId?: string) {
     // Superadmin (ADMIN) has no storeId — prevent order mutations
     if (!storeId) {
@@ -1556,14 +1569,7 @@ export class OrdersService {
       );
     }
 
-    if (storeId) {
-      const hasStoreItems = order.items.some((i) => i.storeId === storeId);
-      if (!hasStoreItems) {
-        throw new ForbiddenException(
-          'Order does not contain items from your store',
-        );
-      }
-    }
+    this.assertStoreOwnsOrder(order, storeId);
 
     // Validate transition (one-way only)
     const allowed = OrdersService.VALID_TRANSITIONS[order.status] ?? [];
@@ -1645,14 +1651,7 @@ export class OrdersService {
     });
     if (!order) throw new NotFoundException('Order not found');
 
-    if (storeId) {
-      const hasStoreItems = order.items.some((i) => i.storeId === storeId);
-      if (!hasStoreItems) {
-        throw new ForbiddenException(
-          'Order does not contain items from your store',
-        );
-      }
-    }
+    this.assertStoreOwnsOrder(order, storeId);
 
     if (
       order.status === OrderStatus.CANCELLED ||
@@ -1719,14 +1718,7 @@ export class OrdersService {
     });
     if (!order) throw new NotFoundException('Order not found');
 
-    if (storeId) {
-      const hasStoreItems = order.items.some((i) => i.storeId === storeId);
-      if (!hasStoreItems) {
-        throw new ForbiddenException(
-          'Order does not contain items from your store',
-        );
-      }
-    }
+    this.assertStoreOwnsOrder(order, storeId);
 
     if (['CANCELLED', 'DELIVERED', 'PENDING'].includes(order.status)) {
       throw new BadRequestException(

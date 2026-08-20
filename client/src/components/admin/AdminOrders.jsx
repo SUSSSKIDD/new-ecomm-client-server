@@ -47,13 +47,11 @@ const AdminOrders = () => {
             else if (data.totalPages) setTotalPages(data.totalPages);
             else if (data.total) setTotalPages(Math.ceil(data.total / limit));
             setLoading(false);
-            return list.some(o =>
-                ['PENDING', 'CONFIRMED', 'ORDER_PICKED', 'SHIPPED'].includes(o.status)
-            );
+            return true; // Always continue polling — don't stop on empty page/filter
         } catch (err) {
             console.error(err);
             setLoading(false);
-            return true;
+            return true; // Retry on error
         }
     }, [page, statusFilter]);
 

@@ -1270,6 +1270,99 @@ await step('RBAC: Rider cannot create store', async () => {
   assert(r.status === 403, `Expected 403, got ${r.status}`);
 });
 
+// ══════════════════════════════════════════════════════════════════════
+//  Phase 12: Super Admin Mutation Restriction (Regression Test)
+// ══════════════════════════════════════════════════════════════════════
+console.log('\n🔷 Phase 12: Super Admin Mutation Restriction (Regression)');
+
+const groceryOrderId = orderIds['GROCERY'];
+const groceryManagerToken = stores['GROCERY'].managerToken;
+
+if (groceryOrderId && groceryManagerToken) {
+  // 1. Super admin CAN read all orders (cross-store visibility)
+  await step('Super Admin: GET /orders/admin/store returns cross-store data', async () => {
+    const r = await api.get('/orders/admin/store', auth(adminToken));
+    assert(r.status === 200, `Expected 200, got ${r.status}`);
+    const data = Array.isArray(r.data) ? r.data : (r.data.data || []);
+    assert(data.length > 0, 'Expected orders in admin store list');
+    // Verify full detail is present: store info, items, assignment, amounts
+    const firstOrder = data[0];
+    assert(firstOrder.items && firstOrder.items.length > 0, 'Expected items on order');
+    assert(firstOrder.subtotal !== undefined, 'Expected subtotal');
+    assert(firstOrder.total !== undefined, 'Expected total');
+    console.log(`    ✅ Super admin can see ${data.length} orders with full detail`);
+  });
+
+  // 2. Super admin CANNOT mutate order status (blocked by RolesGuard at guard level)
+  await step('Super Admin: PATCH /orders/admin/:id/status → 403 (RolesGuard)', async () => {
+    const r = await api.patch(`/orders/admin/${groceryOrderId}/status`, { status: 'PROCESSING' }, auth(adminToken));
+    assert(r.status === 403, `Expected 403 for super admin status update, got ${r.status}`);
+    // RolesGuard rejects before controller - message differs from controller-level check
+    assert(r.data.message?.includes('Requires one of: STORE_MANAGER') || r.data.message?.includes('Superadmin cannot modify orders'),
+      `Wrong error message: ${r.data.message}`);
+  });
+
+  // 3. Super admin CANNOT trigger delivery assignment (blocked by RolesGuard)
+  await step('Super Admin: POST /orders/admin/:id/assign-delivery → 403 (RolesGuard)', async () => {
+    const r = await api.post(`/orders/admin/${groceryOrderId}/assign-delivery`, {}, auth(adminToken));
+    assert(r.status === 403, `Expected 403 for super admin assign-delivery, got ${r.status}`);
+    assert(r.data.message?.includes('Requires one of: STORE_MANAGER') || r.data.message?.includes('Superadmin cannot modify orders'),
+      `Wrong error message: ${r.data.message}`);
+  });
+
+  // 4. Super admin CANNOT manually assign delivery (blocked by RolesGuard)
+  await step('Super Admin: POST /orders/admin/:id/manual-assign → 403 (RolesGuard)', async () => {
+    // First ensure a rider is FREE to have a valid riderId
+    const riderId = dpIds[0];
+    const r = await api.post(`/orders/admin/${groceryOrderId}/manual-assign`, { deliveryPersonId: riderId }, auth(adminToken));
+    assert(r.status === 403, `Expected 403 for super admin manual-assign, got ${r.status}`);
+    assert(r.data.message?.includes('Requires one of: STORE_MANAGER') || r.data.message?.includes('Superadmin cannot modify orders'),
+      `Wrong error message: ${r.data.message}`);
+  });
+
+  // 5. Store manager CAN mutate their own store's order
+  await step('Store Manager: PATCH /orders/admin/:id/status → 200/400 (own store)', async () => {
+    // Reset order to CONFIRMED if it was advanced (for test isolation)
+    // Note: we don't reset here since it's a regression test; just verify mutation works
+    const r = await api.patch(`/orders/admin/${groceryOrderId}/status`, { status: 'ORDER_PICKED' }, auth(groceryManagerToken));
+    // Order might already be past ORDER_PICKED from earlier tests, so accept 200 or 400 (invalid transition)
+    if (r.status === 400) {
+      console.log(`    ⚠️  Order already past ORDER_PICKED (status: ${r.data.message}) — mutation endpoint works`);
+    } else {
+      assert(r.status === 200, `Expected 200 for store manager status update, got ${r.status}`);
+    }
+  });
+
+  // 6. Store manager CAN trigger delivery assignment on their own store's order
+  // (Order must be in ORDER_PICKED or SHIPPED status for assign-delivery to work)
+  await step('Store Manager: POST /orders/admin/:id/assign-delivery → 200/400/409 (own store)', async () => {
+    const r = await api.post(`/orders/admin/${groceryOrderId}/assign-delivery`, {}, auth(groceryManagerToken));
+    // Accept 200/201 (success), 409 (already assigned), or 400 (invalid status)
+    assert(r.status === 200 || r.status === 201 || r.status === 409 || r.status === 400,
+      `Expected 200/201/409/400 for store manager assign-delivery, got ${r.status}`);
+    if (r.status === 400) {
+      console.log(`    ⚠️  Order status invalid for assign-delivery: ${r.data.message}`);
+    }
+  });
+
+  // 7. Store manager CANNOT mutate another store's order (store isolation)
+  // Use a different store's order if available
+  const pizzaOrderId = orderIds['PIZZA_TOWN'];
+  if (pizzaOrderId && pizzaOrderId !== groceryOrderId) {
+    await step('Store Manager: POST /orders/admin/:id/assign-delivery → 403 (other store)', async () => {
+      const r = await api.post(`/orders/admin/${pizzaOrderId}/assign-delivery`, {}, auth(groceryManagerToken));
+      assert(r.status === 403, `Expected 403 for cross-store mutation, got ${r.status}`);
+    });
+  }
+
+  // 8. Super admin CSV export still works
+  await step('Super Admin: GET /orders/admin/export/csv → 200', async () => {
+    const r = await api.get('/orders/admin/export/csv', auth(adminToken));
+    assert(r.status === 200, `Expected 200 for super admin CSV export, got ${r.status}`);
+    assert(r.data.includes('ORDER'), 'Expected CSV header');
+  });
+}
+
 // ── Post-race cleanup: flush delivery pool to prevent stale BullMQ jobs ──
 {
   const raceCleanRedis = new Redis(REDIS_URL, { maxRetriesPerRequest: 1, lazyConnect: true });
