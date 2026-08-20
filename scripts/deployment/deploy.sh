@@ -86,14 +86,13 @@ done
 echo "  ✅ redis-bull healthy"
 
 
-# 1. Build new slot images in parallel using BuildKit
-# --no-cache removed: BuildKit layer cache cuts repeat build time significantly.
-# DOCKER_BUILDKIT=1 enables parallel stage execution within each Dockerfile.
-# --parallel builds server + client simultaneously (independent, no shared layers).
-echo "[1/6] Building latest images (parallel, BuildKit)..."
-DOCKER_BUILDKIT=1 COMPOSE_DOCKER_CLI_BUILD=1 \
-  docker compose -f $DOCKER_COMPOSE_FILE build --parallel \
-  server-$NEW_COLOR client-$NEW_COLOR
+# 1. Pull the latest pre-built images from GHCR
+# These services have no `build:` section (image: only) — they're built by CI
+# and pushed to GHCR under the :latest tag. `docker compose up -d` does NOT
+# re-fetch an already-cached tag on its own, so without an explicit pull here
+# every deploy just restarts the same stale image already sitting on the VPS.
+echo "[1/6] Pulling latest images from GHCR..."
+docker compose -f $DOCKER_COMPOSE_FILE pull server-$NEW_COLOR client-$NEW_COLOR
 
 # 2. Start the new container in the background
 echo "[2/6] Starting $NEW_COLOR containers..."
