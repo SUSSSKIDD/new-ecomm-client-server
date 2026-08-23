@@ -7,12 +7,16 @@ import {
 import { PrismaService } from '../prisma.service';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { CreateAddressDto } from './dto/create-address.dto';
+import { GeocodingService } from '../common/services/geocoding.service';
 
 @Injectable()
 export class UsersService {
   private readonly logger = new Logger(UsersService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly geocodingService: GeocodingService,
+  ) {}
 
   async findAll() {
     return this.prisma.user.findMany({
@@ -84,8 +88,16 @@ export class UsersService {
   }
 
   async createAddress(userId: string, dto: CreateAddressDto) {
+    let { lat, lng } = dto;
+    if (lat == null || lng == null) {
+      const resolved = await this.geocodingService.geocode(dto);
+      if (resolved) {
+        lat = resolved.lat;
+        lng = resolved.lng;
+      }
+    }
     return this.prisma.address.create({
-      data: { userId, ...dto },
+      data: { userId, ...dto, lat, lng },
     });
   }
 
@@ -95,9 +107,26 @@ export class UsersService {
     dto: Partial<CreateAddressDto>,
   ) {
     const address = await this.findOwnedAddress(userId, addressId);
+    let { lat, lng } = dto;
+    if (lat == null && lng == null && (address.lat == null || address.lng == null)) {
+      const resolved = await this.geocodingService.geocode({
+        street: dto.street ?? address.street,
+        city: dto.city ?? address.city,
+        state: dto.state ?? address.state,
+        zipCode: dto.zipCode ?? address.zipCode,
+      });
+      if (resolved) {
+        lat = resolved.lat;
+        lng = resolved.lng;
+      }
+    }
+    const data: Partial<CreateAddressDto> = { ...dto };
+    if (lat != null) data.lat = lat;
+    if (lng != null) data.lng = lng;
+
     return this.prisma.address.update({
       where: { id: address.id },
-      data: dto,
+      data,
     });
   }
 

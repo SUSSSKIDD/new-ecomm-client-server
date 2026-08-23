@@ -10,6 +10,7 @@ import { PrismaService } from '../prisma.service';
 import { CartService } from '../cart/cart.service';
 import { RedisCacheService } from '../common/services/redis-cache.service';
 import { StockService } from '../common/services/stock.service';
+import { GeocodingService } from '../common/services/geocoding.service';
 import { UserSseService } from '../sse/user-sse.service';
 import { paginate } from '../common/utils/pagination.util';
 import {
@@ -59,6 +60,7 @@ export class OrdersService {
     private readonly userSseService: UserSseService,
     private readonly deliverySseService: DeliverySseService,
     private readonly orderPoolService: OrderPoolService,
+    private readonly geocodingService: GeocodingService,
   ) {
     this.deliveryFee = Number(this.config.get('DELIVERY_FEE', '30'));
 
@@ -430,8 +432,32 @@ export class OrdersService {
 
     // 4-5. Parallel: fetch products + resolve allocation
     const productIds = itemsToOrder.map((i) => i.productId);
-    const lat = dto.lat ?? address.lat;
-    const lng = dto.lng ?? address.lng;
+    let lat = dto.lat ?? address.lat;
+    let lng = dto.lng ?? address.lng;
+
+    // Safety net: an address saved without lat/lng (e.g. typed manually, before
+    // geocode-on-save existed, or that save's geocode attempt failed) must still
+    // resolve to real coordinates here — otherwise the order would be created
+    // with no store assignment and become invisible to every store manager.
+    if (lat == null || lng == null) {
+      const resolved = await this.geocodingService.geocode({
+        street: address.street,
+        city: address.city,
+        state: address.state,
+        zipCode: address.zipCode,
+      });
+      if (!resolved) {
+        throw new BadRequestException(
+          'Unable to determine the delivery location for this address. Please update the address with a valid pincode/city, or enable location access.',
+        );
+      }
+      lat = resolved.lat;
+      lng = resolved.lng;
+      // Persist so this address never needs re-geocoding on future orders.
+      this.prisma.address
+        .update({ where: { id: address.id }, data: { lat, lng } })
+        .catch(() => {});
+    }
     const needsFulfillment = lat != null && lng != null;
 
     // Build cart item inputs from cart snapshot
@@ -604,6 +630,14 @@ export class OrdersService {
         variantLabel: cartItem.variantLabel ?? null,
       };
     });
+
+    if (orderItems.some((oi) => oi.storeId == null)) {
+      // Should be unreachable now that create() guarantees resolvable lat/lng
+      // before allocation runs — kept as a visible tripwire, not a silent gap.
+      this.logger.warn(
+        `Order for user ${userId} created with one or more null-storeId items — will be invisible to store managers`,
+      );
+    }
 
     const subtotal = orderItems.reduce((sum, item) => sum + item.total, 0);
     const freeDelivery = subtotal >= this.freeDeliveryThreshold;
