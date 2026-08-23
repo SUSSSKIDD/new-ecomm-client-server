@@ -77,8 +77,10 @@ async function main() {
   console.log(`Found ${orphanedOrders.length} orphaned order(s).`);
   if (orphanedOrders.length === 0) return;
 
+  // Store.lat/lng are required (non-nullable) fields, unlike Address — every
+  // active store row always has coordinates, so no not-null filter is needed.
   const activeStores = await prisma.store.findMany({
-    where: { isActive: true, lat: { not: null }, lng: { not: null } },
+    where: { isActive: true },
   });
 
   let fixed = 0;
@@ -107,7 +109,9 @@ async function main() {
       const inventory = await prisma.storeInventory.findMany({
         where: { storeId: candidate.store.id, productId: { in: productIds } },
       });
-      const stockMap = new Map(inventory.map((row) => [row.productId, row.stock]));
+      const stockMap = new Map<string, number>(
+        inventory.map((row): [string, number] => [row.productId, row.stock]),
+      );
       const requiredMap = new Map<string, number>();
       for (const item of orphanedItems) {
         requiredMap.set(item.productId, (requiredMap.get(item.productId) ?? 0) + item.quantity);
