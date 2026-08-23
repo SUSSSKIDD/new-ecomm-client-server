@@ -26,33 +26,63 @@ export class GeocodingService {
   private static readonly ENDPOINT = 'https://nominatim.openstreetmap.org/search';
   private static readonly USER_AGENT = 'Neyokart-OrderService/1.0';
 
+  /**
+   * Tries a full structured match first, then progressively drops the noisiest
+   * fields (street text is rarely indexed cleanly in OSM — house numbers, flat
+   * numbers, colony/landmark names). A pincode-level match is still precise
+   * enough for this platform's 10km delivery radius, and far better than
+   * failing checkout entirely because Nominatim couldn't parse a street line.
+   */
   async geocode(address: GeocodableAddress): Promise<GeocodeResult | null> {
-    const query = [address.street, address.city, address.state, address.zipCode, 'India']
-      .filter(Boolean)
-      .join(', ');
+    const attempts: Record<string, string>[] = [
+      {
+        street: address.street,
+        city: address.city,
+        state: address.state ?? '',
+        postalcode: address.zipCode,
+      },
+      { city: address.city, state: address.state ?? '', postalcode: address.zipCode },
+      { postalcode: address.zipCode },
+      { city: address.city, state: address.state ?? '' },
+    ];
 
+    for (const params of attempts) {
+      const cleaned = Object.fromEntries(
+        Object.entries(params).filter(([, v]) => v),
+      );
+      if (Object.keys(cleaned).length === 0) continue;
+
+      const result = await this.tryStructuredQuery(cleaned);
+      if (result) return result;
+    }
+
+    this.logger.warn(
+      `No geocode match for address after all fallbacks: ${JSON.stringify(address)}`,
+    );
+    return null;
+  }
+
+  private async tryStructuredQuery(
+    params: Record<string, string>,
+  ): Promise<GeocodeResult | null> {
     try {
       const { data } = await axios.get(GeocodingService.ENDPOINT, {
-        params: { format: 'json', q: query, limit: 1 },
+        params: { format: 'json', country: 'India', limit: 1, ...params },
         headers: { 'User-Agent': GeocodingService.USER_AGENT },
         timeout: 5000,
       });
 
       const match = Array.isArray(data) ? data[0] : null;
-      if (!match) {
-        this.logger.warn(`No geocode match for address: ${query}`);
-        return null;
-      }
+      if (!match) return null;
 
       const lat = parseFloat(match.lat);
       const lng = parseFloat(match.lon);
-      if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-        return null;
-      }
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+
       return { lat, lng };
     } catch (err) {
       this.logger.warn(
-        `Geocoding failed for address "${query}": ${(err as Error).message}`,
+        `Geocoding request failed for ${JSON.stringify(params)}: ${(err as Error).message}`,
       );
       return null;
     }
