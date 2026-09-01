@@ -170,8 +170,8 @@ export class OrdersService {
   }
 
   /**
-   * Calculate order totals using per-item taxRate (flat GST amount per unit in ₹).
-   * Each item must carry a `taxRate` property (flat rupee amount, e.g. 18 = ₹18 per unit).
+   * Calculate order totals using per-item taxRate (GST percentage, 0-100).
+   * Each item must carry a `taxRate` property (percentage, e.g. 18 = 18%).
    * Tax is never applied to the delivery fee.
    */
   private calculateTotals(items: (PreviewItem & { taxRate?: number })[]): {
@@ -187,10 +187,10 @@ export class OrdersService {
     // Threshold-based fee.
     const deliveryFee = freeDeliveryEligible ? 0 : this.deliveryFee;
 
-    // Per-item tax: flat amount per unit × quantity, rounded to 2dp
+    // Per-item tax: item total × (rate / 100), rounded to 2dp
     const tax = items.reduce((taxSum, item) => {
       const rate = item.taxRate ?? 0;
-      const itemTax = Math.round(rate * item.quantity * 100) / 100;
+      const itemTax = Math.round(item.total * (rate / 100) * 100) / 100;
       return taxSum + itemTax;
     }, 0);
 
@@ -644,7 +644,7 @@ export class OrdersService {
     const deliveryFee = freeDelivery ? 0 : this.deliveryFee;
     // Per-item tax: sum of (itemTotal × itemTaxRate / 100), rounded to 2dp each
     const tax = orderItems.reduce((acc, oi) => {
-      return acc + Math.round((oi.taxRate ?? 0) * oi.quantity * 100) / 100;
+      return acc + Math.round(oi.total * ((oi.taxRate ?? 0) / 100) * 100) / 100;
     }, 0);
     const total = Math.round((subtotal + deliveryFee + tax) * 100) / 100;
 
