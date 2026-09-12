@@ -53,7 +53,7 @@ export class CartService {
         ...item,
         price: variant ? variant.price : product.price,
         name: product.name,
-        taxRate: product.taxRate ?? 0,
+        taxRate: variant?.taxRate ?? product.taxRate ?? 0,
       };
     });
 
@@ -100,6 +100,7 @@ export class CartService {
     let overridePrice = product.price;
     let variantLabel = undefined;
     let variantId = undefined;
+    let variantTaxRate: number | undefined = undefined;
 
     if (dto.variantId) {
       const variant = await (this.prisma as any).productVariant.findUnique({
@@ -112,6 +113,7 @@ export class CartService {
       overridePrice = variant.price;
       variantLabel = variant.label;
       variantId = variant.id;
+      variantTaxRate = variant.taxRate ?? undefined;
     }
 
     if (availableStock < dto.quantity) {
@@ -140,7 +142,7 @@ export class CartService {
       cart.items[existingIndex].price = overridePrice;
       cart.items[existingIndex].name = product.name;
       cart.items[existingIndex].image = product.images?.[0] ?? null;
-      cart.items[existingIndex].taxRate = product.taxRate ?? 0;
+      cart.items[existingIndex].taxRate = variantTaxRate ?? product.taxRate ?? 0;
       cart.items[existingIndex].storeType =
         product.store?.storeType || 'GROCERY';
       cart.items[existingIndex].storeTypeName = product.store?.name || 'Store';
@@ -163,7 +165,7 @@ export class CartService {
         price: overridePrice,
         name: product.name,
         image: product.images?.[0] ?? null,
-        taxRate: product.taxRate ?? 0,
+        taxRate: variantTaxRate ?? product.taxRate ?? 0,
         storeType: product.store?.storeType || 'GROCERY',
         storeTypeName: product.store?.name || 'Store',
         ...(variantId ? { variantId, variantLabel } : {}),
@@ -221,6 +223,7 @@ export class CartService {
     let availableStock = Math.max(product.stock, maxStoreStock);
     let overridePrice = product.price;
     let variantLabel = cart.items[itemIndex].variantLabel;
+    let variantTaxRate: number | undefined = undefined;
 
     if (variantId) {
       const variant = await this.prisma.productVariant.findUnique({
@@ -230,6 +233,7 @@ export class CartService {
         availableStock = variant.stock;
         overridePrice = variant.price;
         variantLabel = variant.label;
+        variantTaxRate = variant.taxRate ?? undefined;
       }
     }
 
@@ -244,7 +248,7 @@ export class CartService {
     cart.items[itemIndex].price = overridePrice;
     cart.items[itemIndex].name = product.name;
     cart.items[itemIndex].image = product.images?.[0] ?? null;
-    cart.items[itemIndex].taxRate = product.taxRate ?? 0;
+    cart.items[itemIndex].taxRate = variantTaxRate ?? product.taxRate ?? 0;
     cart.items[itemIndex].storeType = product.store?.storeType || 'GROCERY';
     cart.items[itemIndex].storeTypeName = product.store?.name || 'Store';
     if (variantId) {

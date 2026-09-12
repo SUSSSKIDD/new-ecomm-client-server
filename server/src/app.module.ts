@@ -22,6 +22,7 @@ import { ParcelModule } from './parcel/parcel.module';
 import { PrintModule } from './print/print.module';
 import { SseModule } from './sse/sse.module';
 import { SitemapModule } from './sitemap/sitemap.module';
+import { BannersModule } from './banners/banners.module';
 
 @Module({
   imports: [
@@ -51,6 +52,7 @@ import { SitemapModule } from './sitemap/sitemap.module';
     PrintModule,
     SseModule,
     SitemapModule,
+    BannersModule,
   ],
   controllers: [AppController],
   providers: [AppService],

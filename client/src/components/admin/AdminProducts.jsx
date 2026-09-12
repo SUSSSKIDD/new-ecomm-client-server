@@ -53,10 +53,10 @@ const ProductModal = ({ product, onClose, onSaved, admin }) => {
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState('');
     const [hasVariants, setHasVariants] = useState(false);
-    const [variants, setVariants] = useState([{ label: '', price: '', mrp: '', storePrice: '', stock: '', taxRate: '', images: [] }]);
+    const [variants, setVariants] = useState([{ label: '', name: '', description: '', price: '', mrp: '', storePrice: '', stock: '', taxRate: '', images: [] }]);
 
     const addVariant = () =>
-        setVariants(v => [...v, { label: '', price: '', mrp: '', storePrice: '', stock: '', taxRate: '', images: [] }]);
+        setVariants(v => [...v, { label: '', name: '', description: '', price: '', mrp: '', storePrice: '', stock: '', taxRate: '', images: [] }]);
 
     const removeVariant = (i) =>
         setVariants(v => v.filter((_, idx) => idx !== i));
@@ -86,8 +86,10 @@ const ProductModal = ({ product, onClose, onSaved, admin }) => {
         fd.append('category', form.category);
         if (!product && hasVariants && variants.length > 0) {
             fd.append('stock', '0'); // variants hold the true stock
-            const variantMeta = variants.map(({ label, price, mrp, storePrice, stock, taxRate }) => ({
+            const variantMeta = variants.map(({ label, name, description, price, mrp, storePrice, stock, taxRate }) => ({
                 label,
+                name: name || undefined,
+                description: description || undefined,
                 price: Number(price),
                 mrp: mrp ? Number(mrp) : undefined,
                 storePrice: storePrice ? Number(storePrice) : undefined,
@@ -230,6 +232,14 @@ const ProductModal = ({ product, onClose, onSaved, admin }) => {
                                                     className="w-full border border-gray-300 rounded px-2 py-1 text-sm" required />
                                                 <GstSelect value={v.taxRate} onChange={e => updateVariant(i, 'taxRate', e.target.value)} placeholder="GST % (inherit)" className="w-full" />
                                             </div>
+                                            <div className="grid grid-cols-1 gap-2">
+                                                <input type="text" placeholder="Name (optional, inherits product name)" value={v.name}
+                                                    onChange={e => updateVariant(i, 'name', e.target.value)}
+                                                    className="w-full border border-gray-300 rounded px-2 py-1 text-sm" />
+                                                <textarea placeholder="Description (optional, inherits product description)" value={v.description}
+                                                    onChange={e => updateVariant(i, 'description', e.target.value)} rows={2}
+                                                    className="w-full border border-gray-300 rounded px-2 py-1 text-sm" />
+                                            </div>
                                             <div>
                                                 <label className="text-xs text-gray-500 block mb-1">Images (max 3, optional)</label>
                                                 <input type="file" multiple accept="image/*"
@@ -287,14 +297,16 @@ const ProductModal = ({ product, onClose, onSaved, admin }) => {
 
 const VariantsModal = ({ product, onClose, onRefresh }) => {
     const [variants, setVariants] = useState(product.variants || []);
-    const [newVar, setNewVar] = useState({ label: '', price: '', mrp: '', storePrice: '', stock: '', taxRate: '', images: [] });
+    const [newVar, setNewVar] = useState({ label: '', name: '', description: '', price: '', mrp: '', storePrice: '', stock: '', taxRate: '', images: [] });
     const [editingId, setEditingId] = useState(null);
-    const [editForm, setEditForm] = useState({ label: '', price: '', mrp: '', storePrice: '', stock: '', taxRate: '', images: [] });
+    const [editForm, setEditForm] = useState({ label: '', name: '', description: '', price: '', mrp: '', storePrice: '', stock: '', taxRate: '', images: [] });
 
     const handleAdd = async () => {
         try {
             const fd = new FormData();
             fd.append('label', newVar.label);
+            if (newVar.name) fd.append('name', newVar.name);
+            if (newVar.description) fd.append('description', newVar.description);
             fd.append('price', String(Number(newVar.price)));
             if (newVar.mrp) fd.append('mrp', String(Number(newVar.mrp)));
             if (newVar.storePrice) fd.append('storePrice', String(Number(newVar.storePrice)));
@@ -303,7 +315,7 @@ const VariantsModal = ({ product, onClose, onRefresh }) => {
             (newVar.images || []).slice(0, 3).forEach(f => fd.append('images', f));
             const res = await adminApi().post(`/products/${product.id}/variants`, fd);
             setVariants([...variants, res.data]);
-            setNewVar({ label: '', price: '', mrp: '', storePrice: '', stock: '', taxRate: '', images: [] });
+            setNewVar({ label: '', name: '', description: '', price: '', mrp: '', storePrice: '', stock: '', taxRate: '', images: [] });
             onRefresh();
         } catch (err) {
             alert(err.response?.data?.message || 'Failed to add variant');
@@ -312,13 +324,15 @@ const VariantsModal = ({ product, onClose, onRefresh }) => {
 
     const handleEditStart = (v) => {
         setEditingId(v.id);
-        setEditForm({ label: v.label, price: v.price, mrp: v.mrp || '', storePrice: v.storePrice || '', stock: v.stock, taxRate: v.taxRate != null ? String(v.taxRate) : '', images: [] });
+        setEditForm({ label: v.label, name: v.name || '', description: v.description || '', price: v.price, mrp: v.mrp || '', storePrice: v.storePrice || '', stock: v.stock, taxRate: v.taxRate != null ? String(v.taxRate) : '', images: [] });
     };
 
     const handleSave = async (id) => {
         try {
             const fd = new FormData();
             fd.append('label', editForm.label);
+            fd.append('name', editForm.name);
+            fd.append('description', editForm.description);
             fd.append('price', String(Number(editForm.price)));
             fd.append('mrp', editForm.mrp ? String(Number(editForm.mrp)) : '');
             fd.append('storePrice', editForm.storePrice ? String(Number(editForm.storePrice)) : '');
@@ -369,6 +383,10 @@ const VariantsModal = ({ product, onClose, onRefresh }) => {
                                                 <input type="number" value={editForm.storePrice} onChange={e => setEditForm(f => ({ ...f, storePrice: e.target.value }))} className="px-2 py-1 text-sm border rounded text-gray-900" placeholder="Store Price" />
                                                 <input type="number" value={editForm.stock} onChange={e => setEditForm(f => ({ ...f, stock: e.target.value }))} className="px-2 py-1 text-sm border rounded text-gray-900" placeholder="Stock" />
                                                 <GstSelect value={editForm.taxRate} onChange={e => setEditForm(f => ({ ...f, taxRate: e.target.value }))} placeholder="GST (inherit)" />
+                                            </div>
+                                            <div className="grid grid-cols-1 gap-2">
+                                                <input type="text" value={editForm.name} onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))} className="px-2 py-1 text-sm border rounded text-gray-900" placeholder="Name (optional, inherits product name)" />
+                                                <textarea value={editForm.description} onChange={e => setEditForm(f => ({ ...f, description: e.target.value }))} rows={2} className="px-2 py-1 text-sm border rounded text-gray-900" placeholder="Description (optional, inherits product description)" />
                                             </div>
                                             <div>
                                                 <label className="text-xs text-gray-500 block mb-1">Add Images (max 3 total)</label>
@@ -422,6 +440,10 @@ const VariantsModal = ({ product, onClose, onRefresh }) => {
                             <input type="number" placeholder="Store Price (Optional)" value={newVar.storePrice} onChange={e => setNewVar(v => ({ ...v, storePrice: e.target.value }))} className="px-2 py-1 text-sm border rounded text-gray-900" />
                             <input type="number" placeholder="Stock" value={newVar.stock} onChange={e => setNewVar(v => ({ ...v, stock: e.target.value }))} className="px-2 py-1 text-sm border rounded text-gray-900" />
                             <GstSelect value={newVar.taxRate} onChange={e => setNewVar(v => ({ ...v, taxRate: e.target.value }))} placeholder="GST (inherit)" />
+                        </div>
+                        <div className="grid grid-cols-1 gap-2 mb-2">
+                            <input type="text" placeholder="Name (optional, inherits product name)" value={newVar.name} onChange={e => setNewVar(v => ({ ...v, name: e.target.value }))} className="px-2 py-1 text-sm border rounded text-gray-900" />
+                            <textarea placeholder="Description (optional, inherits product description)" value={newVar.description} onChange={e => setNewVar(v => ({ ...v, description: e.target.value }))} rows={2} className="px-2 py-1 text-sm border rounded text-gray-900" />
                         </div>
                         <div className="mb-2">
                             <label className="text-xs text-gray-500 block mb-1">Images (max 3, optional)</label>

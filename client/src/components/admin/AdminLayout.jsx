@@ -33,6 +33,7 @@ const AdminLayout = () => {
     if (admin?.role === 'ADMIN') {
         navItems = navItems.filter(i => i.name !== 'Products' && i.name !== 'Inventory');
         navItems.push({ name: 'Subcategory Photo', path: '/admin/subcategory-photo', icon: '🖼️' });
+        navItems.push({ name: 'Homepage Banners', path: '/admin/homepage-banners', icon: '🎡' });
         navItems.push({ name: 'Stores', path: '/admin/stores', icon: '🏪' });
         navItems.push({ name: 'Managers', path: '/admin/managers', icon: '👔' });
         navItems.push({ name: 'Delivery Guys', path: '/admin/delivery', icon: '🛵' });

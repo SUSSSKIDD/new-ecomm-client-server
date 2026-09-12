@@ -14,6 +14,8 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateVariantDto {
   @IsString() label: string;
+  @IsOptional() @IsString() name?: string;
+  @IsOptional() @IsString() description?: string;
   @Type(() => Number) @IsNumber() price: number;
   @IsOptional() @Type(() => Number) @IsNumber() storePrice?: number;
   @IsOptional() @Type(() => Number) @IsNumber() mrp?: number;

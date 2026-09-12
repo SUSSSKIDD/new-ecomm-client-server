@@ -389,21 +389,30 @@ export class OrdersService {
       const productIds = dto.items.map((i) => i.productId);
       const products = await this.prisma.product.findMany({
         where: { id: { in: productIds } },
+        include: { variants: true },
       });
 
       if (products.length !== dto.items.length) {
         throw new BadRequestException('One or more products not found');
       }
 
-      const itemMap = new Map(dto.items.map((i) => [i.productId, i.quantity]));
-      itemsToOrder = products.map((p) => ({
-        productId: p.id,
-        name: p.name,
-        price: p.price,
-        quantity: itemMap.get(p.id) ?? 1,
-        image: p.images?.[0] ?? null,
-        taxRate: (p as any).taxRate ?? 0,
-      }));
+      const itemMap = new Map(dto.items.map((i) => [i.productId, i]));
+      itemsToOrder = products.map((p) => {
+        const confirmedItem = itemMap.get(p.id)!;
+        const variant = confirmedItem.variantId
+          ? (p.variants as any[])?.find((v) => v.id === confirmedItem.variantId)
+          : undefined;
+        return {
+          productId: p.id,
+          name: p.name,
+          price: variant ? variant.price : p.price,
+          quantity: confirmedItem.quantity ?? 1,
+          image: (variant?.images?.[0] ?? p.images?.[0]) ?? null,
+          taxRate: variant?.taxRate ?? (p as any).taxRate ?? 0,
+          variantId: confirmedItem.variantId,
+          variantLabel: variant?.label,
+        };
+      });
     } else {
       // Normal flow: use cart
       const cart = await this.cartService.getCart(userId);
@@ -707,9 +716,12 @@ export class OrdersService {
     paymentStatus: PaymentStatus,
     confirmedAt: Date | null,
   ) {
-    // Build a lookup for cart item custom fields
+    // Build a lookup for cart item custom fields, keyed by productId+variantId
+    // so two different variants of the same product can't collide.
+    const cartItemKey = (productId: string, variantId?: string | null) =>
+      variantId ? `${productId}_${variantId}` : productId;
     const cartItemLookup = new Map(
-      itemsToOrder.map((ci) => [ci.productId, ci]),
+      itemsToOrder.map((ci) => [cartItemKey(ci.productId, ci.variantId), ci]),
     );
 
     // Build order items per store from allocation
@@ -718,7 +730,9 @@ export class OrdersService {
       storeName: sa.storeName,
       items: sa.items.map((item) => {
         const product = productMap.get(item.productId)!;
-        const cartItem = cartItemLookup.get(item.productId);
+        const cartItem = cartItemLookup.get(
+          cartItemKey(item.productId, item.variantId),
+        );
         const variant = (product.variants as any[])?.find(
           (v) => v.id === cartItem?.variantId,
         );

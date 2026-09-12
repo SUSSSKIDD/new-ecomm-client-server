@@ -62,7 +62,7 @@ const ProductDetailView = () => {
                     >
                         <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
                     </RippleButton>
-                    <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100 truncate flex-1">{selectedProduct.name}</h2>
+                    <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100 truncate flex-1">{selectedVariant?.name || selectedProduct.name}</h2>
                 </div>
 
                 {/* Hero Image Carousel */}
@@ -75,7 +75,7 @@ const ProductDetailView = () => {
                 {/* Product Details */}
                 <div className="p-4 md:p-6 space-y-4">
                     <div>
-                        <h1 className="text-xl md:text-2xl font-bold text-gray-900 dark:text-gray-100 leading-tight">{selectedProduct.name}</h1>
+                        <h1 className="text-xl md:text-2xl font-bold text-gray-900 dark:text-gray-100 leading-tight">{selectedVariant?.name || selectedProduct.name}</h1>
                         {selectedProduct.subCategory && (
                             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{selectedProduct.subCategory}</p>
                         )}
@@ -113,11 +113,11 @@ const ProductDetailView = () => {
                         </div>
                     )}
 
-                    {selectedProduct.description && (
+                    {(selectedVariant?.description || selectedProduct.description) && (
                         <div className="border-t border-gray-100 dark:border-slate-800 pt-4">
                             <h3 className="font-bold text-gray-900 dark:text-gray-100 mb-2">Product Details</h3>
                             <p className="text-gray-600 dark:text-gray-400 text-sm leading-relaxed">
-                                {selectedProduct.description}
+                                {selectedVariant?.description || selectedProduct.description}
                             </p>
                         </div>
                     )}

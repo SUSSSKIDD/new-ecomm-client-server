@@ -49,6 +49,7 @@ export class LocalStorageService implements OnModuleInit {
       'user-designs',
       'print-product-images',
       'subcategories',
+      'homepage-banners',
       ...storeTypes.map((t) => `subcategories-${t}`),
     ];
     for (const sub of dirs) {

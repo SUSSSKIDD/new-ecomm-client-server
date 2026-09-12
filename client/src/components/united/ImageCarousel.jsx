@@ -1,7 +1,7 @@
 import { RippleButton } from '../../components/ui/ripple-button';
 import { useState, useEffect } from 'react';
 
-const ImageCarousel = ({ images = [], altText = '', className = '' }) => {
+const ImageCarousel = ({ images = [], links = [], altText = '', className = '' }) => {
     const [current, setCurrent] = useState(0);
 
     // Reset index when images array changes (use length to avoid new-array-reference rerenders)
@@ -45,20 +45,29 @@ const ImageCarousel = ({ images = [], altText = '', className = '' }) => {
                     width: `${images.length * 100}%`,
                 }}
             >
-                {images.map((img, idx) => (
-                    <div
-                        key={idx}
-                        className="w-full h-full flex items-center justify-center p-4"
-                        style={{ width: `${100 / images.length}%` }}
-                    >
+                {images.map((img, idx) => {
+                    const image = (
                         <img
                             src={img}
                             alt={`${altText} - View ${idx + 1}`}
                             className="max-h-full max-w-full object-contain filter drop-shadow-xl"
                             loading={idx === 0 ? 'eager' : 'lazy'}
                         />
-                    </div>
-                ))}
+                    );
+                    return (
+                        <div
+                            key={idx}
+                            className="w-full h-full flex items-center justify-center p-4"
+                            style={{ width: `${100 / images.length}%` }}
+                        >
+                            {links[idx] ? (
+                                <a href={links[idx]} className="w-full h-full flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
+                                    {image}
+                                </a>
+                            ) : image}
+                        </div>
+                    );
+                })}
             </div>
 
             {/* Prev / Next Arrows */}
