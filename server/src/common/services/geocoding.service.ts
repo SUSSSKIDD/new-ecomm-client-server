@@ -26,6 +26,12 @@ export class GeocodingService {
   private static readonly ENDPOINT = 'https://nominatim.openstreetmap.org/search';
   private static readonly USER_AGENT = 'Neyokart-OrderService/1.0';
 
+  // Hard ceiling on total time spent geocoding, regardless of how many
+  // fallback attempts run — an unresponsive/slow Nominatim must never stall
+  // checkout for long enough to make a user think it failed and retry.
+  private static readonly OVERALL_BUDGET_MS = 8000;
+  private static readonly PER_ATTEMPT_TIMEOUT_MS = 3000;
+
   /**
    * Tries a full structured match first, then progressively drops the noisiest
    * fields (street text is rarely indexed cleanly in OSM — house numbers, flat
@@ -46,7 +52,16 @@ export class GeocodingService {
       { city: address.city, state: address.state ?? '' },
     ];
 
+    const deadline = Date.now() + GeocodingService.OVERALL_BUDGET_MS;
+
     for (const params of attempts) {
+      if (Date.now() >= deadline) {
+        this.logger.warn(
+          `Geocoding overall time budget exceeded, aborting remaining fallbacks for: ${JSON.stringify(address)}`,
+        );
+        break;
+      }
+
       const cleaned = Object.fromEntries(
         Object.entries(params).filter(([, v]) => v),
       );
@@ -69,7 +84,7 @@ export class GeocodingService {
       const { data } = await axios.get(GeocodingService.ENDPOINT, {
         params: { format: 'json', country: 'India', limit: 1, ...params },
         headers: { 'User-Agent': GeocodingService.USER_AGENT },
-        timeout: 5000,
+        timeout: GeocodingService.PER_ATTEMPT_TIMEOUT_MS,
       });
 
       const match = Array.isArray(data) ? data[0] : null;

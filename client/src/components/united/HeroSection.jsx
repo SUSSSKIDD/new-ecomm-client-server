@@ -22,6 +22,17 @@ const HeroSection = () => {
         setImageLoaded(false);
     }, [banners.length]);
 
+    // Auto-advance every 15s; resets on any transition (auto or manual) so
+    // there's always a consistent 15s gap after the user last interacted.
+    useEffect(() => {
+        if (banners.length <= 1) return;
+        const timer = setInterval(() => {
+            setImageLoaded(false);
+            setCurrent(prev => (prev === banners.length - 1 ? 0 : prev + 1));
+        }, 15000);
+        return () => clearInterval(timer);
+    }, [banners.length, current]);
+
     if (banners.length === 0) return null;
 
     const hasMultiple = banners.length > 1;

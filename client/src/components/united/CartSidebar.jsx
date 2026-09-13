@@ -36,6 +36,16 @@ const CartSidebar = () => {
     // Auto-resume checkout after login
     const [pendingCheckout, setPendingCheckout] = useState(false);
 
+    // Stable per-checkout-attempt idempotency key. Generated once when the
+    // user reaches checkout / picks an address, and deliberately NOT
+    // regenerated inside handlePlaceOrder — if the first attempt's response
+    // never reaches the client (dropped connection, impatient retry) but the
+    // server-side request still completes, retrying with the SAME key lets
+    // the backend's idempotency check return the original order instead of
+    // creating a duplicate one.
+    const idempotencyKeyRef = useRef(null);
+    const newIdempotencyKey = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
     const loadAddressesAndCheckout = useCallback(async () => {
         try {
             const res = await api(token).get('/users/addresses');
@@ -43,6 +53,7 @@ const CartSidebar = () => {
             setStep('checkout');
             const defaultAddr = res.data.find((a) => a.lat) || res.data[0] || null;
             if (defaultAddr) {
+                idempotencyKeyRef.current = null; // fresh checkout attempt
                 setSelectedAddress(defaultAddr);
                 setPreviewLoading(true);
                 try {
@@ -163,6 +174,7 @@ const CartSidebar = () => {
 
     // Select address and fetch preview
     const handleSelectAddress = async (address, overrideItems = null) => {
+        idempotencyKeyRef.current = null; // switching address = a new checkout attempt
         setSelectedAddress(address);
         setPreviewLoading(true);
         setError('');
@@ -189,7 +201,8 @@ const CartSidebar = () => {
     const handlePlaceOrder = async () => {
         setPlacing(true);
         setError('');
-        const idempotencyKey = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        if (!idempotencyKeyRef.current) idempotencyKeyRef.current = newIdempotencyKey();
+        const idempotencyKey = idempotencyKeyRef.current;
 
         try {
             // 1. Create the internal order
@@ -211,6 +224,7 @@ const CartSidebar = () => {
             }
 
             const orderRes = await http.post('/orders', body, {
+                timeout: 30000,
                 headers: { 'idempotency-key': idempotencyKey },
             });
 
@@ -234,6 +248,7 @@ const CartSidebar = () => {
                     // In mock mode, we auto-trigger the mock payment for development
                     try {
                         const mockRes = await http.post(`/payments/mock/${order.id}`);
+                        idempotencyKeyRef.current = null; // this attempt is done; any future order needs a fresh key
                         setOrderResult(mockRes.data.order);
                         setStep('success');
                         logEvent('purchase', { order_id: mockRes.data.order.id, value: mockRes.data.order.total, payment_method: paymentMethod }).catch(() => {});
@@ -293,6 +308,7 @@ const CartSidebar = () => {
                                 razorpay_signature: response.razorpay_signature,
                             });
 
+                            idempotencyKeyRef.current = null; // this attempt is done; any future order needs a fresh key
                             setOrderResult(verifyRes.data.order);
                             setStep('success');
                             logEvent('purchase', { order_id: verifyRes.data.order.id, value: verifyRes.data.order.total, payment_method: paymentMethod }).catch(() => {});
@@ -326,6 +342,7 @@ const CartSidebar = () => {
                 // We don't setPlacing(false) here because the flow continues in the handler or ondismiss
             } else {
                 // COD Flow
+                idempotencyKeyRef.current = null; // this attempt is done; any future order needs a fresh key
                 setOrderResult(order);
                 setStep('success');
                 logEvent('purchase', { order_id: order.id, value: order.total, payment_method: 'COD' }).catch(() => {});
