@@ -71,7 +71,13 @@ export class BannersController {
   @ApiOperation({ summary: 'Upload/update a banner slot (Admin)' })
   async upsert(
     @Param('slot', ParseIntPipe) slot: number,
-    @Body() dto: { linkUrl?: string },
+    @Body()
+    dto: {
+      linkUrl?: string;
+      badgeText?: string;
+      heading?: string;
+      subheading?: string;
+    },
     @UploadedFile() file?: Express.Multer.File,
   ) {
     const imageUrl = file
@@ -80,6 +86,9 @@ export class BannersController {
     return this.bannersService.upsert(slot, {
       imageUrl,
       linkUrl: dto.linkUrl !== undefined ? dto.linkUrl || null : undefined,
+      badgeText: dto.badgeText !== undefined ? dto.badgeText || null : undefined,
+      heading: dto.heading !== undefined ? dto.heading || null : undefined,
+      subheading: dto.subheading !== undefined ? dto.subheading || null : undefined,
     });
   }
 

@@ -33,12 +33,18 @@ export class BannersService {
       orderBy: { slot: 'asc' },
     });
     const bySlot = new Map(banners.map((b) => [b.slot, b]));
-    return HOMEPAGE_BANNER_SLOTS.map((slot) => bySlot.get(slot) ?? { slot, imageUrl: null, linkUrl: null, isActive: false });
+    return HOMEPAGE_BANNER_SLOTS.map((slot) => bySlot.get(slot) ?? { slot, imageUrl: null, linkUrl: null, badgeText: null, heading: null, subheading: null, isActive: false });
   }
 
   async upsert(
     slot: number,
-    data: { imageUrl?: string; linkUrl?: string | null },
+    data: {
+      imageUrl?: string;
+      linkUrl?: string | null;
+      badgeText?: string | null;
+      heading?: string | null;
+      subheading?: string | null;
+    },
   ) {
     this.assertValidSlot(slot);
     const existing = await this.prisma.homepageBanner.findUnique({
@@ -62,10 +68,16 @@ export class BannersService {
         slot,
         imageUrl: data.imageUrl!,
         linkUrl: data.linkUrl ?? null,
+        badgeText: data.badgeText ?? null,
+        heading: data.heading ?? null,
+        subheading: data.subheading ?? null,
       },
       update: {
         ...(data.imageUrl && { imageUrl: data.imageUrl }),
         ...(data.linkUrl !== undefined && { linkUrl: data.linkUrl }),
+        ...(data.badgeText !== undefined && { badgeText: data.badgeText }),
+        ...(data.heading !== undefined && { heading: data.heading }),
+        ...(data.subheading !== undefined && { subheading: data.subheading }),
       },
     });
   }

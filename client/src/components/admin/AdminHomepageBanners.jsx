@@ -2,19 +2,26 @@ import { useState, useEffect, useRef } from 'react';
 import { adminApi } from '../../lib/api';
 import { RippleButton } from '../ui/ripple-button';
 
+const emptyDetails = { linkUrl: '', badgeText: '', heading: '', subheading: '' };
+
 const AdminHomepageBanners = () => {
     const [slots, setSlots] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [linkDrafts, setLinkDrafts] = useState({});
+    const [detailDrafts, setDetailDrafts] = useState({});
     const [uploading, setUploading] = useState(null);
-    const [savingLink, setSavingLink] = useState(null);
+    const [savingDetails, setSavingDetails] = useState(null);
     const fileInputRefs = useRef({});
 
     const fetchData = async () => {
         try {
             const res = await adminApi().get('/banners/admin');
             setSlots(res.data);
-            setLinkDrafts(Object.fromEntries(res.data.map(b => [b.slot, b.linkUrl || ''])));
+            setDetailDrafts(Object.fromEntries(res.data.map(b => [b.slot, {
+                linkUrl: b.linkUrl || '',
+                badgeText: b.badgeText || '',
+                heading: b.heading || '',
+                subheading: b.subheading || '',
+            }])));
         } catch (err) {
             console.error(err);
         } finally {
@@ -54,21 +61,28 @@ const AdminHomepageBanners = () => {
         }
     };
 
-    const handleSaveLink = async (slot) => {
-        setSavingLink(slot);
+    const handleSaveDetails = async (slot) => {
+        setSavingDetails(slot);
         try {
+            const draft = detailDrafts[slot] || emptyDetails;
             const fd = new FormData();
-            fd.append('linkUrl', linkDrafts[slot] || '');
+            fd.append('linkUrl', draft.linkUrl || '');
+            fd.append('badgeText', draft.badgeText || '');
+            fd.append('heading', draft.heading || '');
+            fd.append('subheading', draft.subheading || '');
             await adminApi().post(`/banners/${slot}`, fd, {
                 headers: { 'Content-Type': 'multipart/form-data' },
             });
             await fetchData();
         } catch (err) {
-            alert(err.response?.data?.message || 'Failed to save link');
+            alert(err.response?.data?.message || 'Failed to save details');
         } finally {
-            setSavingLink(null);
+            setSavingDetails(null);
         }
     };
+
+    const updateDraft = (slot, field, value) =>
+        setDetailDrafts(d => ({ ...d, [slot]: { ...(d[slot] || emptyDetails), [field]: value } }));
 
     const triggerFileInput = (slot) => fileInputRefs.current[slot]?.click();
 
@@ -130,21 +144,44 @@ const AdminHomepageBanners = () => {
                                         </RippleButton>
                                     )}
                                 </div>
-                                <div className="flex gap-2 items-center">
+                                <div className="space-y-2">
                                     <input
                                         type="text"
-                                        placeholder="Link URL (optional)"
-                                        value={linkDrafts[banner.slot] ?? ''}
-                                        onChange={e => setLinkDrafts(d => ({ ...d, [banner.slot]: e.target.value }))}
-                                        className="flex-1 border border-indigo-200 rounded px-2 py-1.5 text-sm text-gray-900 bg-white"
+                                        placeholder="Badge text (e.g. Fresh from Farm)"
+                                        value={(detailDrafts[banner.slot] || emptyDetails).badgeText}
+                                        onChange={e => updateDraft(banner.slot, 'badgeText', e.target.value)}
+                                        className="w-full border border-indigo-200 rounded px-2 py-1.5 text-sm text-gray-900 bg-white"
                                     />
-                                    <button
-                                        onClick={() => handleSaveLink(banner.slot)}
-                                        disabled={savingLink === banner.slot}
-                                        className="text-xs font-medium text-indigo-600 hover:underline disabled:opacity-50 flex-shrink-0"
-                                    >
-                                        {savingLink === banner.slot ? 'Saving...' : 'Save Link'}
-                                    </button>
+                                    <textarea
+                                        placeholder={'Heading (e.g. ORGANIC\nVEGETABLES — one line per row)'}
+                                        value={(detailDrafts[banner.slot] || emptyDetails).heading}
+                                        onChange={e => updateDraft(banner.slot, 'heading', e.target.value)}
+                                        rows={2}
+                                        className="w-full border border-indigo-200 rounded px-2 py-1.5 text-sm text-gray-900 bg-white"
+                                    />
+                                    <input
+                                        type="text"
+                                        placeholder="Subheading (e.g. UP TO 50% OFF)"
+                                        value={(detailDrafts[banner.slot] || emptyDetails).subheading}
+                                        onChange={e => updateDraft(banner.slot, 'subheading', e.target.value)}
+                                        className="w-full border border-indigo-200 rounded px-2 py-1.5 text-sm text-gray-900 bg-white"
+                                    />
+                                    <div className="flex items-center gap-2">
+                                        <input
+                                            type="text"
+                                            placeholder="Link URL (optional)"
+                                            value={(detailDrafts[banner.slot] || emptyDetails).linkUrl}
+                                            onChange={e => updateDraft(banner.slot, 'linkUrl', e.target.value)}
+                                            className="flex-1 border border-indigo-200 rounded px-2 py-1.5 text-sm text-gray-900 bg-white"
+                                        />
+                                        <button
+                                            onClick={() => handleSaveDetails(banner.slot)}
+                                            disabled={savingDetails === banner.slot}
+                                            className="text-xs font-medium text-indigo-600 hover:underline disabled:opacity-50 flex-shrink-0"
+                                        >
+                                            {savingDetails === banner.slot ? 'Saving...' : 'Save Details'}
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                         </div>
