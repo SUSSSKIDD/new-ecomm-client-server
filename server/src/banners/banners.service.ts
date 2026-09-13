@@ -62,22 +62,33 @@ export class BannersService {
       await this.localStorage.delete(existing.imageUrl);
     }
 
-    return this.prisma.homepageBanner.upsert({
-      where: { slot },
-      create: {
+    // Deliberately not using prisma.homepageBanner.upsert() here — Prisma
+    // validates the full `create` argument shape (including the required
+    // imageUrl field) up front regardless of whether `update` is what will
+    // actually run, so a text-only edit of an existing banner (imageUrl
+    // undefined) would always fail that check even though create is never
+    // reached. Branching explicitly avoids that.
+    if (existing) {
+      return this.prisma.homepageBanner.update({
+        where: { slot },
+        data: {
+          ...(data.imageUrl && { imageUrl: data.imageUrl }),
+          ...(data.linkUrl !== undefined && { linkUrl: data.linkUrl }),
+          ...(data.badgeText !== undefined && { badgeText: data.badgeText }),
+          ...(data.heading !== undefined && { heading: data.heading }),
+          ...(data.subheading !== undefined && { subheading: data.subheading }),
+        },
+      });
+    }
+
+    return this.prisma.homepageBanner.create({
+      data: {
         slot,
-        imageUrl: data.imageUrl!,
+        imageUrl: data.imageUrl!, // guaranteed present — guard above rejects the alternative
         linkUrl: data.linkUrl ?? null,
         badgeText: data.badgeText ?? null,
         heading: data.heading ?? null,
         subheading: data.subheading ?? null,
-      },
-      update: {
-        ...(data.imageUrl && { imageUrl: data.imageUrl }),
-        ...(data.linkUrl !== undefined && { linkUrl: data.linkUrl }),
-        ...(data.badgeText !== undefined && { badgeText: data.badgeText }),
-        ...(data.heading !== undefined && { heading: data.heading }),
-        ...(data.subheading !== undefined && { subheading: data.subheading }),
       },
     });
   }
