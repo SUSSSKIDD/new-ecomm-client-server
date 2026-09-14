@@ -22,14 +22,14 @@ const HeroSection = () => {
         setImageLoaded(false);
     }, [banners.length]);
 
-    // Auto-advance every 15s; resets on any transition (auto or manual) so
-    // there's always a consistent 15s gap after the user last interacted.
+    // Auto-advance every 3s; resets on any transition (auto or manual) so
+    // there's always a consistent 3s gap after the user last interacted.
     useEffect(() => {
         if (banners.length <= 1) return;
         const timer = setInterval(() => {
             setImageLoaded(false);
             setCurrent(prev => (prev === banners.length - 1 ? 0 : prev + 1));
-        }, 15000);
+        }, 3000);
         return () => clearInterval(timer);
     }, [banners.length, current]);
 
@@ -67,14 +67,14 @@ const HeroSection = () => {
         <div className="bg-ud-primary dark:bg-slate-900 text-white overflow-hidden relative transition-colors duration-300">
             <div className="container mx-auto px-4 py-4 md:py-0 md:h-[400px] flex flex-row items-center justify-between relative z-10">
 
-                {/* Left Arrow (Desktop Only) */}
+                {/* Left Arrow (mobile + desktop) */}
                 {hasMultiple && (
                     <RippleButton
                         onClick={goToPrev}
                         aria-label="Previous banner"
-                        className="hidden md:flex absolute left-4 w-10 h-10 rounded-full bg-white/20 hover:bg-white/30 items-center justify-center backdrop-blur-sm transition-colors z-30"
+                        className="flex absolute left-2 md:left-4 w-8 h-8 md:w-10 md:h-10 rounded-full bg-white/20 hover:bg-white/30 items-center justify-center backdrop-blur-sm transition-colors z-30"
                     >
-                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+                        <svg className="w-5 h-5 md:w-6 md:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
                     </RippleButton>
                 )}
 
@@ -129,14 +129,14 @@ const HeroSection = () => {
                     </div>
                 </div>
 
-                {/* Right Arrow (Desktop Only) */}
+                {/* Right Arrow (mobile + desktop) */}
                 {hasMultiple && (
                     <RippleButton
                         onClick={goToNext}
                         aria-label="Next banner"
-                        className="hidden md:flex absolute right-4 w-10 h-10 rounded-full bg-white/20 hover:bg-white/30 items-center justify-center backdrop-blur-sm transition-colors z-30"
+                        className="flex absolute right-2 md:right-4 w-8 h-8 md:w-10 md:h-10 rounded-full bg-white/20 hover:bg-white/30 items-center justify-center backdrop-blur-sm transition-colors z-30"
                     >
-                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                        <svg className="w-5 h-5 md:w-6 md:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
                     </RippleButton>
                 )}
 
