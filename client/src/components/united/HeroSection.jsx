@@ -79,14 +79,14 @@ const HeroSection = () => {
                 )}
 
                 {/* Content */}
-                <div className="w-3/5 md:w-1/2 space-y-2 md:space-y-6 md:pl-12 z-10 text-left">
+                <div className="w-3/5 md:w-1/2 min-w-0 space-y-2 md:space-y-6 md:pl-12 z-10 text-left">
                     {banner.badgeText && (
                         <div className="inline-block px-2 py-0.5 bg-yellow-400 text-black text-[10px] font-bold rounded-sm uppercase tracking-wider">
                             {banner.badgeText}
                         </div>
                     )}
                     {(headingLines.length > 0 || banner.subheading) && (
-                        <h2 className="text-xl md:text-5xl font-extrabold tracking-tight leading-tight">
+                        <h2 className="text-xl md:text-5xl font-extrabold tracking-tight leading-tight break-words">
                             {headingLines.map((line, i) => (
                                 <span key={i}>{line}<br /></span>
                             ))}
