@@ -288,18 +288,9 @@ const ProductDetails = () => {
                         Back to Shopping
                     </RippleButton>
 
-                    <div className="bg-white rounded-xl shadow-sm overflow-hidden flex flex-col md:flex-row">
-                        {/* Image Carousel Section */}
-                        <div className="md:w-1/2">
-                            <ImageCarousel
-                                images={product.images || []}
-                                altText={product.name}
-                                className="h-[300px] md:h-[500px]"
-                            />
-                        </div>
-
-                        {/* Details Section */}
-                        <div className="md:w-1/2 p-8">
+                    <div className="bg-white rounded-xl shadow-sm overflow-hidden flex flex-col md:flex-row md:flex-row-reverse">
+                        {/* Details Section - LEFT */}
+                        <div className="md:w-1/2 p-8 flex flex-col justify-between min-h-[500px]">
                             <div className="mb-2">
                                 <span className="bg-blue-100 text-blue-800 text-xs font-semibold px-2.5 py-0.5 rounded uppercase tracking-wide">
                                     {product.category}
@@ -496,6 +487,14 @@ const ProductDetails = () => {
                                     Buy Now
                                 </RippleButton>
                             </div>
+                        </div>
+                        {/* Image Carousel Section - RIGHT */}
+                        <div className="md:w-1/2 flex-shrink-0">
+                            <ImageCarousel
+                                images={product.images || []}
+                                altText={product.name}
+                                className="h-[500px] w-full"
+                            />
                         </div>
                     </div>
                 </div>

@@ -60,13 +60,13 @@ const ProductGrid = ({ mainCategory, subCategory, onProductSelect }) => {
                             return (
                             <li
                                 key={product.id}
-                                className="bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-gray-100 dark:border-slate-700 p-4 flex gap-4 hover:shadow-md transition-all cursor-pointer relative"
+                                className="bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-gray-100 dark:border-slate-700 p-4 flex flex-row-reverse gap-4 hover:shadow-md transition-all cursor-pointer relative h-[140px]"
                                 onClick={() => handleSelect(product)}
                                 role="listitem"
                             >
-                                <div className="h-24 w-24 shrink-0 flex items-center justify-center bg-gray-50 dark:bg-slate-900 rounded-md overflow-hidden relative">
+                                <div className="h-full w-28 shrink-0 flex items-center justify-center bg-gray-50 dark:bg-slate-900 rounded-md overflow-hidden relative">
                                     {product.images?.[0] ? (
-                                        <img src={product.images[0]} alt="" className="h-full object-contain mix-blend-multiply dark:mix-blend-normal" loading="lazy" />
+                                        <img src={product.images[0]} alt="" className="h-full w-full object-contain mix-blend-multiply dark:mix-blend-normal" loading="lazy" />
                                     ) : (
                                         <span className="text-gray-300 dark:text-gray-600 text-[10px]">No Image</span>
                                     )}
